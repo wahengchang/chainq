@@ -237,22 +237,34 @@ async function saveNode(){
   if(!r.ok)return setMsg("pnMsg","err",errs(r.data)||"save failed");
   setMsg("pnMsg","ok","saved ✓");await loadNodes();selectNode(selected);
 }
+// read an NDJSON stream, calling onNode for each node result as it arrives
+async function streamRun(url,bodyObj){
+  const r=await fetch(url,{method:"POST",body:JSON.stringify(bodyObj)});
+  if(!r.ok)return{ok:false,data:await r.json().catch(()=>({}))};
+  const reader=r.body.getReader(),dec=new TextDecoder();let buf="";
+  while(true){const{done,value}=await reader.read();if(done)break;
+    buf+=dec.decode(value,{stream:true});let i;
+    while((i=buf.indexOf("\n"))>=0){const line=buf.slice(0,i).trim();buf=buf.slice(i+1);if(line){try{onNode(JSON.parse(line));}catch(e){}}}}
+  return{ok:true};
+}
+function onNode(rec){
+  if(rec.error&&!rec.id){setMsg("canvasMsg","err",rec.error);return;}
+  results[rec.id]={status:rec.status,output:rec.output,error:rec.error};
+  renderGraph();                       // each node flips the instant it finishes
+  if(selected===rec.id)selectNode(selected);
+}
 async function runNode(){
   if(!selected)return;
   $("pnOut").className="mbody dim";$("pnOut").textContent="running…";
   setRunningUI([selected,...ancestors(selected)]);
-  const{ok,data}=await api("/api/run-node",{method:"POST",body:JSON.stringify({path:current,node:selected,profile:$("profile").value})});
-  if(!ok){renderGraph();return setMsg("pnMsg","err",errs(data)||"run failed");}
-  data.results.forEach(r=>results[r.id]={status:r.status,output:r.output,error:r.error});
-  renderGraph();selectNode(selected);
+  const r=await streamRun("/api/run-node",{path:current,node:selected,profile:$("profile").value});
+  if(!r.ok){renderGraph();return setMsg("pnMsg","err",errs(r.data)||"run failed");}
 }
 // run-to-here straight from a node's ▷ button (no panel needed)
 async function runTo(id){
   setRunningUI([id,...ancestors(id)]);
-  const{ok,data}=await api("/api/run-node",{method:"POST",body:JSON.stringify({path:current,node:id,profile:$("profile").value})});
-  if(!ok){results={};renderGraph();return setMsg("canvasMsg","err",errs(data)||"run failed");}
-  data.results.forEach(r=>results[r.id]={status:r.status,output:r.output,error:r.error});
-  renderGraph();if(selected===id)selectNode(id);
+  const r=await streamRun("/api/run-node",{path:current,node:id,profile:$("profile").value});
+  if(!r.ok){results={};renderGraph();return setMsg("canvasMsg","err",errs(r.data)||"run failed");}
 }
 // click a variable in INPUT → insert it into the prompt at the cursor (no typos)
 function insertVar(id,primary){
@@ -278,10 +290,8 @@ async function addNode(){
 }
 async function runAll(){
   setRunningUI(nodes.map(n=>n.id));
-  const{ok,data}=await api("/api/run",{method:"POST",body:JSON.stringify({path:current,profile:$("profile").value})});
-  if(!ok){results={};renderGraph();return setMsg("canvasMsg","err",errs(data)||"run failed");}
-  results={};data.results.forEach(r=>results[r.id]={status:r.status,output:r.output,error:r.error});
-  renderGraph();if(selected)selectNode(selected);
+  const r=await streamRun("/api/run",{path:current,profile:$("profile").value});
+  if(!r.ok){results={};renderGraph();return setMsg("canvasMsg","err",errs(r.data)||"run failed");}
 }
 let rawOn=false;
 async function toggleRaw(){rawOn=!rawOn;

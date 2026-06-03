@@ -161,51 +161,17 @@ async function handle(req: IncomingMessage, res: ServerResponse, opts: WebOption
     return json(res, 200, { ok: true });
   }
 
-  // Run the flow and return per-node status.
+  // Run the flow, STREAMING each node's result as it settles (NDJSON) so the UI
+  // lights up one node at a time, in execution order — not all at once.
   if (method === "POST" && path === "/api/run") {
     const { path: file = "", profile = "" } = await body(req);
-    const fp = resolve(file);
-    const flow = parseFlow(readFileSync(fp, "utf8"));
-    if (profile && !flow.profiles[profile]) {
-      return json(res, 400, { errors: [{ node: "(profile)", message: `no profile "${profile}"` }] });
-    }
-    const errors = validate(flow);
-    if (errors.length) return json(res, 400, { errors });
-    const baseDir = dirname(fp);
-    const results = await new Runner(flow, {
-      chainDir: join(baseDir, ".chain"),
-      baseDir,
-      profileOverride: profile || undefined,
-    }).runChain();
-    return json(res, 200, {
-      results: results.map((r) => ({
-        id: r.id,
-        status: r.status,
-        output: r.output,
-        error: r.error ?? null,
-      })),
-    });
+    return streamRun(res, resolve(file), profile, (runner) => runner.runChain());
   }
 
-  // Run UP TO one node (its upstream cone, reusing cache) — the iteration wedge.
+  // Run UP TO one node (its upstream cone) — streamed, same as /api/run.
   if (method === "POST" && path === "/api/run-node") {
     const { path: file = "", node = "", profile = "" } = await body(req);
-    const fp = resolve(file);
-    const flow = parseFlow(readFileSync(fp, "utf8"));
-    if (profile && !flow.profiles[profile]) {
-      return json(res, 400, { errors: [{ node: "(profile)", message: `no profile "${profile}"` }] });
-    }
-    const errors = validate(flow);
-    if (errors.length) return json(res, 400, { errors });
-    const baseDir = dirname(fp);
-    const results = await new Runner(flow, {
-      chainDir: join(baseDir, ".chain"),
-      baseDir,
-      profileOverride: profile || undefined,
-    }).runToNode(node);
-    return json(res, 200, {
-      results: results.map((r) => ({ id: r.id, status: r.status, output: r.output, error: r.error ?? null })),
-    });
+    return streamRun(res, resolve(file), profile, (runner) => runner.runToNode(node));
   }
 
   // Rewire a node's `from` (which upstream steps feed it; first = $json).
@@ -267,6 +233,40 @@ async function body(req: IncomingMessage): Promise<Record<string, string>> {
   for await (const c of req) chunks.push(c as Buffer);
   const raw = Buffer.concat(chunks).toString("utf8");
   return raw ? (JSON.parse(raw) as Record<string, string>) : {};
+}
+
+// Run a flow, streaming each node's result as one NDJSON line as it settles.
+// Validation errors come back as a normal JSON 400 (before the stream starts).
+async function streamRun(
+  res: ServerResponse,
+  fp: string,
+  profile: string,
+  run: (runner: Runner) => Promise<unknown>,
+): Promise<void> {
+  const flow = parseFlow(readFileSync(fp, "utf8"));
+  if (profile && !flow.profiles[profile]) {
+    return json(res, 400, { errors: [{ node: "(profile)", message: `no profile "${profile}"` }] });
+  }
+  const errors = validate(flow);
+  if (errors.length) return json(res, 400, { errors });
+
+  const baseDir = dirname(fp);
+  res.writeHead(200, { "content-type": "application/x-ndjson" });
+  const runner = new Runner(flow, {
+    chainDir: join(baseDir, ".chain"),
+    baseDir,
+    profileOverride: profile || undefined,
+    onResult: (r) =>
+      res.write(
+        JSON.stringify({ id: r.id, status: r.status, output: r.output, error: r.error ?? null }) + "\n",
+      ),
+  });
+  try {
+    await run(runner);
+  } catch (e) {
+    res.write(JSON.stringify({ error: msg(e) }) + "\n");
+  }
+  res.end();
 }
 
 function atomicWrite(file: string, data: string): void {

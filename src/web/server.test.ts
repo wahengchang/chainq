@@ -34,9 +34,10 @@ describe("web server", () => {
       expect(created.path).toContain("blog.yaml");
       expect(existsSync(join(dir, "blog.yaml"))).toBe(true);
 
-      // run it offline
-      const run: any = await post(base, "/api/run", { path: join(dir, "blog.yaml"), profile: "fake" }).then((r) => r.json());
-      expect(run.results.map((n: { status: string }) => n.status)).toEqual(["ran", "ran"]);
+      // run it offline — streamed NDJSON, one line per node as it settles
+      const runText = await post(base, "/api/run", { path: join(dir, "blog.yaml"), profile: "fake" }).then((r) => r.text());
+      const runResults = runText.trim().split("\n").map((l) => JSON.parse(l));
+      expect(runResults.map((n: { status: string }) => n.status)).toEqual(["ran", "ran"]);
 
       // a broken save is rejected with errors (壞不落地)
       const bad = await post(base, "/api/save", {
