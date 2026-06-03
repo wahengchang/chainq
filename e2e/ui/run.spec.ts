@@ -79,12 +79,14 @@ test("the ▷ button runs inline on the card WITHOUT opening the modal", async (
   // pick a DOWNSTREAM node (has upstream) so we exercise run-to-here
   const node = page.locator(".node").nth(1);
   await node.hover();
-  await node.locator(".noderun").click();
+  await node.getByRole("button", { name: "▷" }).click();
 
   // the result must appear ON the card
   await expect(node.locator(".nodeout")).toBeVisible({ timeout: 20000 });
   await expect(node.locator(".nodeout")).not.toHaveText(/running…/);
   await expect(node.locator(".nodeout")).not.toBeEmpty();
+  // a ran/cached badge must be visible on the card so real-vs-cached is clear
+  await expect(node.locator(".outbadge")).toContainText(/ran|cached/);
   // the glyph settles to a finished state
   await expect(node.locator(".glyph")).toContainText(/[✓⊘]/, { timeout: 20000 });
 

@@ -32,8 +32,10 @@
   .flowrow{display:flex;align-items:flex-start;flex-wrap:wrap;gap:0;padding:30px}
   .node{position:relative;width:200px;background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:11px 13px;cursor:pointer;transition:border-color .15s}
   .node:hover{border-color:var(--accent)}
-  .noderun{position:absolute;top:6px;right:6px;padding:0 7px;font-size:12px;line-height:18px;border:1px solid var(--line);border-radius:3px;background:var(--panel2);color:var(--accent);opacity:0;transition:opacity .1s}
-  .node:hover .noderun{opacity:1} .noderun:hover{border-color:var(--accent)}
+  .noderun-wrap{position:absolute;top:6px;right:6px;display:flex;gap:4px;opacity:0;transition:opacity .1s}
+  .node:hover .noderun-wrap{opacity:1}
+  .noderun{padding:0 7px;font-size:12px;line-height:18px;border:1px solid var(--line);border-radius:3px;background:var(--panel2);color:var(--accent);cursor:pointer}
+  .noderun:hover{border-color:var(--accent)}
   .node.ran{border-left:3px solid var(--ran)} .node.cached{border-left:3px solid var(--cached)}
   .node.failed{border-left:3px solid var(--bad)} .node.skipped{opacity:.6}
   .node.running{border-left:3px solid var(--accent);animation:pulse 1.1s ease-in-out infinite}
@@ -48,6 +50,8 @@
   .nodeout{margin-top:8px;padding:7px 8px;background:var(--panel2);border-radius:3px;font-size:11px;line-height:1.45;white-space:pre-wrap;max-height:120px;overflow:auto;border-left:2px solid var(--ran)}
   .nodeout.bad{border-left-color:var(--bad);color:var(--bad)}
   .nodeout.dim{color:var(--dim);border-left-color:var(--accent)}
+  .outbadge{font-size:10px;margin-bottom:5px;letter-spacing:.02em;font-weight:600}
+  .outbadge.g-ran{color:var(--ran)} .outbadge.g-cached{color:var(--cached)} .outbadge.g-failed{color:var(--bad)}
   .arrow{align-self:center;color:var(--dim);padding:0 8px}
   .addnode{padding:0 30px 30px}
   /* n8n-style floating node panel */
@@ -99,6 +103,7 @@
     <button onclick="toggleRaw()" id="rawBtn">{ } raw</button>
     <select id="profile"><option value="">default (claude -p)</option><option value="fake">fake (offline)</option></select>
     <button class="primary" onclick="runAll()">▷ Run all</button>
+    <button onclick="runAll(true)" title="ignore cache — really call the model for every node">↻ fresh</button>
   </div>
 
   <!-- canvas -->
@@ -193,11 +198,18 @@ function renderGraph(){
     const r=results[n.id];
     const d=document.createElement("div");d.className="node "+(r?r.status:"");
     const glyph=r?('<span class="glyph g-'+r.status+(r.status==="running"?" spin":"")+'">'+G[r.status]+'</span>'):'<span class="glyph g-pending">○</span>';
-    // show the result ON the card (no modal) once it runs
+    // show the result ON the card (no modal) once it runs, with a ran/cached badge
+    const BADGE={ran:"✓ ran · called the model",cached:"⊘ cached · reused, no call",failed:"✗ failed",skipped:"– skipped"};
     let out="";
     if(r&&r.status==="running")out='<div class="nodeout dim">◌ running…</div>';
-    else if(r&&(r.error||r.output))out='<div class="nodeout'+(r.status==="failed"?" bad":"")+'">'+esc((r.error||r.output))+'</div>';
-    d.innerHTML='<button class="noderun" title="run to here" onclick="event.stopPropagation();runTo(\''+n.id+'\')">▷</button>'
+    else if(r&&(r.error||r.output)){
+      const badge='<div class="outbadge g-'+r.status+'">'+(BADGE[r.status]||r.status)+'</div>';
+      out='<div class="nodeout'+(r.status==="failed"?" bad":"")+'">'+badge+esc(r.error||r.output)+'</div>';
+    }
+    d.innerHTML='<div class="noderun-wrap">'
+        +'<button class="noderun" title="run to here (reuse cache)" onclick="event.stopPropagation();runTo(\''+n.id+'\')">▷</button>'
+        +'<button class="noderun" title="re-run fresh — really call the model" onclick="event.stopPropagation();runTo(\''+n.id+'\',true)">↻</button>'
+      +'</div>'
       +'<div class="nh">'+glyph+'<span class="nn">'+n.id+'</span><span class="nt">'+n.type+'</span></div>'
       +'<div class="npreview">'+esc((n.prompt||n.run||"").slice(0,70))+'</div>'+out;
     d.onclick=()=>selectNode(n.id);g.appendChild(d);
@@ -273,9 +285,9 @@ async function runNode(force){
 // run-to-here straight from a node's ▷ button — runs inline, NO modal.
 // The result shows on the card itself (see renderGraph). Click the card body
 // (not ▷) if you want to open the editor panel.
-async function runTo(id){
+async function runTo(id,fresh){
   setRunningUI([id,...ancestors(id)]);
-  const r=await streamRun("/api/run-node",{path:current,node:id,profile:$("profile").value});
+  const r=await streamRun("/api/run-node",{path:current,node:id,profile:$("profile").value,fresh:!!fresh});
   if(!r.ok){renderGraph();return setMsg("canvasMsg","err",errs(r.data)||"run failed");}
 }
 // click a variable in INPUT → insert it into the prompt at the cursor (no typos)
@@ -300,9 +312,9 @@ async function addNode(){
   const{ok}=await api("/api/save",{method:"POST",body:JSON.stringify({path:current,yaml:y})});
   if(!ok)return setMsg("canvasMsg","err","add failed");await loadNodes();selectNode(id);
 }
-async function runAll(){
+async function runAll(fresh){
   setRunningUI(nodes.map(n=>n.id));
-  const r=await streamRun("/api/run",{path:current,profile:$("profile").value});
+  const r=await streamRun("/api/run",{path:current,profile:$("profile").value,fresh:!!fresh});
   if(!r.ok){results={};renderGraph();return setMsg("canvasMsg","err",errs(r.data)||"run failed");}
 }
 let rawOn=false;

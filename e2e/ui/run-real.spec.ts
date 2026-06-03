@@ -57,26 +57,25 @@ test("↻ re-run with the real profile actually calls claude -p", async ({ page 
   // the REAL profile (value="" → "default (claude -p)")
   await page.locator("#profile").selectOption({ value: "" });
 
-  // open the first node and force a fresh run (ignores cache → must call the cmd)
-  await page.locator(".node").first().click();
-  await expect(page.locator(".modal")).toBeVisible();
-
   // capture proof the subprocess spawned: poll `pgrep claude` while it runs
   let sawProcess = false;
   const poll = setInterval(() => {
     if (spawnSync("pgrep", ["-f", "claude"]).status === 0) sawProcess = true;
   }, 200);
 
-  await page.getByRole("button", { name: /re-run/ }).click();
+  // click the card's ↻ button (force fresh → must really call claude -p), no modal
+  const node = page.locator(".node").first();
+  await node.hover();
+  await node.getByRole("button", { name: "↻" }).click();
 
-  // the badge must say it RAN (called the model) — NOT cached
-  await expect(page.locator("#pnOutStatus")).toContainText("called the model", { timeout: 90000 });
+  // the card badge must say it RAN (called the model) — NOT cached
+  await expect(node.locator(".outbadge")).toContainText("called the model", { timeout: 90000 });
   clearInterval(poll);
 
-  // and there must be real output text
-  const out = page.locator("#pnOut");
-  await expect(out).not.toHaveText("running…");
-  await expect(out).not.toBeEmpty();
+  // real output text on the card, modal stays closed
+  await expect(node.locator(".nodeout")).not.toHaveText(/running…/);
+  await expect(node.locator(".nodeout")).not.toBeEmpty();
+  await expect(page.locator(".modal")).toBeHidden();
 
   expect(sawProcess, "a `claude` process should have been spawned during the run").toBe(true);
 });
