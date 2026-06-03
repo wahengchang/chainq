@@ -91,7 +91,8 @@
         <textarea id="pnPrompt" spellcheck="false" placeholder="write the prompt for this step…"></textarea>
         <div class="row" style="margin-top:8px">
           <button class="primary" onclick="saveNode()">Save node</button>
-          <button onclick="runNode()">▷ Run this</button>
+          <button onclick="runNode()">▷ Run to here</button>
+          <button onclick="deleteNode()">delete</button>
         </div>
         <div id="pnMsg" class="msg"></div>
         <h3>output</h3>
@@ -176,7 +177,20 @@ async function saveNode(){
   if(!ok) return setMsg("pnMsg","err",(data.errors||[]).map(e=>"✗ "+e.node+": "+e.message).join("\n")||"save failed");
   setMsg("pnMsg","ok","saved ✓"); await loadNodes(); selectNode(selected);
 }
-function runNode(){ run(); }           // (per-node run is a later step; run all for now)
+async function runNode(){
+  if(!selected) return;
+  const {ok,data}=await api("/api/run-node",{method:"POST",body:JSON.stringify({path:current,node:selected,profile:$("profile").value})});
+  if(!ok){ setMsg("pnMsg","err",(data.errors||[]).map(e=>"✗ "+e.node+": "+e.message).join("\n")||"run failed"); return; }
+  data.results.forEach(r=>results[r.id]={status:r.status,output:r.output,error:r.error});
+  renderGraph(); selectNode(selected);
+}
+async function deleteNode(){
+  if(!selected) return;
+  const {ok,data}=await api("/api/delete-node",{method:"POST",body:JSON.stringify({path:current,node:selected})});
+  if(!ok){ setMsg("pnMsg","err",(data.errors||[]).map(e=>"✗ "+e.node+": "+e.message).join("\n")||"delete failed"); return; }
+  selected=null; $("panelBody").classList.add("hidden"); $("panelEmpty").classList.remove("hidden");
+  await loadNodes();
+}
 
 async function addNode(){
   // append a new ai step to the YAML via raw, simplest reliable path

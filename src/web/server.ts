@@ -164,6 +164,47 @@ async function handle(req: IncomingMessage, res: ServerResponse, opts: WebOption
     });
   }
 
+  // Run UP TO one node (its upstream cone, reusing cache) — the iteration wedge.
+  if (method === "POST" && path === "/api/run-node") {
+    const { path: file = "", node = "", profile = "" } = await body(req);
+    const fp = resolve(file);
+    const flow = parseFlow(readFileSync(fp, "utf8"));
+    if (profile && !flow.profiles[profile]) {
+      return json(res, 400, { errors: [{ node: "(profile)", message: `no profile "${profile}"` }] });
+    }
+    const errors = validate(flow);
+    if (errors.length) return json(res, 400, { errors });
+    const baseDir = dirname(fp);
+    const results = await new Runner(flow, {
+      chainDir: join(baseDir, ".chain"),
+      baseDir,
+      profileOverride: profile || undefined,
+    }).runToNode(node);
+    return json(res, 200, {
+      results: results.map((r) => ({ id: r.id, status: r.status, output: r.output, error: r.error ?? null })),
+    });
+  }
+
+  // Delete a node (comment-preserving). Rejected if a downstream still needs it.
+  if (method === "POST" && path === "/api/delete-node") {
+    const { path: file = "", node = "" } = await body(req);
+    const fp = resolve(file);
+    const doc = parseDocument(readFileSync(fp, "utf8"));
+    doc.deleteIn(["steps", node]);
+    try {
+      const errors = validate(parseFlow(String(doc)));
+      if (errors.length) {
+        return json(res, 400, {
+          errors: [{ node, message: "another step still depends on this — rewire it first" }],
+        });
+      }
+    } catch (e) {
+      return json(res, 400, { errors: [{ node: "(parse)", message: msg(e) }] });
+    }
+    atomicWrite(fp, String(doc));
+    return json(res, 200, { ok: true });
+  }
+
   res.writeHead(404, { "content-type": "text/plain" });
   res.end("not found");
 }
