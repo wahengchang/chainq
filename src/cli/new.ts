@@ -8,7 +8,7 @@
 import { existsSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-const TEMPLATE = `# A new chain workflow. Edit the prompts, then:
+export const NEW_FLOW_TEMPLATE = `# A new chain workflow. Edit the prompts, then:
 #   chain run THIS_FILE --profile fake   # offline (cat echoes the prompt)
 #   chain run THIS_FILE                  # real (needs: claude login)
 profiles:
@@ -41,7 +41,7 @@ export function runNew(args: string[]): number {
     return 1;
   }
 
-  writeFileSync(path, TEMPLATE);
+  writeFileSync(path, NEW_FLOW_TEMPLATE);
   console.error(`created ${path}`);
   console.error(`\nnext:`);
   console.error(`  chain run ${file} --profile fake   # try it offline`);

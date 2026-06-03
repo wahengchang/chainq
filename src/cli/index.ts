@@ -23,6 +23,7 @@ import {
 } from "../engine/index.js";
 import { runInit } from "./init.js";
 import { runNew } from "./new.js";
+import { startWebServer } from "../web/server.js";
 
 const PREFIX: Record<NodeResult["status"], string> = {
   ran: "\x1b[32m✓\x1b[0m",
@@ -87,6 +88,12 @@ async function main(argv: string[]): Promise<number> {
     return runNew(args);
   }
 
+  if (cmd === "ui") {
+    const initialFlow = args[0] ? resolve(args[0]) : undefined;
+    startWebServer({ cwd: process.cwd(), initialFlow });
+    return new Promise<number>(() => {}); // never resolves — the server keeps running
+  }
+
   if (cmd === "ls") {
     const dir = resolve(args[0] ?? ".");
     const flows = listFlows(dir);
@@ -98,7 +105,7 @@ async function main(argv: string[]): Promise<number> {
   const file = args[0];
   if (!cmd || !file || !["run", "validate"].includes(cmd)) {
     console.error(
-      "usage: chain init [dir] | chain new <name> | chain <run|validate> <flow.yaml> [flags] | chain ls [dir]",
+      "usage: chain init [dir] | chain new <name> | chain ui [flow.yaml] | chain <run|validate> <flow.yaml> [flags] | chain ls [dir]",
     );
     return 2;
   }

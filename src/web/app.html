@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>chain</title>
+<style>
+  :root{--bg:#0e0f11;--panel:#15171a;--line:#2a2d31;--ink:#d7dadd;--dim:#7f868d;
+    --accent:#e0a64d;--ran:#5db07e;--cached:#6b7177;--bad:#e0635b;
+    --mono:"Berkeley Mono","JetBrains Mono",ui-monospace,Menlo,monospace;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--mono);font-size:13px;line-height:1.5}
+  header{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--line);background:var(--panel)}
+  header b{font-weight:normal} header .sub{color:var(--dim);font-size:11px}
+  .wrap{max-width:920px;margin:0 auto;padding:28px 18px}
+  h2{font-weight:normal;color:var(--ink);font-size:15px;margin:0 0 4px}
+  .hint{color:var(--dim);font-size:12px;margin-bottom:18px}
+  label{display:block;color:var(--dim);font-size:11px;text-transform:uppercase;letter-spacing:.06em;margin:14px 0 4px}
+  input,textarea,select,button{font:inherit;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:3px;padding:7px 10px}
+  input,textarea{width:100%}
+  textarea{min-height:340px;white-space:pre;overflow:auto;tab-size:2}
+  button{cursor:pointer;background:transparent}
+  button:hover{border-color:var(--accent)}
+  button.primary{border-color:var(--accent);color:var(--accent)}
+  .row{display:flex;gap:8px;align-items:center}
+  .flows{margin:8px 0;border:1px solid var(--line);border-radius:3px}
+  .flow{padding:7px 11px;cursor:pointer;border-bottom:1px solid #1b1e22}
+  .flow:last-child{border-bottom:0} .flow:hover{background:#1b1e22;color:var(--accent)}
+  .empty{padding:18px;text-align:center;color:var(--dim)}
+  .bar{display:flex;align-items:center;gap:10px;padding:8px 16px;border-bottom:1px solid var(--line);background:var(--panel)}
+  .bar .path{color:var(--dim);font-size:11px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .edit{display:grid;grid-template-columns:1fr 280px;gap:0;height:calc(100vh - 49px)}
+  .editor{padding:0} .editor textarea{height:100%;border:0;border-right:1px solid var(--line);border-radius:0;min-height:0}
+  .side{padding:14px 16px;overflow:auto}
+  .side h3{font-weight:normal;color:var(--dim);font-size:11px;text-transform:uppercase;letter-spacing:.06em;margin:0 0 8px}
+  .node{display:flex;gap:8px;padding:4px 0;align-items:center}
+  .g-ran{color:var(--ran)} .g-cached{color:var(--cached)} .g-failed{color:var(--bad)} .g-skipped{color:var(--dim)}
+  .msg{margin-top:10px;font-size:12px;white-space:pre-wrap}
+  .msg.ok{color:var(--ran)} .msg.err{color:var(--bad)}
+  .hidden{display:none}
+</style></head>
+<body>
+<header><b>chain</b><span class="sub">create a project · edit a chain</span></header>
+
+<!-- ───────── CREATE SCREEN ───────── -->
+<div id="create" class="wrap">
+  <h2>Start a chain</h2>
+  <div class="hint">Pick a folder, name a flow, create it — then edit.</div>
+
+  <label>Target folder</label>
+  <div class="row">
+    <input id="dir" placeholder="/path/to/project">
+    <button onclick="listFlows()">List</button>
+  </div>
+
+  <div id="flows" class="flows hidden"></div>
+
+  <label>New flow name</label>
+  <div class="row">
+    <input id="name" placeholder="my-flow" onkeydown="if(event.key==='Enter')createFlow()">
+    <button class="primary" onclick="createFlow()">Create →</button>
+  </div>
+  <div id="createMsg" class="msg"></div>
+</div>
+
+<!-- ───────── EDITOR SCREEN ───────── -->
+<div id="editor" class="hidden">
+  <div class="bar">
+    <button onclick="back()">← projects</button>
+    <span class="path" id="path"></span>
+    <select id="profile"><option value="fake">fake (offline)</option><option value="">default (claude -p)</option></select>
+    <button onclick="save()">Save</button>
+    <button class="primary" onclick="run()">▷ Run</button>
+  </div>
+  <div class="edit">
+    <div class="editor"><textarea id="yaml" spellcheck="false"></textarea></div>
+    <div class="side">
+      <h3>result</h3>
+      <div id="nodes" class="dim">Run to see node status.</div>
+      <div id="editMsg" class="msg"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+let current = null; // current flow path
+const $ = (id) => document.getElementById(id);
+const api = (url, opts) => fetch(url, opts).then(async r => ({ ok: r.ok, data: await r.json().catch(()=>({})) }));
+
+async function boot() {
+  const { data } = await api("/api/context");
+  $("dir").value = data.cwd;
+  if (data.initialFlow) return open(data.initialFlow);
+  listFlows();
+}
+
+async function listFlows() {
+  const dir = encodeURIComponent($("dir").value);
+  const { data } = await api("/api/list?dir=" + dir);
+  $("dir").value = data.dir;
+  const box = $("flows");
+  box.classList.remove("hidden");
+  if (!data.flows.length) { box.innerHTML = '<div class="empty">empty — create your first flow below</div>'; return; }
+  box.innerHTML = data.flows.map(f => '<div class="flow" data-f="'+f+'">'+f+'</div>').join("");
+  box.querySelectorAll(".flow").forEach(el =>
+    el.onclick = () => open(data.dir.replace(/\/$/,"") + "/" + el.dataset.f));
+}
+
+async function createFlow() {
+  const name = $("name").value.trim();
+  if (!name) return setMsg("createMsg", "err", "name required");
+  const { ok, data } = await api("/api/create", { method:"POST", body: JSON.stringify({ dir: $("dir").value, name }) });
+  if (!ok) return setMsg("createMsg", "err", data.error || "create failed");
+  open(data.path);
+}
+
+async function open(path) {
+  current = path;
+  const { data } = await api("/api/read?path=" + encodeURIComponent(path));
+  $("yaml").value = data.yaml || "";
+  $("path").textContent = path;
+  $("create").classList.add("hidden");
+  $("editor").classList.remove("hidden");
+  $("nodes").textContent = "Run to see node status.";
+  setMsg("editMsg", "", "");
+}
+
+function back() {
+  $("editor").classList.add("hidden");
+  $("create").classList.remove("hidden");
+  listFlows();
+}
+
+async function save() {
+  const { ok, data } = await api("/api/save", { method:"POST", body: JSON.stringify({ path: current, yaml: $("yaml").value }) });
+  if (ok) return setMsg("editMsg", "ok", "saved ✓");
+  setMsg("editMsg", "err", (data.errors||[]).map(e => "✗ "+e.node+": "+e.message).join("\n") || "save failed");
+}
+
+async function run() {
+  // save (validate) first, then run
+  const s = await api("/api/save", { method:"POST", body: JSON.stringify({ path: current, yaml: $("yaml").value }) });
+  if (!s.ok) return setMsg("editMsg", "err", (s.data.errors||[]).map(e=>"✗ "+e.node+": "+e.message).join("\n"));
+  setMsg("editMsg", "", "");
+  $("nodes").textContent = "running…";
+  const { ok, data } = await api("/api/run", { method:"POST", body: JSON.stringify({ path: current, profile: $("profile").value }) });
+  if (!ok) { $("nodes").textContent=""; return setMsg("editMsg","err",(data.errors||[]).map(e=>"✗ "+e.node+": "+e.message).join("\n")); }
+  const G = { ran:"✓", cached:"⊘", failed:"✗", skipped:"–" };
+  $("nodes").innerHTML = data.results.map(r =>
+    '<div class="node"><span class="g-'+r.status+'">'+G[r.status]+'</span><span>'+r.id+'</span>'
+    + (r.error ? '<span class="g-failed">'+r.error+'</span>' : '<span class="dim">'+r.status+'</span>') + '</div>').join("");
+}
+
+function setMsg(id, cls, text){ const e=$(id); e.className="msg "+cls; e.textContent=text; }
+boot();
+</script>
+</body></html>
