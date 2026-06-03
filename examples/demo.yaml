@@ -1,0 +1,14 @@
+# A tiny offline demo flow. Uses the `cat` fake model (G2) so it runs with
+# no API key and no network — output of each ai step is its rendered prompt.
+profiles:
+  default: { cmd: 'cat' }
+
+steps:
+  greet:
+    type: ai
+    prompt: '{"name": "chain", "kind": "prompt-chain tool"}'
+
+  describe:
+    type: ai
+    from: greet
+    prompt: 'Building {{ $json.name }}, a {{ $json.kind }}.'

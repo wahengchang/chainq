@@ -1,0 +1,82 @@
+// THE make-or-break test. If transitive Merkle invalidation is wrong, chain
+// silently serves stale output — the worst possible failure for this tool.
+
+import { describe, it, expect } from "vitest";
+import { computeKeys, volatileSet } from "./cache.js";
+import type { Flow } from "./types.js";
+
+// DAG:  A ──▶ B ──▶ C
+//        └──▶ D            (D is a sibling branch of B)
+function diamond(promptB: string, promptA = "a"): Flow {
+  return {
+    profiles: { default: { cmd: "cat" } },
+    steps: {
+      A: { id: "A", type: "ai", prompt: promptA },
+      B: { id: "B", type: "ai", from: "A", prompt: promptB },
+      C: { id: "C", type: "ai", from: "B", prompt: "c" },
+      D: { id: "D", type: "ai", from: "A", prompt: "d" },
+    },
+  };
+}
+
+describe("Merkle cache keys", () => {
+  it("editing B invalidates B and its transitive downstream C — but NOT sibling D or upstream A", () => {
+    const before = computeKeys(diamond("b"), "/tmp");
+    const after = computeKeys(diamond("b-edited"), "/tmp");
+
+    expect(after.get("A")).toBe(before.get("A")); // upstream untouched
+    expect(after.get("D")).toBe(before.get("D")); // sibling untouched
+    expect(after.get("B")).not.toBe(before.get("B")); // edited node
+    expect(after.get("C")).not.toBe(before.get("C")); // transitive downstream
+  });
+
+  it("editing the root A cascades to every descendant", () => {
+    const before = computeKeys(diamond("b", "a"), "/tmp");
+    const after = computeKeys(diamond("b", "a-edited"), "/tmp");
+
+    expect(after.get("A")).not.toBe(before.get("A"));
+    expect(after.get("B")).not.toBe(before.get("B"));
+    expect(after.get("C")).not.toBe(before.get("C"));
+    expect(after.get("D")).not.toBe(before.get("D"));
+  });
+
+  it("identical flows produce identical keys (deterministic)", () => {
+    const a = computeKeys(diamond("b"), "/tmp");
+    const b = computeKeys(diamond("b"), "/tmp");
+    expect([...a.entries()]).toEqual([...b.entries()]);
+  });
+
+  it("switching an ai node's profile changes its key (env is folded in)", () => {
+    const f = diamond("b");
+    f.profiles.fast = { cmd: "claude --model haiku -p" };
+    const base = computeKeys(f, "/tmp");
+    const f2 = diamond("b");
+    f2.profiles.fast = { cmd: "claude --model haiku -p" };
+    f2.steps.B!.profile = "fast";
+    const changed = computeKeys(f2, "/tmp");
+    expect(changed.get("B")).not.toBe(base.get("B"));
+  });
+});
+
+describe("volatile (uncacheable) propagation", () => {
+  it("a cmd with no declared inputs is volatile, and poisons its downstream", () => {
+    const flow: Flow = {
+      profiles: { default: { cmd: "cat" } },
+      steps: {
+        fetch: { id: "fetch", type: "cmd", run: "echo hi" }, // no inputs -> volatile
+        sum: { id: "sum", type: "ai", from: "fetch", prompt: "{{ $json }}" },
+      },
+    };
+    const v = volatileSet(flow);
+    expect(v.has("fetch")).toBe(true);
+    expect(v.has("sum")).toBe(true); // fed by a volatile node
+  });
+
+  it("a cmd WITH declared inputs is cacheable", () => {
+    const flow: Flow = {
+      profiles: { default: { cmd: "cat" } },
+      steps: { fetch: { id: "fetch", type: "cmd", run: "cat in.txt", inputs: ["in.txt"] } },
+    };
+    expect(volatileSet(flow).has("fetch")).toBe(false);
+  });
+});
