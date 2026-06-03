@@ -76,6 +76,9 @@ export async function runSubprocess(
     });
 
     // Feed the prompt, then close stdin so the model knows input is complete.
+    // Swallow EPIPE: if the child exits before reading stdin, the write errors —
+    // the real failure is the non-zero exit, surfaced by the 'close' handler.
+    child.stdin.on("error", () => {});
     child.stdin.write(stdin);
     child.stdin.end();
   });

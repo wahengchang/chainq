@@ -34,12 +34,24 @@ export interface RunOptions {
   onResult?: (r: NodeResult) => void;
 }
 
+/**
+ * Per-operation scratch state. Created fresh for EACH run* call, never stored on
+ * the Runner — so a Runner can be reused across many UI actions (run-to-here,
+ * re-run, edit) without one operation's memo/blocked leaking into the next.
+ */
+interface RunCtx {
+  /** in-operation output cache (successes), so a node runs at most once per op */
+  memo: Map<string, string>;
+  /** nodes that failed or were skipped this op → halt their downstream (E2) */
+  blocked: Set<string>;
+}
+
+const newCtx = (): RunCtx => ({ memo: new Map(), blocked: new Set() });
+
 export class Runner {
   private keys: Map<string, string>;
   private volatile: Set<string>;
   private store: CacheStore;
-  private memo = new Map<string, string>(); // in-run output cache (successes)
-  private blocked = new Set<string>(); // failed this run, or downstream of a failure
   private baseDir: string; // where the flow's relative paths resolve
 
   constructor(private flow: Flow, private opts: RunOptions) {
@@ -69,65 +81,70 @@ export class Runner {
 
   /** Run every node, in topological order. (发布模式 / `chain run`) */
   async runChain(): Promise<NodeResult[]> {
+    const ctx = newCtx();
     const results: NodeResult[] = [];
     for (const id of topoOrder(this.flow)) {
-      results.push(await this.ensure(id, false));
+      results.push(await this.ensure(id, false, ctx));
     }
     return results;
   }
 
   /** Run upstream of N (reusing cache), then N. (n8n 运行到当前节点) */
   async runToNode(id: string): Promise<NodeResult[]> {
+    const ctx = newCtx();
     const cone = topoOrder(this.flow).filter(
       (n) => n === id || ancestorsOf(this.flow, id).has(n),
     );
     const results: NodeResult[] = [];
-    for (const n of cone) results.push(await this.ensure(n, false));
+    for (const n of cone) results.push(await this.ensure(n, false, ctx));
     return results;
   }
 
   /** Force-run just N, materializing its upstream first. (n8n 重跑任一节点) */
   async rerunNode(id: string): Promise<NodeResult> {
-    await this.materializeUpstream(id);
-    return this.ensure(id, true);
+    const ctx = newCtx();
+    await this.materializeUpstream(id, ctx);
+    return this.ensure(id, true, ctx);
   }
 
   /** Force-rerun N and everything downstream of it, reusing upstream cache. (--from) */
   async runFrom(id: string): Promise<NodeResult[]> {
-    await this.materializeUpstream(id);
+    const ctx = newCtx();
+    await this.materializeUpstream(id, ctx);
     const forced = new Set<string>([id, ...descendantsOf(this.flow, id)]);
     const results: NodeResult[] = [];
     for (const n of topoOrder(this.flow)) {
-      if (forced.has(n)) results.push(await this.ensure(n, true));
+      if (forced.has(n)) results.push(await this.ensure(n, true, ctx));
     }
     return results;
   }
 
   /** Run the first N nodes in topological order. (--steps) */
   async runSteps(n: number): Promise<NodeResult[]> {
+    const ctx = newCtx();
     const results: NodeResult[] = [];
     for (const id of topoOrder(this.flow).slice(0, n)) {
-      results.push(await this.ensure(id, false));
+      results.push(await this.ensure(id, false, ctx));
     }
     return results;
   }
 
-  /** Ensure every transitive upstream of N has an output available. */
-  async materializeUpstream(id: string): Promise<void> {
+  /** Ensure every transitive upstream of N has an output available (shared ctx). */
+  private async materializeUpstream(id: string, ctx: RunCtx): Promise<void> {
     const cone = topoOrder(this.flow).filter((n) => ancestorsOf(this.flow, id).has(n));
-    for (const n of cone) await this.ensure(n, false);
+    for (const n of cone) await this.ensure(n, false, ctx);
   }
 
-  // Run a node if needed (or forced); otherwise serve cache. Memoized per run.
-  private async ensure(id: string, force: boolean): Promise<NodeResult> {
-    if (this.memo.has(id)) {
-      return { id, status: "cached", output: this.memo.get(id)! };
+  // Run a node if needed (or forced); otherwise serve cache. Memoized per OPERATION.
+  private async ensure(id: string, force: boolean, ctx: RunCtx): Promise<NodeResult> {
+    if (ctx.memo.has(id)) {
+      return { id, status: "cached", output: ctx.memo.get(id)! };
     }
 
     // A pinned node is a fixed fact input — never runs, never charges quota.
     const pin = this.opts.pins?.[id];
     if (pin !== undefined) {
-      this.memo.set(id, pin);
+      ctx.memo.set(id, pin);
       const r: NodeResult = { id, status: "cached", output: pin };
       this.opts.onResult?.(r);
       return r;
@@ -138,9 +155,9 @@ export class Runner {
     const node = this.flow.steps[id]!;
     const failedUp = upstreamsOf(node)
       .filter((u) => this.flow.steps[u])
-      .find((u) => this.blocked.has(u));
+      .find((u) => ctx.blocked.has(u));
     if (failedUp) {
-      this.blocked.add(id);
+      ctx.blocked.add(id);
       const r: NodeResult = {
         id,
         status: "skipped",
@@ -156,24 +173,24 @@ export class Runner {
     const valid = !force && nodeDisposition(id, this.deps()) === "cache";
     if (valid) {
       const output = this.store.load(id);
-      this.memo.set(id, output);
+      ctx.memo.set(id, output);
       const r: NodeResult = { id, status: "cached", output };
       this.opts.onResult?.(r);
       return r;
     }
 
-    const r = await this.runNode(id, key);
-    if (r.status === "failed") this.blocked.add(id); // halt downstream (E2)
+    const r = await this.runNode(id, key, ctx);
+    if (r.status === "failed") ctx.blocked.add(id); // halt downstream (E2)
     this.opts.onResult?.(r);
     return r;
   }
 
   // Lowest primitive: resolve inputs, run, persist on success.
-  private async runNode(id: string, key: string): Promise<NodeResult> {
+  private async runNode(id: string, key: string, ctx: RunCtx): Promise<NodeResult> {
     const node = this.flow.steps[id]!;
     const ups = upstreamsOf(node).filter((u) => this.flow.steps[u]);
     const outputs: Record<string, string> = {};
-    for (const u of ups) outputs[u] = this.memo.get(u) ?? this.store.load(u);
+    for (const u of ups) outputs[u] = ctx.memo.get(u) ?? this.store.load(u);
 
     try {
       let output: string;
@@ -205,7 +222,7 @@ export class Runner {
 
       // Persist ONLY on success — a failed/partial run never becomes valid cache.
       if (!this.volatile.has(id)) this.store.put(id, key, output);
-      this.memo.set(id, output);
+      ctx.memo.set(id, output);
       return { id, status: "ran", output };
     } catch (err) {
       // e.g. ENOENT (command not found) — surfaced verbatim.

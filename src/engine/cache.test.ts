@@ -58,6 +58,22 @@ describe("Merkle cache keys", () => {
   });
 });
 
+describe("from-order is cache-significant", () => {
+  it("reordering a node's from list changes its key ($json binds to the first upstream)", () => {
+    const base = (order: string[]): Flow => ({
+      profiles: { default: { cmd: "cat" } },
+      steps: {
+        A: { id: "A", type: "ai", prompt: "a" },
+        B: { id: "B", type: "ai", prompt: "b" },
+        M: { id: "M", type: "ai", from: order, prompt: "{{ $json }}" },
+      },
+    });
+    const ab = computeKeys(base(["A", "B"]), "/tmp");
+    const ba = computeKeys(base(["B", "A"]), "/tmp");
+    expect(ba.get("M")).not.toBe(ab.get("M")); // different $json source → different key
+  });
+});
+
 describe("volatile (uncacheable) propagation", () => {
   it("a cmd with no declared inputs is volatile, and poisons its downstream", () => {
     const flow: Flow = {

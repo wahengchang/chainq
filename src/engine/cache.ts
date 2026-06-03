@@ -66,10 +66,11 @@ export function computeKeys(
     const profileCmd =
       node.type === "ai" ? resolveProfile(flow, profileOverride ?? node.profile).cmd : null;
     const inputFileHashes = (node.inputs ?? []).map((p) => hashFile(join(baseDir, p)));
+    // NOT sorted: `from` order is significant — $json binds to the first
+    // upstream (run.ts), so reordering changes behavior and MUST change the key.
     const upstreamKeys = upstreamsOf(node)
       .filter((u) => flow.steps[u])
-      .map((u) => keys.get(u) ?? "")
-      .sort();
+      .map((u) => keys.get(u) ?? "");
 
     const material = canonicalize({
       v: ENGINE_VERSION,

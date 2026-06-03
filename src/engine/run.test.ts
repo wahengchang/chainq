@@ -85,6 +85,21 @@ describe("Runner — G2 fake model", () => {
     expect(r.status).toBe("ran"); // forced
   });
 
+  it("a REUSED Runner: rerunNode forces a re-run even after runChain (per-op ctx)", async () => {
+    const d = dir();
+    const flow: Flow = {
+      profiles: cat,
+      steps: {
+        a: { id: "a", type: "ai", prompt: "x" },
+        b: { id: "b", type: "ai", from: "a", prompt: "{{ $json }}" },
+      },
+    };
+    const runner = new Runner(flow, { chainDir: d });
+    await runner.runChain(); // first operation
+    const r = await runner.rerunNode("b"); // SAME instance — must NOT return stale memo
+    expect(r.status).toBe("ran");
+  });
+
   it("a pinned upstream is treated as a fact input and never runs", async () => {
     const d = dir();
     const flow: Flow = {
@@ -112,6 +127,17 @@ describe("Runner — G2 fake model", () => {
     expect(res.find((x) => x.id === "a")!.status).toBe("failed");
     expect(res.find((x) => x.id === "b")!.status).toBe("skipped");
     expect(res.find((x) => x.id === "b")!.error).toMatch(/upstream "a"/);
+  });
+
+  it("a node that exceeds its timeout fails as 'timed out' (kill path)", async () => {
+    const d = dir();
+    const flow: Flow = {
+      profiles: cat,
+      steps: { slow: { id: "slow", type: "cmd", run: "sleep 5" } },
+    };
+    const res = await new Runner(flow, { chainDir: d, timeoutMs: 100 }).runChain();
+    expect(res[0]!.status).toBe("failed");
+    expect(res[0]!.error).toMatch(/timed out/);
   });
 
   it("a failed node is not cached (next run retries it)", async () => {

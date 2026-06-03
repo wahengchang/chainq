@@ -1,14 +1,16 @@
-// Minimal expression substitution for prompt templates (v1 — tier-1 only).
+// Tier-1 expression substitution for prompt templates (the statically-checkable
+// path selectors from the design §4.2). The tier-2 read-only JS sandbox
+// ({{ a + b }}) stays deferred (security surface, eng review).
 //
-// Supported (the path selectors; statically the common case):
-//   {{ $json }}            -> the primary upstream's whole output
-//   {{ $json.field }}      -> parse primary upstream as JSON, take .field
-//   {{ $node["id"] }}      -> another named upstream's whole output
-//   {{ $node["id"].field } -> that upstream parsed as JSON, take .field
+//   {{ $json }}                whole primary-upstream output
+//   {{ $json.title }}          a field
+//   {{ $json.items[2].text }}  nested + array index
+//   {{ $json.items[-1].text }} negative index (from the end)
+//   {{ $json.items[*].title }} pluck a column → JSON array
+//   {{ $node["id"] }}          another named upstream (whole / + path)
+//   {{ $node["id"].x.y }}
 //
-// The tier-2 read-only JS sandbox ({{ a + b }}) is deferred (security surface,
-// eng review). Unknown expressions are left verbatim so they're visible, not
-// silently blanked.
+// Unknown expressions are left verbatim so they're visible, not silently blanked.
 
 export interface RenderInputs {
   /** id -> that upstream's output text */
@@ -27,30 +29,68 @@ export function renderPrompt(template: string, inputs: RenderInputs): string {
 }
 
 function resolveExpr(expr: string, inputs: RenderInputs): string | undefined {
-  // $json[.field]
-  let m = /^\$json(?:\.([\w[\]*-]+))?$/.exec(expr);
+  // $json[.path]
+  let m = /^\$json(?:\.(.+))?$/.exec(expr);
   if (m) {
     if (!inputs.primary) return undefined;
-    return pick(inputs.outputs[inputs.primary], m[1]);
+    return select(inputs.outputs[inputs.primary], m[1]);
   }
-  // $node["id"][.field]
-  m = /^\$node\[["']([^"']+)["']\](?:\.([\w[\]*-]+))?$/.exec(expr);
+  // $node["id"][.path]
+  m = /^\$node\[["']([^"']+)["']\](?:\.(.+))?$/.exec(expr);
   if (m) {
     const id = m[1]!;
     if (!(id in inputs.outputs)) return undefined;
-    return pick(inputs.outputs[id], m[2]);
+    return select(inputs.outputs[id], m[2]);
   }
   return undefined;
 }
 
-function pick(raw: string | undefined, field?: string): string | undefined {
+/** Apply a dotted path (with [n] / [-1] / [*]) to an upstream's output text. */
+function select(raw: string | undefined, path?: string): string | undefined {
   if (raw === undefined) return undefined;
-  if (!field) return raw;
+  if (!path) return raw; // {{ $json }} — whole output, verbatim
+
+  let root: unknown;
   try {
-    const obj = JSON.parse(raw) as Record<string, unknown>;
-    const val = obj[field];
-    return val === undefined ? undefined : typeof val === "string" ? val : JSON.stringify(val);
+    root = JSON.parse(raw);
   } catch {
-    return undefined; // not JSON — can't pick a field
+    return undefined; // not JSON → no fields to select
   }
+  const value = walk(root, tokenize(path));
+  return stringify(value);
+}
+
+type Accessor = { kind: "key"; key: string } | { kind: "index"; index: number | "*" };
+
+// "items[2].text" → [key items, index 2, key text] ; "items[*].title" → [..., index *, key title]
+function tokenize(path: string): Accessor[] {
+  const out: Accessor[] = [];
+  const re = /(\w+)|\[(\*|-?\d+)\]/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(path)) !== null) {
+    if (m[1] !== undefined) out.push({ kind: "key", key: m[1] });
+    else out.push({ kind: "index", index: m[2] === "*" ? "*" : Number(m[2]) });
+  }
+  return out;
+}
+
+function walk(value: unknown, accessors: Accessor[]): unknown {
+  if (accessors.length === 0) return value;
+  if (value === null || value === undefined) return undefined;
+  const [acc, ...rest] = accessors as [Accessor, ...Accessor[]];
+
+  if (acc.kind === "key") {
+    if (typeof value !== "object") return undefined;
+    return walk((value as Record<string, unknown>)[acc.key], rest);
+  }
+  // index
+  if (!Array.isArray(value)) return undefined;
+  if (acc.index === "*") return value.map((el) => walk(el, rest)); // pluck a column
+  const idx = acc.index < 0 ? value.length + acc.index : acc.index;
+  return walk(value[idx], rest);
+}
+
+function stringify(value: unknown): string | undefined {
+  if (value === undefined) return undefined;
+  return typeof value === "string" ? value : JSON.stringify(value);
 }
