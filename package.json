@@ -1,0 +1,24 @@
+{
+  "name": "chain-cli",
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Run multi-step prompt chains on local CLI models, defined in one YAML file.",
+  "bin": {
+    "chain": "./src/cli/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "dev": "tsx src/cli/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "yaml": "^2.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}

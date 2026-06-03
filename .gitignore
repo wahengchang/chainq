@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.chain/
+*.log
+
+# macOS AppleDouble files (this repo lives on a non-HFS drive)
+._*
+.DS_Store
