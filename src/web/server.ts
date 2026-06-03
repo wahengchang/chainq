@@ -19,7 +19,8 @@ import {
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
-import { parseFlow, validate, Runner } from "../engine/index.js";
+import { parseDocument } from "yaml";
+import { parseFlow, validate, Runner, upstreamsOf } from "../engine/index.js";
 import { NEW_FLOW_TEMPLATE } from "../cli/new.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -79,6 +80,37 @@ async function handle(req: IncomingMessage, res: ServerResponse, opts: WebOption
   if (method === "GET" && path === "/api/read") {
     const file = resolve(url.searchParams.get("path") || "");
     return json(res, 200, { yaml: readFileSync(file, "utf8") });
+  }
+
+  // Parse a flow into a node list (for the visual node editor).
+  if (method === "GET" && path === "/api/parse") {
+    const file = resolve(url.searchParams.get("path") || "");
+    const flow = parseFlow(readFileSync(file, "utf8"));
+    const nodes = Object.values(flow.steps).map((n) => ({
+      id: n.id,
+      type: n.type,
+      from: upstreamsOf(n),
+      prompt: n.prompt ?? null,
+      run: n.run ?? null,
+      profile: n.profile ?? null,
+    }));
+    return json(res, 200, { nodes });
+  }
+
+  // Edit ONE field of ONE node (e.g. its prompt), preserving comments/formatting.
+  if (method === "POST" && path === "/api/set") {
+    const { path: file = "", node = "", field = "", value = "" } = await body(req);
+    const fp = resolve(file);
+    const doc = parseDocument(readFileSync(fp, "utf8"));
+    doc.setIn(["steps", node, field], value);
+    try {
+      const errors = validate(parseFlow(String(doc)));
+      if (errors.length) return json(res, 400, { errors });
+    } catch (e) {
+      return json(res, 400, { errors: [{ node: "(parse)", message: msg(e) }] });
+    }
+    atomicWrite(fp, String(doc));
+    return json(res, 200, { ok: true });
   }
 
   // Create a new flow file from the starter template.

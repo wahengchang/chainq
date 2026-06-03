@@ -49,6 +49,25 @@ describe("web server", () => {
       // creating the same flow again conflicts
       const dup = await post(base, "/api/create", { dir, name: "blog" });
       expect(dup.status).toBe(409);
+
+      // parse → node list for the visual editor
+      const parsed: any = await fetch(
+        `${base}/api/parse?path=${encodeURIComponent(join(dir, "blog.yaml"))}`,
+      ).then((r) => r.json());
+      expect(parsed.nodes.map((n: { id: string }) => n.id)).toEqual(["draft", "refine"]);
+
+      // edit one node's prompt (comment-preserving) and confirm it took
+      const set = await post(base, "/api/set", {
+        path: join(dir, "blog.yaml"),
+        node: "draft",
+        field: "prompt",
+        value: "Write a haiku.",
+      });
+      expect(set.status).toBe(200);
+      const re: any = await fetch(
+        `${base}/api/parse?path=${encodeURIComponent(join(dir, "blog.yaml"))}`,
+      ).then((r) => r.json());
+      expect(re.nodes.find((n: { id: string }) => n.id === "draft").prompt).toBe("Write a haiku.");
     } finally {
       close();
     }
