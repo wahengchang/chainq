@@ -24,6 +24,13 @@ export interface SubprocessOptions {
   timeoutMs?: number;
   /** Grace period between SIGTERM and SIGKILL. */
   killGraceMs?: number;
+  /**
+   * Working directory for the child. Relative paths in a cmd node (`cat in.txt`)
+   * resolve against this — the flow's directory, NOT wherever the process was
+   * launched. Pinning this kills the "same flow, different cwd → reads different
+   * files" drift the design warns about.
+   */
+  cwd?: string;
 }
 
 const DEFAULT_TIMEOUT = 120_000;
@@ -40,7 +47,7 @@ export async function runSubprocess(
   const killGraceMs = opts.killGraceMs ?? DEFAULT_KILL_GRACE;
 
   return new Promise<SubprocessResult>((resolve, reject) => {
-    const child = spawn(cmd, args, { stdio: ["pipe", "pipe", "pipe"] });
+    const child = spawn(cmd, args, { stdio: ["pipe", "pipe", "pipe"], cwd: opts.cwd });
     let stdout = "";
     let stderr = "";
     let timedOut = false;

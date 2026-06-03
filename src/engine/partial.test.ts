@@ -2,7 +2,7 @@
 // touch the real outputs — B1 in the design).
 
 import { describe, it, expect } from "vitest";
-import { existsSync, mkdtempSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Runner } from "./run.js";
@@ -37,6 +37,22 @@ describe("partial runs", () => {
     const d = dir();
     const res = await new Runner(chain(), { chainDir: d }).runSteps(2);
     expect(res.map((r) => r.id)).toEqual(["a", "b"]);
+  });
+});
+
+describe("cmd cwd", () => {
+  it("resolves a cmd's relative path against baseDir, not process.cwd (cwd-drift regression)", async () => {
+    const d = dir();
+    writeFileSync(join(d, "data.txt"), "hello-from-basedir");
+    const flow: Flow = {
+      profiles: cat,
+      steps: { read: { id: "read", type: "cmd", run: "cat data.txt", inputs: ["data.txt"] } },
+    };
+    // chainDir is a SUBdir; baseDir is d. process.cwd() is the repo root, NOT d —
+    // so this only passes if the subprocess runs in baseDir.
+    const res = await new Runner(flow, { chainDir: join(d, ".chain"), baseDir: d }).runChain();
+    expect(res[0]!.status).toBe("ran");
+    expect(res[0]!.output).toContain("hello-from-basedir");
   });
 });
 

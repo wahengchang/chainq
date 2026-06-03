@@ -39,10 +39,11 @@ export class Runner {
   private store: CacheStore;
   private memo = new Map<string, string>(); // in-run output cache (successes)
   private blocked = new Set<string>(); // failed this run, or downstream of a failure
+  private baseDir: string; // where the flow's relative paths resolve
 
   constructor(private flow: Flow, private opts: RunOptions) {
-    const baseDir = opts.baseDir ?? opts.chainDir;
-    this.keys = computeKeys(flow, baseDir, opts.profileOverride);
+    this.baseDir = opts.baseDir ?? opts.chainDir;
+    this.keys = computeKeys(flow, this.baseDir, opts.profileOverride);
     this.volatile = volatileSet(flow);
     this.store = new CacheStore(opts.chainDir, { scratch: opts.scratch });
   }
@@ -160,6 +161,7 @@ export class Runner {
       if (node.type === "cmd") {
         const res = await runSubprocess(cmdToArgv(node.run ?? ""), "", {
           timeoutMs: this.opts.timeoutMs,
+          cwd: this.baseDir,
         });
         if (res.timedOut) return this.fail(id, "timed out");
         if (res.code !== 0) return this.fail(id, res.stderr || `exit ${res.code}`);
@@ -172,6 +174,7 @@ export class Runner {
           const profile = resolveProfile(this.flow, this.opts.profileOverride ?? node.profile);
           const res = await runSubprocess(cmdToArgv(profile.cmd), rendered, {
             timeoutMs: this.opts.timeoutMs,
+            cwd: this.baseDir,
           });
           if (res.timedOut) return this.fail(id, "timed out");
           if (res.code !== 0) {

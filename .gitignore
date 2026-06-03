@@ -6,3 +6,6 @@ dist/
 # macOS AppleDouble files (this repo lives on a non-HFS drive)
 ._*
 .DS_Store
+
+# generated E2E visualizer
+e2e-viz.html

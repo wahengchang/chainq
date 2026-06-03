@@ -10,7 +10,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "dev": "tsx src/cli/index.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "viz": "tsx scripts/e2e-trace.ts"
   },
   "dependencies": {
     "yaml": "^2.5.0"
