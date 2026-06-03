@@ -112,6 +112,7 @@
           <span class="mtitle">node · <span id="pnId"></span></span>
           <span class="nt" id="pnType"></span>
           <button class="primary" onclick="runNode()">▷ Run to here</button>
+          <button onclick="runNode(true)" title="ignore cache, call the model again">↻ re-run</button>
           <button onclick="saveNode()">Save</button>
           <button onclick="deleteNode()">delete</button>
           <button onclick="closeNode()">✕ close</button>
@@ -132,7 +133,7 @@
             <div id="pnRendered" class="mbody" style="flex:0 0 42%;color:var(--ran);background:rgba(93,176,126,.05)">— run upstream (▷ Run to here) to fill {{ }} —</div>
           </div>
           <div class="mcol">
-            <div class="chead">output</div>
+            <div class="chead">output <span id="pnOutStatus" style="float:right;text-transform:none;letter-spacing:0"></span></div>
             <div id="pnOut" class="mbody dim">Run to see this node's output.</div>
           </div>
         </div>
@@ -215,6 +216,8 @@ function selectNode(id){
   const ro=results[n.id];
   $("pnOut").className="mbody"+(ro&&ro.status==="failed"?" out err":(ro&&ro.status==="running"?" dim":(ro?"":" dim")));
   $("pnOut").textContent=ro?(ro.status==="running"?"running…":(ro.error||ro.output||"(empty)")):"Run to see this node's output.";
+  const lab={ran:'<span class="g-ran">✓ ran · called the model</span>',cached:'<span class="g-cached">⊘ cached · reused, no call</span>',failed:'<span class="g-failed">✗ failed</span>',skipped:'<span class="g-skipped">– skipped</span>',running:'<span class="g-running">◌ running…</span>'};
+  $("pnOutStatus").innerHTML=ro?(lab[ro.status]||""):"";
   setMsg("pnMsg","","");renderPreview();
 }
 function schedulePreview(){clearTimeout(previewTimer);previewTimer=setTimeout(renderPreview,350);}
@@ -253,11 +256,11 @@ function onNode(rec){
   renderGraph();                       // each node flips the instant it finishes
   if(selected===rec.id)selectNode(selected);
 }
-async function runNode(){
+async function runNode(force){
   if(!selected)return;
-  $("pnOut").className="mbody dim";$("pnOut").textContent="running…";
+  $("pnOut").className="mbody dim";$("pnOut").textContent="running…";$("pnOutStatus").innerHTML='<span class="g-running">◌ running…</span>';
   setRunningUI([selected,...ancestors(selected)]);
-  const r=await streamRun("/api/run-node",{path:current,node:selected,profile:$("profile").value});
+  const r=await streamRun("/api/run-node",{path:current,node:selected,profile:$("profile").value,fresh:!!force});
   if(!r.ok){renderGraph();return setMsg("pnMsg","err",errs(r.data)||"run failed");}
 }
 // run-to-here straight from a node's ▷ button (no panel needed)

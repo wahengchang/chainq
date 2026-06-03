@@ -164,14 +164,14 @@ async function handle(req: IncomingMessage, res: ServerResponse, opts: WebOption
   // Run the flow, STREAMING each node's result as it settles (NDJSON) so the UI
   // lights up one node at a time, in execution order — not all at once.
   if (method === "POST" && path === "/api/run") {
-    const { path: file = "", profile = "" } = await body(req);
-    return streamRun(res, resolve(file), profile, (runner) => runner.runChain());
+    const { path: file = "", profile = "", fresh } = await body(req);
+    return streamRun(res, resolve(file), profile, Boolean(fresh), (runner) => runner.runChain());
   }
 
   // Run UP TO one node (its upstream cone) — streamed, same as /api/run.
   if (method === "POST" && path === "/api/run-node") {
-    const { path: file = "", node = "", profile = "" } = await body(req);
-    return streamRun(res, resolve(file), profile, (runner) => runner.runToNode(node));
+    const { path: file = "", node = "", profile = "", fresh } = await body(req);
+    return streamRun(res, resolve(file), profile, Boolean(fresh), (runner) => runner.runToNode(node));
   }
 
   // Rewire a node's `from` (which upstream steps feed it; first = $json).
@@ -241,6 +241,7 @@ async function streamRun(
   res: ServerResponse,
   fp: string,
   profile: string,
+  fresh: boolean,
   run: (runner: Runner) => Promise<unknown>,
 ): Promise<void> {
   const flow = parseFlow(readFileSync(fp, "utf8"));
@@ -256,6 +257,7 @@ async function streamRun(
     chainDir: join(baseDir, ".chain"),
     baseDir,
     profileOverride: profile || undefined,
+    fresh,
     onResult: (r) =>
       res.write(
         JSON.stringify({ id: r.id, status: r.status, output: r.output, error: r.error ?? null }) + "\n",
