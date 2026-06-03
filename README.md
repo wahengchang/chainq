@@ -15,6 +15,9 @@ the slow upstream every time — is the real pain. `chain` makes that loop cheap
 edit a node → only its transitive downstream is invalidated → everything else is served
 from cache.
 
+> **New here?** Read [docs/getting-started.md](docs/getting-started.md) — a step-by-step
+> walkthrough from zero to a running chain (no prior knowledge assumed).
+
 ## Create a new project
 
 ```bash
