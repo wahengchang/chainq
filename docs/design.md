@@ -339,6 +339,30 @@ positions → .chain/layout.json keyed by node id; never in main YAML
   - Files: `engine/layout.ts`
   - Verify: move node → flow YAML byte-identical; validate-fail → neither written
 
+## Partial Execution Contract (n8n analysis, 2026-06-03)
+
+Evaluated n8n's `partial-execution-utils` (DirectedGraph, findStartNodes, findSubgraph, cleanRunData, handleCycles, recreateNodeExecutionStack…). Verdict: our engine already implements ~80% of it; we ADOPT one structural idea and KEEP our invalidation core.
+
+**UI action → system promise → engine entry (the contract to honor):**
+
+| UI action | promise | chain entry |
+|---|---|---|
+| Execute workflow (全量) | rerun from start, ignore cache | `runChain()` (+ `--fresh` to ignore cache) |
+| Execute step (部分) | run node + minimal upstream, reuse rest | `runToNode(node)` |
+| Pin | freeze output, never call the model | `Runner({pins})` — short-circuits before run |
+| Edit param / connection | node + downstream recompute next run | Merkle key changes → auto-dirty (no manual cleanup) |
+
+**Adopted — plan/execute separation** (`engine/plan.ts`): `planRun(flow, destination, deps)` predicts `{toRun, toReuse, toSkip, aiCallCount}` WITHOUT executing. Powers the UI/CLI **preflight** ("will call N ai nodes" — quota awareness up front). One shared `nodeDisposition()` is used by both the planner and the executor so a plan can never drift from what runs. Pin > cache > run priority.
+
+**NOT adopted — n8n's mutation-based `cleanRunData`.** We keep **Merkle keys**: editing a node changes its key → `isValid` false → it + transitive downstream re-run, automatically. Content-addressed, deterministic, no "remember to clear the right set" (n8n shipped bugs there). Post-edit stale display is handled by the UI computing `isValid` and marking a node **stale** (better than n8n blanking it).
+
+**Banked for the loop container (do NOT forget when building loops):**
+- A loop is an **atomic re-run unit** — anything dirty inside → whole loop reruns from entry. (Per-item *trial* runs still allowed via scratch/pin.)
+- An **unclosed loop must not be a start node** (n8n #22555).
+- Loop `done` output empty → loop becomes a start node; **`null` AND `[]` both count as "no data."**
+- **Composite edge keys with port index** — adopt only when multi-output/branch nodes (IF) appear; today `from` is a single name / list.
+- n8n's **cycle/Tarjan-SCC** model is only needed for feedback/while loops — out of scope; chain's container loops (`over: <fixed list>`) match the design.
+
 ## GSTACK REVIEW REPORT
 
 | Review | Trigger | Why | Runs | Status | Findings |

@@ -20,5 +20,12 @@ export {
 export { validate, type ValidationError } from "./validate.js";
 export { computeKeys, volatileSet, CacheStore } from "./cache.js";
 export { Runner, type RunOptions } from "./run.js";
+export {
+  planRun,
+  nodeDisposition,
+  type RunPlan,
+  type PlanDeps,
+  type Disposition,
+} from "./plan.js";
 export { FlowLock } from "./lock.js";
 export { renderPrompt } from "./render.js";

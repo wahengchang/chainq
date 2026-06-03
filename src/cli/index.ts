@@ -134,6 +134,14 @@ async function main(argv: string[]): Promise<number> {
       },
     });
 
+    // Preflight: show what WILL run before burning any quota (n8n-style).
+    if (!flags.from && flags.steps === undefined) {
+      const p = runner.plan(flags.to ?? null);
+      console.error(
+        `plan: ${p.aiCallCount} ai call(s) · ${p.toReuse.length} reused · ${p.toSkip.length} skipped\n`,
+      );
+    }
+
     if (flags.from) await runner.runFrom(flags.from);
     else if (flags.to) await runner.runToNode(flags.to);
     else if (flags.steps !== undefined) await runner.runSteps(flags.steps);

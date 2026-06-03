@@ -12,6 +12,7 @@ import { CacheStore, computeKeys, volatileSet } from "./cache.js";
 import { cmdToArgv, resolveProfile } from "./profiles.js";
 import { renderPrompt } from "./render.js";
 import { runSubprocess } from "./proc.js";
+import { nodeDisposition, planRun, type PlanDeps, type RunPlan } from "./plan.js";
 import type { Flow, NodeResult } from "./types.js";
 
 export interface RunOptions {
@@ -46,6 +47,24 @@ export class Runner {
     this.keys = computeKeys(flow, this.baseDir, opts.profileOverride);
     this.volatile = volatileSet(flow);
     this.store = new CacheStore(opts.chainDir, { scratch: opts.scratch });
+  }
+
+  private deps(): PlanDeps {
+    return {
+      keys: this.keys,
+      volatile: this.volatile,
+      store: this.store,
+      pins: this.opts.pins,
+      fresh: this.opts.fresh,
+    };
+  }
+
+  /**
+   * Predict what a run would do WITHOUT running it. `destination` = run-to-here
+   * (null = full chain). Use it for a UI preflight ("will call N ai nodes").
+   */
+  plan(destination: string | null = null): RunPlan {
+    return planRun(this.flow, destination, this.deps());
   }
 
   /** Run every node, in topological order. (发布模式 / `chain run`) */
@@ -132,9 +151,9 @@ export class Runner {
       return r;
     }
 
+    // Same decision the planner uses (DRY: plan can never drift from execution).
     const key = this.keys.get(id)!;
-    const valid =
-      !force && !this.opts.fresh && this.store.isValid(id, key, this.volatile.has(id));
+    const valid = !force && nodeDisposition(id, this.deps()) === "cache";
     if (valid) {
       const output = this.store.load(id);
       this.memo.set(id, output);
