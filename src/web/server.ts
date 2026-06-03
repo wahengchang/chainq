@@ -20,7 +20,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 import { parseDocument } from "yaml";
-import { parseFlow, validate, Runner, upstreamsOf } from "../engine/index.js";
+import { parseFlow, validate, Runner, upstreamsOf, renderPrompt } from "../engine/index.js";
 import { NEW_FLOW_TEMPLATE } from "../cli/new.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -95,6 +95,29 @@ async function handle(req: IncomingMessage, res: ServerResponse, opts: WebOption
       profile: n.profile ?? null,
     }));
     return json(res, 200, { nodes });
+  }
+
+  // Render a node's prompt with its inputs substituted (the 代入後 preview).
+  // Uses the upstream nodes' last cached outputs. `template` overrides the saved
+  // prompt so the preview updates live as you type.
+  if (method === "POST" && path === "/api/render") {
+    const { path: file = "", node = "", template } = await body(req);
+    const fp = resolve(file);
+    const flow = parseFlow(readFileSync(fp, "utf8"));
+    const n = flow.steps[node];
+    if (!n) return json(res, 404, { error: "no such node" });
+    const ups = upstreamsOf(n).filter((u) => flow.steps[u]);
+    const outDir = join(dirname(fp), ".chain", "outputs");
+    const outputs: Record<string, string> = {};
+    let haveAll = ups.length > 0;
+    for (const u of ups) {
+      const f = join(outDir, `${u}.out`);
+      if (existsSync(f)) outputs[u] = readFileSync(f, "utf8");
+      else haveAll = false;
+    }
+    const tmpl = typeof template === "string" ? template : (n.prompt ?? "");
+    const rendered = renderPrompt(tmpl, { outputs, primary: ups[0] });
+    return json(res, 200, { rendered, haveInputs: haveAll, noUpstream: ups.length === 0 });
   }
 
   // Edit ONE field of ONE node (e.g. its prompt), preserving comments/formatting.
@@ -183,6 +206,29 @@ async function handle(req: IncomingMessage, res: ServerResponse, opts: WebOption
     return json(res, 200, {
       results: results.map((r) => ({ id: r.id, status: r.status, output: r.output, error: r.error ?? null })),
     });
+  }
+
+  // Rewire a node's `from` (which upstream steps feed it; first = $json).
+  // Comma-separated list → "" (no from), one string, or a YAML list.
+  if (method === "POST" && path === "/api/set-from") {
+    const { path: file = "", node = "", from = "" } = await body(req);
+    const fp = resolve(file);
+    const doc = parseDocument(readFileSync(fp, "utf8"));
+    const list = String(from)
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (list.length === 0) doc.deleteIn(["steps", node, "from"]);
+    else if (list.length === 1) doc.setIn(["steps", node, "from"], list[0]);
+    else doc.setIn(["steps", node, "from"], list);
+    try {
+      const errors = validate(parseFlow(String(doc)));
+      if (errors.length) return json(res, 400, { errors });
+    } catch (e) {
+      return json(res, 400, { errors: [{ node: "(parse)", message: msg(e) }] });
+    }
+    atomicWrite(fp, String(doc));
+    return json(res, 200, { ok: true });
   }
 
   // Delete a node (comment-preserving). Rejected if a downstream still needs it.
