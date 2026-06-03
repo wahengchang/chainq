@@ -28,6 +28,14 @@ chain run flow.yaml                          # run for real (first: claude login
 `fake: cat` profile, so a fresh project runs offline immediately. It refuses to overwrite
 an existing `flow.yaml` unless you pass `--force`.
 
+A project holds many flows — add another workflow any time:
+
+```bash
+chain new tweets          # generates tweets.yaml (a 2-node starter chain)
+chain run tweets.yaml --profile fake
+chain ls                  # list every flow in the project
+```
+
 ## Run it
 
 ```bash

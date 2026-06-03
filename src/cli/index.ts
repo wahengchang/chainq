@@ -22,6 +22,7 @@ import {
   type NodeResult,
 } from "../engine/index.js";
 import { runInit } from "./init.js";
+import { runNew } from "./new.js";
 
 const PREFIX: Record<NodeResult["status"], string> = {
   ran: "\x1b[32m✓\x1b[0m",
@@ -82,6 +83,10 @@ async function main(argv: string[]): Promise<number> {
     return runInit(args);
   }
 
+  if (cmd === "new") {
+    return runNew(args);
+  }
+
   if (cmd === "ls") {
     const dir = resolve(args[0] ?? ".");
     const flows = listFlows(dir);
@@ -93,7 +98,7 @@ async function main(argv: string[]): Promise<number> {
   const file = args[0];
   if (!cmd || !file || !["run", "validate"].includes(cmd)) {
     console.error(
-      "usage: chain init [dir] | chain <run|validate> <flow.yaml> [flags] | chain ls [dir]",
+      "usage: chain init [dir] | chain new <name> | chain <run|validate> <flow.yaml> [flags] | chain ls [dir]",
     );
     return 2;
   }
