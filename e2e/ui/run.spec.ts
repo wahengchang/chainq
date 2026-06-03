@@ -69,29 +69,25 @@ test("Run to here on a node produces output (offline)", async ({ page }) => {
   await expect(page.locator("#pnOut")).not.toHaveText("Run to see this node's output.");
 });
 
-test("the ▷ button on a node card opens its panel AND shows output", async ({ page }) => {
-  // reproduces the user's report: clicking ▷ used to run silently with no
-  // visible output. Now it must open the panel and surface the result.
+test("the ▷ button runs inline on the card WITHOUT opening the modal", async ({ page }) => {
+  // the ▷ button must NOT hijack you into the editor panel — it runs in place
+  // and shows the result on the card itself.
   await page.goto(baseURL);
   await expect(page.locator(".node").first()).toBeVisible();
   await page.locator("#profile").selectOption("fake");
 
-  // pick a DOWNSTREAM node (has upstream) so we exercise run-to-here, not just a start node
+  // pick a DOWNSTREAM node (has upstream) so we exercise run-to-here
   const node = page.locator(".node").nth(1);
   await node.hover();
   await node.locator(".noderun").click();
 
-  // ▷ must open the node panel (this was the bug — it ran without opening it)
-  await expect(page.locator(".modal")).toBeVisible();
-
-  // the node's glyph settles to a finished state
+  // the result must appear ON the card
+  await expect(node.locator(".nodeout")).toBeVisible({ timeout: 20000 });
+  await expect(node.locator(".nodeout")).not.toHaveText(/running…/);
+  await expect(node.locator(".nodeout")).not.toBeEmpty();
+  // the glyph settles to a finished state
   await expect(node.locator(".glyph")).toContainText(/[✓⊘]/, { timeout: 20000 });
 
-  // and the OUTPUT panel actually shows text (not stuck on running / placeholder)
-  const out = page.locator("#pnOut");
-  await expect(out).not.toHaveText("running…");
-  await expect(out).not.toHaveText("Run to see this node's output.");
-  await expect(out).not.toBeEmpty();
-  // status badge reports ran or cached
-  await expect(page.locator("#pnOutStatus")).toContainText(/ran|cached/, { timeout: 20000 });
+  // and the modal must stay CLOSED
+  await expect(page.locator(".modal")).toBeHidden();
 });

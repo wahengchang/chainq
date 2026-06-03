@@ -45,6 +45,9 @@
   .glyph{width:14px;text-align:center}
   .g-ran{color:var(--ran)} .g-cached{color:var(--cached)} .g-failed{color:var(--bad)} .g-skipped{color:var(--dim)} .g-pending{color:var(--dim)}
   .npreview{color:var(--dim);font-size:11px;margin-top:6px;max-height:32px;overflow:hidden}
+  .nodeout{margin-top:8px;padding:7px 8px;background:var(--panel2);border-radius:3px;font-size:11px;line-height:1.45;white-space:pre-wrap;max-height:120px;overflow:auto;border-left:2px solid var(--ran)}
+  .nodeout.bad{border-left-color:var(--bad);color:var(--bad)}
+  .nodeout.dim{color:var(--dim);border-left-color:var(--accent)}
   .arrow{align-self:center;color:var(--dim);padding:0 8px}
   .addnode{padding:0 30px 30px}
   /* n8n-style floating node panel */
@@ -190,9 +193,13 @@ function renderGraph(){
     const r=results[n.id];
     const d=document.createElement("div");d.className="node "+(r?r.status:"");
     const glyph=r?('<span class="glyph g-'+r.status+(r.status==="running"?" spin":"")+'">'+G[r.status]+'</span>'):'<span class="glyph g-pending">○</span>';
+    // show the result ON the card (no modal) once it runs
+    let out="";
+    if(r&&r.status==="running")out='<div class="nodeout dim">◌ running…</div>';
+    else if(r&&(r.error||r.output))out='<div class="nodeout'+(r.status==="failed"?" bad":"")+'">'+esc((r.error||r.output))+'</div>';
     d.innerHTML='<button class="noderun" title="run to here" onclick="event.stopPropagation();runTo(\''+n.id+'\')">▷</button>'
       +'<div class="nh">'+glyph+'<span class="nn">'+n.id+'</span><span class="nt">'+n.type+'</span></div>'
-      +'<div class="npreview">'+esc((n.prompt||n.run||"").slice(0,70))+'</div>';
+      +'<div class="npreview">'+esc((n.prompt||n.run||"").slice(0,70))+'</div>'+out;
     d.onclick=()=>selectNode(n.id);g.appendChild(d);
   });
 }
@@ -263,14 +270,13 @@ async function runNode(force){
   const r=await streamRun("/api/run-node",{path:current,node:selected,profile:$("profile").value,fresh:!!force});
   if(!r.ok){renderGraph();return setMsg("pnMsg","err",errs(r.data)||"run failed");}
 }
-// run-to-here straight from a node's ▷ button — OPEN the panel so the output
-// is actually visible (otherwise it looks like "nothing happened").
+// run-to-here straight from a node's ▷ button — runs inline, NO modal.
+// The result shows on the card itself (see renderGraph). Click the card body
+// (not ▷) if you want to open the editor panel.
 async function runTo(id){
-  selectNode(id);
-  $("pnOut").className="mbody dim";$("pnOut").textContent="running…";$("pnOutStatus").innerHTML='<span class="g-running">◌ running…</span>';
   setRunningUI([id,...ancestors(id)]);
   const r=await streamRun("/api/run-node",{path:current,node:id,profile:$("profile").value});
-  if(!r.ok){renderGraph();return setMsg("pnMsg","err",errs(r.data)||"run failed");}
+  if(!r.ok){renderGraph();return setMsg("canvasMsg","err",errs(r.data)||"run failed");}
 }
 // click a variable in INPUT → insert it into the prompt at the cursor (no typos)
 function insertVar(id,primary){
