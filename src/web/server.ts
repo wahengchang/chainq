@@ -123,7 +123,12 @@ async function handle(req: IncomingMessage, res: ServerResponse, opts: WebOption
       profileOverride: profile || undefined,
     }).runChain();
     return json(res, 200, {
-      results: results.map((r) => ({ id: r.id, status: r.status, error: r.error ?? null })),
+      results: results.map((r) => ({
+        id: r.id,
+        status: r.status,
+        output: r.output,
+        error: r.error ?? null,
+      })),
     });
   }
 
