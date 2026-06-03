@@ -9,3 +9,8 @@ dist/
 
 # generated E2E visualizer
 e2e-viz.html
+
+# playwright
+test-results/
+playwright-report/
+playwright/.cache/

@@ -5,10 +5,17 @@ flow files in throwaway temp projects. No mocks, no internal imports — everyth
 runs the way a user would, fully offline via the `cat` fake model.
 
 ```bash
-npm run e2e          # run all scenarios (headless — asserts, pass/fail)
-npm run e2e:demo     # NON-HEADLESS — watch the real chain runs scroll by, in color
+npm run e2e          # CLI E2E (vitest) — drives the real chain binary, asserts
+npm run e2e:demo     # non-headless terminal — watch the real chain runs, in color
+npm run e2e:ui       # BROWSER E2E (Playwright, headed) — Chromium opens the
+                     #   visualizer and clicks through every step; you watch it
+npm run e2e:ui:headless   # same, no visible window (CI)
 npm test             # unit tests only (src/), kept separate
 ```
+
+Three layers: **unit** (`src/`, pure functions), **CLI E2E** (`e2e/scenarios`, spawns
+the real binary), **browser E2E** (`e2e/ui`, Playwright drives Chromium over the
+`e2e-viz.html` visualizer — which itself replays the real engine).
 
 `e2e:demo` (`e2e/demo.ts`) walks the same flows but streams the CLI's real colored
 output to your terminal (`✓ ran` / `⊘ cached` / `✗ failed`, the `plan:` preflight),
