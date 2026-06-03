@@ -22,3 +22,10 @@ export function runCli(cwd: string, args: string[]): CliResult {
   const out = `${r.stdout ?? ""}${r.stderr ?? ""}`.replace(/\x1b\[[0-9;]*m/g, "");
   return { out, code: r.status ?? 1 };
 }
+
+// "Non-headless": stream the CLI's real (colored) output straight to the
+// terminal so you can WATCH the chain run. Used by the demo runner, not asserts.
+export function showCli(cwd: string, args: string[]): number {
+  const r = spawnSync(TSX, [CLI, ...args], { cwd, stdio: "inherit" });
+  return r.status ?? 1;
+}

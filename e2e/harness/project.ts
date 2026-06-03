@@ -8,7 +8,7 @@
 import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { runCli, type CliResult } from "./cli.js";
+import { runCli, showCli, type CliResult } from "./cli.js";
 import { parseStatuses, type Status } from "./status.js";
 
 export class Project {
@@ -33,6 +33,11 @@ export class Project {
 
   exists(rel: string): boolean {
     return existsSync(join(this.dir, rel));
+  }
+
+  /** Run the CLI streaming its real colored output to the terminal (demo mode). */
+  show(...args: string[]): number {
+    return showCli(this.dir, args);
   }
 }
 

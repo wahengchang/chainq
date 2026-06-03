@@ -12,7 +12,8 @@
     "dev": "tsx src/cli/index.ts",
     "typecheck": "tsc --noEmit",
     "viz": "tsx scripts/e2e-trace.ts",
-    "e2e": "vitest run --config vitest.e2e.config.ts"
+    "e2e": "vitest run --config vitest.e2e.config.ts",
+    "e2e:demo": "tsx e2e/demo.ts"
   },
   "dependencies": {
     "yaml": "^2.5.0"

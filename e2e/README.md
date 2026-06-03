@@ -5,9 +5,14 @@ flow files in throwaway temp projects. No mocks, no internal imports — everyth
 runs the way a user would, fully offline via the `cat` fake model.
 
 ```bash
-npm run e2e          # run all scenarios
+npm run e2e          # run all scenarios (headless — asserts, pass/fail)
+npm run e2e:demo     # NON-HEADLESS — watch the real chain runs scroll by, in color
 npm test             # unit tests only (src/), kept separate
 ```
+
+`e2e:demo` (`e2e/demo.ts`) walks the same flows but streams the CLI's real colored
+output to your terminal (`✓ ran` / `⊘ cached` / `✗ failed`, the `plan:` preflight),
+so you can *see* it work instead of just reading pass/fail.
 
 ## Layout
 
