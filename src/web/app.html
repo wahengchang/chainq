@@ -263,11 +263,14 @@ async function runNode(force){
   const r=await streamRun("/api/run-node",{path:current,node:selected,profile:$("profile").value,fresh:!!force});
   if(!r.ok){renderGraph();return setMsg("pnMsg","err",errs(r.data)||"run failed");}
 }
-// run-to-here straight from a node's ▷ button (no panel needed)
+// run-to-here straight from a node's ▷ button — OPEN the panel so the output
+// is actually visible (otherwise it looks like "nothing happened").
 async function runTo(id){
+  selectNode(id);
+  $("pnOut").className="mbody dim";$("pnOut").textContent="running…";$("pnOutStatus").innerHTML='<span class="g-running">◌ running…</span>';
   setRunningUI([id,...ancestors(id)]);
   const r=await streamRun("/api/run-node",{path:current,node:id,profile:$("profile").value});
-  if(!r.ok){results={};renderGraph();return setMsg("canvasMsg","err",errs(r.data)||"run failed");}
+  if(!r.ok){renderGraph();return setMsg("pnMsg","err",errs(r.data)||"run failed");}
 }
 // click a variable in INPUT → insert it into the prompt at the cursor (no typos)
 function insertVar(id,primary){

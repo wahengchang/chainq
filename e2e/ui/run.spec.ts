@@ -69,15 +69,29 @@ test("Run to here on a node produces output (offline)", async ({ page }) => {
   await expect(page.locator("#pnOut")).not.toHaveText("Run to see this node's output.");
 });
 
-test("the ▷ run button on a node card runs it", async ({ page }) => {
+test("the ▷ button on a node card opens its panel AND shows output", async ({ page }) => {
+  // reproduces the user's report: clicking ▷ used to run silently with no
+  // visible output. Now it must open the panel and surface the result.
   await page.goto(baseURL);
   await expect(page.locator(".node").first()).toBeVisible();
   await page.locator("#profile").selectOption("fake");
 
-  const node = page.locator(".node").first();
+  // pick a DOWNSTREAM node (has upstream) so we exercise run-to-here, not just a start node
+  const node = page.locator(".node").nth(1);
   await node.hover();
   await node.locator(".noderun").click();
 
-  // the node's glyph should become a finished state (✓ ran or ⊘ cached)
+  // ▷ must open the node panel (this was the bug — it ran without opening it)
+  await expect(page.locator(".modal")).toBeVisible();
+
+  // the node's glyph settles to a finished state
   await expect(node.locator(".glyph")).toContainText(/[✓⊘]/, { timeout: 20000 });
+
+  // and the OUTPUT panel actually shows text (not stuck on running / placeholder)
+  const out = page.locator("#pnOut");
+  await expect(out).not.toHaveText("running…");
+  await expect(out).not.toHaveText("Run to see this node's output.");
+  await expect(out).not.toBeEmpty();
+  // status badge reports ran or cached
+  await expect(page.locator("#pnOutStatus")).toContainText(/ran|cached/, { timeout: 20000 });
 });
