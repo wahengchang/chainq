@@ -369,13 +369,14 @@ Evaluated n8n's `partial-execution-utils` (DirectedGraph, findStartNodes, findSu
 |--------|---------|-----|------|--------|----------|
 | CEO Review | `/plan-ceo-review` | Scope & strategy | 0 | — | — |
 | Codex Review | `/codex review` | Independent 2nd opinion | 1 | issues_found | 30+ challenges, key ones absorbed (cache env/cmd, YAML-preserve, cancellation, lock-blocks); D3 tension → user defended |
-| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 2 | clean | Pass1: engine/cache/subprocess. Pass2 (canvas→YAML): React Flow + n8n delete-bridge decided, CST surgical editor + layout sidecar specced, 6 critical tests |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 3 | clean | P1 engine plan · P2 canvas→YAML plan · P3 CODE review of as-built engine: 4 findings FIXED (from-order cache staleness, Runner per-op lifecycle, stdin EPIPE, full tier-1 paths) + regression tests, 48/48 green |
 | Design Review | `/plan-design-review` | UI/UX gaps | 1 | clean | 5/10 → 8/10, 4 decisions; canvas-first IA, 6 OUTPUT states, render preview, loop view; D4 pulled full canvas into v1 |
 | DX Review | `/plan-devex-review` | Developer experience gaps | 0 | — | — |
 
 - **CODEX:** First pass caught the cache-key environment gap (cmd uncacheable, profile/CLI-version in key) and YAML-preservation — both absorbed. D3 objection rejected on wrong-premise (local CLI subscription, not metered API).
 - **CROSS-MODEL:** Codex challenged D3 (silent re-run), YAML-key identity, in-process engine. User defended D3 with reasoning; identity + in-process kept with mitigations.
 - **CANVAS RE-REVIEW (D4 follow-up):** the canvas→YAML scope is now reviewed. Stack = React + React Flow; delete = n8n auto-bridge; serialization = CST surgical edits (comment-preserving), layout in sidecar, validate-before-write. 6 critical tests, comment/order round-trip is make-or-break. Scope-change flag from the design review is now resolved.
+- **CODE REVIEW (eng pass 3, as-built engine):** 4 findings, all FIXED with regression tests. The two load-bearing ones were silent-wrong-output bugs invisible at plan stage — (A1) `computeKeys` sorted upstream keys but `$json` binds to the first upstream → reordering `from` served stale cache; (A2) `Runner` memo/blocked were instance state → a reused Runner (the UI pattern) had memo shadow `force`, so `rerunNode` returned stale output. Both fixed; memo/blocked now per-operation (`RunCtx`). PR #4.
 - **UNRESOLVED:** 0.
-- **VERDICT:** ENG (×2) + DESIGN CLEARED — engine, cache, subprocess, AND the canvas→YAML surface all reviewed. Ready to implement. Build order: engine core (T1–T5) → node panel demo gate (T6) → CLI (T9) → canvas serialization (T11/T12) → canvas UI (T10).
+- **VERDICT:** ENG (×3) + DESIGN CLEARED — engine plan, canvas→YAML plan, AND the as-built engine code all reviewed; 48/48 tests green across 4 PRs. Ready to keep building (UI surface next). Build order: engine core ✓ → CLI iteration ✓ → plan/execute ✓ → node panel (T6) → canvas serialization (T11/T12) → canvas UI (T10).
 
