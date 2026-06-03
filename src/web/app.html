@@ -30,8 +30,10 @@
   .stage{position:relative;height:calc(100vh - 49px);overflow:auto;
     background:radial-gradient(circle,var(--panel2) 1px,transparent 1px);background-size:22px 22px}
   .flowrow{display:flex;align-items:flex-start;flex-wrap:wrap;gap:0;padding:30px}
-  .node{width:200px;background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:11px 13px;cursor:pointer;transition:border-color .15s}
+  .node{position:relative;width:200px;background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:11px 13px;cursor:pointer;transition:border-color .15s}
   .node:hover{border-color:var(--accent)}
+  .noderun{position:absolute;top:6px;right:6px;padding:0 7px;font-size:12px;line-height:18px;border:1px solid var(--line);border-radius:3px;background:var(--panel2);color:var(--accent);opacity:0;transition:opacity .1s}
+  .node:hover .noderun{opacity:1} .noderun:hover{border-color:var(--accent)}
   .node.ran{border-left:3px solid var(--ran)} .node.cached{border-left:3px solid var(--cached)}
   .node.failed{border-left:3px solid var(--bad)} .node.skipped{opacity:.6}
   .node.running{border-left:3px solid var(--accent);animation:pulse 1.1s ease-in-out infinite}
@@ -59,9 +61,13 @@
   .mbody{padding:10px 12px;overflow:auto;flex:1;white-space:pre-wrap;word-break:break-word}
   .mcol textarea{height:100%;border:0;border-radius:0;min-height:0;background:var(--bg)}
   .mcol .pad{padding:10px 12px}
-  .infield{margin-bottom:8px}
-  .intag{color:var(--pin);font-size:11px}
-  .inval{background:var(--bg);border:1px solid var(--line);border-radius:3px;padding:6px 8px;margin-top:3px;font-size:12px;white-space:pre-wrap;word-break:break-word}
+  .infield{margin-bottom:8px;cursor:pointer;border-radius:4px;padding:5px;border:1px solid transparent}
+  .infield:hover{background:#1b1e22;border-color:var(--line)}
+  .infield .ins{float:right;color:var(--dim);font-size:10px;opacity:0}
+  .infield:hover .ins{opacity:1}
+  .intag{color:var(--pin);font-size:11px;text-decoration:underline;text-decoration-style:dotted}
+  /* read-only value display (NOT an input) */
+  .inval{background:var(--panel2);border-left:2px solid var(--line);border-radius:0;padding:5px 8px;margin-top:4px;font-size:12px;white-space:pre-wrap;word-break:break-word;color:var(--dim);user-select:text}
   .out.err{color:var(--bad)}
   .mfoot{padding:6px 14px;border-top:1px solid var(--line);min-height:0}
   /* raw */
@@ -183,7 +189,9 @@ function renderGraph(){
     const r=results[n.id];
     const d=document.createElement("div");d.className="node "+(r?r.status:"");
     const glyph=r?('<span class="glyph g-'+r.status+(r.status==="running"?" spin":"")+'">'+G[r.status]+'</span>'):'<span class="glyph g-pending">○</span>';
-    d.innerHTML='<div class="nh">'+glyph+'<span class="nn">'+n.id+'</span><span class="nt">'+n.type+'</span></div><div class="npreview">'+esc((n.prompt||n.run||"").slice(0,70))+'</div>';
+    d.innerHTML='<button class="noderun" title="run to here" onclick="event.stopPropagation();runTo(\''+n.id+'\')">▷</button>'
+      +'<div class="nh">'+glyph+'<span class="nn">'+n.id+'</span><span class="nt">'+n.type+'</span></div>'
+      +'<div class="npreview">'+esc((n.prompt||n.run||"").slice(0,70))+'</div>';
     d.onclick=()=>selectNode(n.id);g.appendChild(d);
   });
 }
@@ -200,7 +208,9 @@ function selectNode(id){
     ? '<span class="dim">no upstream — this is a start node</span>'
     : ups.map((u,i)=>{const r=results[u];const tag=i===0?'$json':('$node["'+u+'"]');
         const val=r?esc(r.output||r.error||"(empty)"):'<span class="dim">(run to see)</span>';
-        return '<div class="infield"><span class="intag">'+tag+'</span> ← '+u+'<div class="inval">'+val+'</div></div>';}).join("");
+        return '<div class="infield" onclick="insertVar(\''+u+'\','+(i===0)+')" title="click to insert into the prompt">'
+          +'<span class="ins">↵ insert</span><span class="intag">'+tag+'</span> ← '+u
+          +'<div class="inval">'+val+'</div></div>';}).join("");
   // OUTPUT
   const ro=results[n.id];
   $("pnOut").className="mbody"+(ro&&ro.status==="failed"?" out err":(ro&&ro.status==="running"?" dim":(ro?"":" dim")));
@@ -235,6 +245,22 @@ async function runNode(){
   if(!ok){renderGraph();return setMsg("pnMsg","err",errs(data)||"run failed");}
   data.results.forEach(r=>results[r.id]={status:r.status,output:r.output,error:r.error});
   renderGraph();selectNode(selected);
+}
+// run-to-here straight from a node's ▷ button (no panel needed)
+async function runTo(id){
+  setRunningUI([id,...ancestors(id)]);
+  const{ok,data}=await api("/api/run-node",{method:"POST",body:JSON.stringify({path:current,node:id,profile:$("profile").value})});
+  if(!ok){results={};renderGraph();return setMsg("canvasMsg","err",errs(data)||"run failed");}
+  data.results.forEach(r=>results[r.id]={status:r.status,output:r.output,error:r.error});
+  renderGraph();if(selected===id)selectNode(id);
+}
+// click a variable in INPUT → insert it into the prompt at the cursor (no typos)
+function insertVar(id,primary){
+  const expr=primary?'{{ $json }}':'{{ $node["'+id+'"] }}';
+  const ta=$("pnPrompt");const s=ta.selectionStart??ta.value.length,e=ta.selectionEnd??s;
+  ta.value=ta.value.slice(0,s)+expr+ta.value.slice(e);
+  ta.focus();ta.selectionStart=ta.selectionEnd=s+expr.length;
+  schedulePreview();
 }
 async function deleteNode(){
   if(!selected)return;
