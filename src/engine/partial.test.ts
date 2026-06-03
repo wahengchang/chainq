@@ -1,0 +1,63 @@
+// Partial runs (--from / --steps) and scratch isolation (--pin must never
+// touch the real outputs — B1 in the design).
+
+import { describe, it, expect } from "vitest";
+import { existsSync, mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { Runner } from "./run.js";
+import type { Flow } from "./types.js";
+
+const dir = () => mkdtempSync(join(tmpdir(), "chain-test-"));
+const cat = { default: { cmd: "cat" } };
+
+function chain(): Flow {
+  return {
+    profiles: cat,
+    steps: {
+      a: { id: "a", type: "ai", prompt: "x" },
+      b: { id: "b", type: "ai", from: "a", prompt: "{{ $json }}" },
+      c: { id: "c", type: "ai", from: "b", prompt: "{{ $json }}" },
+    },
+  };
+}
+
+describe("partial runs", () => {
+  it("--from forces the node and everything downstream, upstream stays cached", async () => {
+    const d = dir();
+    await new Runner(chain(), { chainDir: d }).runChain();
+    const res = await new Runner(chain(), { chainDir: d }).runFrom("b");
+    const status = Object.fromEntries(res.map((r) => [r.id, r.status]));
+    expect(status.b).toBe("ran");
+    expect(status.c).toBe("ran"); // downstream of b
+    expect(status.a).toBeUndefined(); // a is upstream — not in the forced set
+  });
+
+  it("--steps runs only the first N nodes", async () => {
+    const d = dir();
+    const res = await new Runner(chain(), { chainDir: d }).runSteps(2);
+    expect(res.map((r) => r.id)).toEqual(["a", "b"]);
+  });
+});
+
+describe("scratch isolation (--pin)", () => {
+  it("a pinned trial run writes .chain/scratch and NEVER touches real outputs", async () => {
+    const d = dir();
+    // Real run populates .chain/outputs.
+    await new Runner(chain(), { chainDir: d }).runChain();
+    const realB = readFileSync(join(d, "outputs", "b.out"), "utf8");
+
+    // Trial run with a pinned upstream, in scratch mode.
+    await new Runner(chain(), {
+      chainDir: d,
+      scratch: true,
+      pins: { a: "PINNED-SAMPLE" },
+    }).runToNode("c");
+
+    // Real outputs are byte-for-byte unchanged...
+    expect(readFileSync(join(d, "outputs", "b.out"), "utf8")).toBe(realB);
+    // ...and the trial landed in scratch.
+    expect(existsSync(join(d, "scratch"))).toBe(true);
+    expect(readFileSync(join(d, "scratch", "b.out"), "utf8")).toContain("PINNED-SAMPLE");
+  });
+});

@@ -7,7 +7,7 @@
 //   rerunNode(N)        force-run N on materialized upstream   (n8n "re-run node")
 //   runChain()          run every node in topo order           (publish / chain run)
 
-import { ancestorsOf, topoOrder, upstreamsOf } from "./dag.js";
+import { ancestorsOf, descendantsOf, topoOrder, upstreamsOf } from "./dag.js";
 import { CacheStore, computeKeys, volatileSet } from "./cache.js";
 import { cmdToArgv, resolveProfile } from "./profiles.js";
 import { renderPrompt } from "./render.js";
@@ -23,6 +23,10 @@ export interface RunOptions {
   pins?: Record<string, string>;
   /** Ignore all cached outputs and re-run everything. */
   fresh?: boolean;
+  /** Trial run: read/write .chain/scratch only, never the real outputs (B1). */
+  scratch?: boolean;
+  /** Override every ai node's profile (CLI --profile). Folds into cache keys. */
+  profileOverride?: string;
   /** Per-node timeout. */
   timeoutMs?: number;
   /** Called as each node settles — lets the UI stream ran/cached/failed live. */
@@ -37,9 +41,9 @@ export class Runner {
 
   constructor(private flow: Flow, private opts: RunOptions) {
     const baseDir = opts.baseDir ?? opts.chainDir;
-    this.keys = computeKeys(flow, baseDir);
+    this.keys = computeKeys(flow, baseDir, opts.profileOverride);
     this.volatile = volatileSet(flow);
-    this.store = new CacheStore(opts.chainDir);
+    this.store = new CacheStore(opts.chainDir, { scratch: opts.scratch });
   }
 
   /** Run every node, in topological order. (发布模式 / `chain run`) */
@@ -65,6 +69,26 @@ export class Runner {
   async rerunNode(id: string): Promise<NodeResult> {
     await this.materializeUpstream(id);
     return this.ensure(id, true);
+  }
+
+  /** Force-rerun N and everything downstream of it, reusing upstream cache. (--from) */
+  async runFrom(id: string): Promise<NodeResult[]> {
+    await this.materializeUpstream(id);
+    const forced = new Set<string>([id, ...descendantsOf(this.flow, id)]);
+    const results: NodeResult[] = [];
+    for (const n of topoOrder(this.flow)) {
+      if (forced.has(n)) results.push(await this.ensure(n, true));
+    }
+    return results;
+  }
+
+  /** Run the first N nodes in topological order. (--steps) */
+  async runSteps(n: number): Promise<NodeResult[]> {
+    const results: NodeResult[] = [];
+    for (const id of topoOrder(this.flow).slice(0, n)) {
+      results.push(await this.ensure(id, false));
+    }
+    return results;
   }
 
   /** Ensure every transitive upstream of N has an output available. */
@@ -125,7 +149,7 @@ export class Runner {
         if (node.type === "assemble") {
           output = rendered; // pure data assembly, no external call
         } else {
-          const profile = resolveProfile(this.flow, node.profile);
+          const profile = resolveProfile(this.flow, this.opts.profileOverride ?? node.profile);
           const res = await runSubprocess(cmdToArgv(profile.cmd), rendered, {
             timeoutMs: this.opts.timeoutMs,
           });

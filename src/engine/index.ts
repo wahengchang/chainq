@@ -9,8 +9,16 @@ export type {
   NodeResult,
   NodeStatus,
 } from "./types.js";
-export { parseFlow, topoOrder, upstreamsOf, ancestorsOf, wouldCycle } from "./dag.js";
+export {
+  parseFlow,
+  topoOrder,
+  upstreamsOf,
+  ancestorsOf,
+  descendantsOf,
+  wouldCycle,
+} from "./dag.js";
 export { validate, type ValidationError } from "./validate.js";
 export { computeKeys, volatileSet, CacheStore } from "./cache.js";
 export { Runner, type RunOptions } from "./run.js";
+export { FlowLock } from "./lock.js";
 export { renderPrompt } from "./render.js";

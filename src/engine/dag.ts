@@ -103,6 +103,27 @@ export function wouldCycle(flow: Flow, fromId: string, toId: string): boolean {
   return false;
 }
 
+/** All transitive descendants of `id` (everything that depends on it). */
+export function descendantsOf(flow: Flow, id: string): Set<string> {
+  // Build reverse edges once: upstream -> [dependents].
+  const dependents = new Map<string, string[]>();
+  for (const nid of Object.keys(flow.steps)) {
+    for (const up of upstreamsOf(flow.steps[nid]!)) {
+      if (!flow.steps[up]) continue;
+      (dependents.get(up) ?? dependents.set(up, []).get(up)!).push(nid);
+    }
+  }
+  const seen = new Set<string>();
+  const stack = [...(dependents.get(id) ?? [])];
+  while (stack.length > 0) {
+    const cur = stack.pop()!;
+    if (seen.has(cur)) continue;
+    seen.add(cur);
+    stack.push(...(dependents.get(cur) ?? []));
+  }
+  return seen;
+}
+
 /** All transitive ancestors of `id` (its upstream cone), plus nothing else. */
 export function ancestorsOf(flow: Flow, id: string): Set<string> {
   const seen = new Set<string>();

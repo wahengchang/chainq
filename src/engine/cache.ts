@@ -50,13 +50,21 @@ export function volatileSet(flow: Flow): Set<string> {
   return volatile;
 }
 
-/** Merkle keys for every node, computed in topological order. */
-export function computeKeys(flow: Flow, baseDir: string): Map<string, string> {
+/**
+ * Merkle keys for every node, computed in topological order.
+ * `profileOverride` (the CLI's --profile) folds into ai keys, so switching the
+ * model invalidates the cache for those nodes (different model = different output).
+ */
+export function computeKeys(
+  flow: Flow,
+  baseDir: string,
+  profileOverride?: string,
+): Map<string, string> {
   const keys = new Map<string, string>();
   for (const id of topoOrder(flow)) {
     const node = flow.steps[id]!;
     const profileCmd =
-      node.type === "ai" ? resolveProfile(flow, node.profile).cmd : null;
+      node.type === "ai" ? resolveProfile(flow, profileOverride ?? node.profile).cmd : null;
     const inputFileHashes = (node.inputs ?? []).map((p) => hashFile(join(baseDir, p)));
     const upstreamKeys = upstreamsOf(node)
       .filter((u) => flow.steps[u])
@@ -93,14 +101,24 @@ interface StateEntry {
 }
 type State = Record<string, StateEntry>;
 
+export interface CacheStoreOptions {
+  /**
+   * Scratch mode: a trial run (--pin) writes to .chain/scratch and a separate
+   * state file, NEVER touching the real outputs/ or state.json. So試跑 can never
+   * pollute your committed results (B1 in the design).
+   */
+  scratch?: boolean;
+}
+
 export class CacheStore {
   private statePath: string;
   private outputsDir: string;
   private state: State;
 
-  constructor(private chainDir: string) {
-    this.statePath = join(chainDir, "state.json");
-    this.outputsDir = join(chainDir, "outputs");
+  constructor(private chainDir: string, opts: CacheStoreOptions = {}) {
+    const sub = opts.scratch ? "scratch" : "outputs";
+    this.statePath = join(chainDir, opts.scratch ? "scratch-state.json" : "state.json");
+    this.outputsDir = join(chainDir, sub);
     mkdirSync(this.outputsDir, { recursive: true });
     this.state = existsSync(this.statePath)
       ? (JSON.parse(readFileSync(this.statePath, "utf8")) as State)
