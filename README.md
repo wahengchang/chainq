@@ -32,7 +32,8 @@ an existing `flow.yaml` unless you pass `--force`.
 
 ```bash
 npm install
-npm test                                       # 56 tests, fully offline (G2 fake model)
+npm test                                       # 47 unit tests, offline (G2 fake model)
+npm run e2e                                     # E2E framework — drives the real CLI (see e2e/)
 npx tsx src/cli/index.ts run examples/demo.yaml
 npx tsx src/cli/index.ts run examples/demo.yaml --fresh   # ignore cache
 npx tsx src/cli/index.ts validate examples/demo.yaml
