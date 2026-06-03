@@ -37,7 +37,8 @@ export class Runner {
   private keys: Map<string, string>;
   private volatile: Set<string>;
   private store: CacheStore;
-  private memo = new Map<string, string>(); // in-run output cache
+  private memo = new Map<string, string>(); // in-run output cache (successes)
+  private blocked = new Set<string>(); // failed this run, or downstream of a failure
 
   constructor(private flow: Flow, private opts: RunOptions) {
     const baseDir = opts.baseDir ?? opts.chainDir;
@@ -112,6 +113,24 @@ export class Runner {
       return r;
     }
 
+    // Fast-fail (E2): if any upstream failed or was skipped, don't run this node
+    // (it has no valid input) — and don't read a non-existent upstream output.
+    const node = this.flow.steps[id]!;
+    const failedUp = upstreamsOf(node)
+      .filter((u) => this.flow.steps[u])
+      .find((u) => this.blocked.has(u));
+    if (failedUp) {
+      this.blocked.add(id);
+      const r: NodeResult = {
+        id,
+        status: "skipped",
+        output: "",
+        error: `upstream "${failedUp}" did not complete`,
+      };
+      this.opts.onResult?.(r);
+      return r;
+    }
+
     const key = this.keys.get(id)!;
     const valid =
       !force && !this.opts.fresh && this.store.isValid(id, key, this.volatile.has(id));
@@ -124,6 +143,7 @@ export class Runner {
     }
 
     const r = await this.runNode(id, key);
+    if (r.status === "failed") this.blocked.add(id); // halt downstream (E2)
     this.opts.onResult?.(r);
     return r;
   }

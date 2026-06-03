@@ -99,6 +99,21 @@ describe("Runner — G2 fake model", () => {
     expect(res.find((x) => x.id === "b")!.output).toContain("PINNED");
   });
 
+  it("a failed upstream halts its downstream (skipped, no crash) — E2", async () => {
+    const d = dir();
+    const flow: Flow = {
+      profiles: cat,
+      steps: {
+        a: { id: "a", type: "cmd", run: "false" }, // exits 1 -> fails
+        b: { id: "b", type: "ai", from: "a", prompt: "{{ $json }}" },
+      },
+    };
+    const res = await new Runner(flow, { chainDir: d }).runChain();
+    expect(res.find((x) => x.id === "a")!.status).toBe("failed");
+    expect(res.find((x) => x.id === "b")!.status).toBe("skipped");
+    expect(res.find((x) => x.id === "b")!.error).toMatch(/upstream "a"/);
+  });
+
   it("a failed node is not cached (next run retries it)", async () => {
     const d = dir();
     const flow: Flow = {
