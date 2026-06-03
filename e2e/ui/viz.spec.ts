@@ -61,5 +61,8 @@ test.describe("E2E visualizer (browser)", () => {
       { id: "summarize", status: "skipped" },
       { id: "title", status: "skipped" },
     ]);
+
+    // Demo dwell: let the final screen linger before the browser closes.
+    if (process.env.SLOWMO) await page.waitForTimeout(1500);
   });
 });

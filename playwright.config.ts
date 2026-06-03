@@ -14,5 +14,8 @@ export default defineConfig({
   use: {
     ...devices["Desktop Chrome"],
     trace: "on-first-retry",
+    // SLOWMO=900 makes each browser action visibly slow, so you can WATCH the
+    // automation click through the visualizer live (the `e2e:ui:demo` script).
+    launchOptions: { slowMo: Number(process.env.SLOWMO ?? 0) },
   },
 });

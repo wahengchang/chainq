@@ -16,7 +16,8 @@
     "e2e:demo": "tsx e2e/demo.ts",
     "e2e:ui": "playwright test --ui",
     "e2e:ui:headless": "playwright test",
-    "e2e:ui:headed": "playwright test --headed"
+    "e2e:ui:headed": "playwright test --headed",
+    "e2e:ui:demo": "SLOWMO=900 playwright test --headed -g replays"
   },
   "dependencies": {
     "yaml": "^2.5.0"
