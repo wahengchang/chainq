@@ -363,13 +363,47 @@ Evaluated n8n's `partial-execution-utils` (DirectedGraph, findStartNodes, findSu
 - **Composite edge keys with port index** — adopt only when multi-output/branch nodes (IF) appear; today `from` is a single name / list.
 - n8n's **cycle/Tarjan-SCC** model is only needed for feedback/while loops — out of scope; chain's container loops (`over: <fixed list>`) match the design.
 
+## chain init + E2E Verification (plan, 2026-06-03, eng review pass 4)
+
+Goal: a `chain init` command to create a new project, plus a fixture-driven E2E harness that runs a few real workflows offline to verify the whole journey.
+
+**`chain init [dir] [--force]` (D1: dual profile)**
+- Creates `<dir>` (default cwd) and writes:
+  - `flow.yaml` — `profiles{ default:'claude -p', fake:'cat' }` + a 2-node example (`load` cmd reading `input.txt` + `summarize` ai), with comments on offline vs real runs.
+  - `.gitignore` — `.chain/`
+  - `input.txt` — sample text
+- **Refuses** if `flow.yaml` exists (exit 1) unless `--force` — never clobber user work.
+- Prints next steps: `chain run flow.yaml --profile fake` (offline) · `chain run flow.yaml` (real, needs `claude login`).
+
+**E2E harness (fixture-driven, DRY)**
+- Refactor the single `src/cli/e2e.test.ts` into a fixtures array: `{ name, setup(dir), args, expect: {nodeId:status} | {exitCode,outMatch} }`. One test loops, spawns the repo's **absolute** tsx CLI binary with `cwd=tempdir`, strips ANSI, asserts. (Reuse the existing spawn helper — the `npx tsx` / file:// gotchas are already solved.)
+
+**Workflow matrix (the "few workflows"):**
+| Fixture | Verifies |
+|---|---|
+| init-scaffold | `chain init` → `run --profile fake` → all nodes ran; files created (CRITICAL) |
+| init-refuse | init over an existing `flow.yaml` → exit 1, file untouched (`--force` overrides) |
+| linear-cache | cold → cached → edit-downstream → edit-upstream (cache correctness) |
+| cmd-inputs | cmd reads `input.txt` (cwd + declared-input cacheable) → cached on run 2 |
+| pin-scratch | `--pin` → scratch written, real outputs untouched |
+| multi-input | `from:[A,B]` → `$json`=A; reorder → different output (from-order regression) |
+| validate-fail | broken flow → exit 1 + error message |
+
+**Failure modes**
+- `chain init` clobbering an existing flow → refuse + `--force` (tested: init-refuse).
+- E2E spawn from temp cwd → absolute tsx binary (known gotcha, already solved in `e2e.test.ts`).
+
+**NOT in scope:** interactive init / "貼上就生鏈" (office-hours idea — deferred, scope creep); CI workflow (the E2E runs under `npm test`, no new pipeline); loop/schema/write-node workflows (those features aren't built yet).
+
+**Tasks:** T-init-1 `chain init` command (+refuse/--force) · T-init-2 fixture-driven E2E harness (refactor existing) · T-init-3 the 7-workflow matrix · T-init-4 README quickstart.
+
 ## GSTACK REVIEW REPORT
 
 | Review | Trigger | Why | Runs | Status | Findings |
 |--------|---------|-----|------|--------|----------|
 | CEO Review | `/plan-ceo-review` | Scope & strategy | 0 | — | — |
 | Codex Review | `/codex review` | Independent 2nd opinion | 1 | issues_found | 30+ challenges, key ones absorbed (cache env/cmd, YAML-preserve, cancellation, lock-blocks); D3 tension → user defended |
-| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 3 | clean | P1 engine plan · P2 canvas→YAML plan · P3 CODE review of as-built engine: 4 findings FIXED (from-order cache staleness, Runner per-op lifecycle, stdin EPIPE, full tier-1 paths) + regression tests, 48/48 green |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 4 | clean | P1 engine plan · P2 canvas→YAML plan · P3 code review (4 fixes) · P4 chain init + E2E verification plan: dual-profile scaffold, fixture-driven harness, 7-workflow matrix |
 | Design Review | `/plan-design-review` | UI/UX gaps | 1 | clean | 5/10 → 8/10, 4 decisions; canvas-first IA, 6 OUTPUT states, render preview, loop view; D4 pulled full canvas into v1 |
 | DX Review | `/plan-devex-review` | Developer experience gaps | 0 | — | — |
 
@@ -378,5 +412,6 @@ Evaluated n8n's `partial-execution-utils` (DirectedGraph, findStartNodes, findSu
 - **CANVAS RE-REVIEW (D4 follow-up):** the canvas→YAML scope is now reviewed. Stack = React + React Flow; delete = n8n auto-bridge; serialization = CST surgical edits (comment-preserving), layout in sidecar, validate-before-write. 6 critical tests, comment/order round-trip is make-or-break. Scope-change flag from the design review is now resolved.
 - **CODE REVIEW (eng pass 3, as-built engine):** 4 findings, all FIXED with regression tests. The two load-bearing ones were silent-wrong-output bugs invisible at plan stage — (A1) `computeKeys` sorted upstream keys but `$json` binds to the first upstream → reordering `from` served stale cache; (A2) `Runner` memo/blocked were instance state → a reused Runner (the UI pattern) had memo shadow `force`, so `rerunNode` returned stale output. Both fixed; memo/blocked now per-operation (`RunCtx`). PR #4.
 - **UNRESOLVED:** 0.
-- **VERDICT:** ENG (×3) + DESIGN CLEARED — engine plan, canvas→YAML plan, AND the as-built engine code all reviewed; 48/48 tests green across 4 PRs. Ready to keep building (UI surface next). Build order: engine core ✓ → CLI iteration ✓ → plan/execute ✓ → node panel (T6) → canvas serialization (T11/T12) → canvas UI (T10).
+- **CHAIN INIT + E2E (eng pass 4):** planned `chain init [dir] --force` (dual-profile scaffold: `claude -p` default + `cat` fake) and a fixture-driven E2E harness running a 7-workflow matrix offline (init-scaffold, init-refuse, linear-cache, cmd-inputs, pin-scratch, multi-input, validate-fail). No code yet — plan cleared to implement.
+- **VERDICT:** ENG (×4) + DESIGN CLEARED — engine plan, canvas→YAML plan, as-built engine code, AND the chain-init/E2E plan all reviewed; 48/48 tests green. Next: implement `chain init` + the E2E matrix, then the UI surface.
 
