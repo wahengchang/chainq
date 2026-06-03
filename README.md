@@ -15,11 +15,24 @@ the slow upstream every time — is the real pain. `chain` makes that loop cheap
 edit a node → only its transitive downstream is invalidated → everything else is served
 from cache.
 
+## Create a new project
+
+```bash
+npx tsx src/cli/index.ts init my-flow        # scaffolds flow.yaml + .gitignore + input.txt
+cd my-flow
+chain run flow.yaml --profile fake           # run offline (the cat fake model, no login)
+chain run flow.yaml                          # run for real (first: claude login)
+```
+
+`init` writes a starter `flow.yaml` with both a real `default: claude -p` profile and a
+`fake: cat` profile, so a fresh project runs offline immediately. It refuses to overwrite
+an existing `flow.yaml` unless you pass `--force`.
+
 ## Run it
 
 ```bash
 npm install
-npm test                                       # 23 tests, fully offline (G2 fake model)
+npm test                                       # 56 tests, fully offline (G2 fake model)
 npx tsx src/cli/index.ts run examples/demo.yaml
 npx tsx src/cli/index.ts run examples/demo.yaml --fresh   # ignore cache
 npx tsx src/cli/index.ts validate examples/demo.yaml

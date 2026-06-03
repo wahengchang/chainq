@@ -1,121 +1,187 @@
-// END-TO-END walkthrough of how `chain` actually works.
+// END-TO-END verification matrix. Spawns the REAL `chain` CLI as a subprocess
+// against REAL flow files in temp dirs — no mocks, no internal imports. Offline
+// via the `cat` fake model. Fixture-driven: each scenario is data, one runner
+// loops over them.
 //
-// This spawns the REAL CLI as a subprocess against a REAL flow file in a temp
-// dir — no mocks, no internal imports. It uses the `cat` fake model so it runs
-// offline. Read it top to bottom and you see the whole product loop:
-//
-//   1. cold run            every node runs        ✓ ✓ ✓
-//   2. warm run            everything cached       ⊘ ⊘ ⊘   (no model called)
-//   3. edit a downstream   only it re-runs         ⊘ ⊘ ✓
-//   4. edit an upstream    it + downstream re-run   ⊘ ✓ ✓   (no stale output)
-//   5. pin a sample        trial in scratch         real outputs untouched
-//   6. break the flow      validate blocks it       nothing runs
+//   init-scaffold · init-refuse · cached-on-rerun · edit-downstream ·
+//   edit-upstream · cmd-inputs · pin-scratch · multi-input-reorder · validate-fail
 
 import { describe, it, expect } from "vitest";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, writeFileSync, existsSync } from "node:fs";
+import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const CLI = join(dirname(fileURLToPath(import.meta.url)), "index.ts");
 // repo root = up from src/cli; use the repo's own tsx binary by absolute path so
-// it resolves even when cwd is a temp flow dir with no node_modules.
-const REPO_ROOT = join(dirname(CLI), "..", "..");
-const TSX = join(REPO_ROOT, "node_modules", ".bin", "tsx");
+// it resolves even when cwd is a temp dir with no node_modules.
+const TSX = join(dirname(CLI), "..", "..", "node_modules", ".bin", "tsx");
 
-// Run the chain CLI as a real process. Status prefixes go to stderr, `ls` to
-// stdout — combine both so the test sees everything the user sees.
-function chain(cwd: string, ...args: string[]): { out: string; code: number } {
-  const r = spawnSync(TSX, [CLI, ...args], { cwd, encoding: "utf8" });
-  // Strip ANSI color codes so the status prefixes (✓ ⊘ ✗) match cleanly.
-  const out = `${r.stdout ?? ""}${r.stderr ?? ""}`.replace(/\x1b\[[0-9;]*m/g, "");
-  return { out, code: r.status ?? 1 };
+type Status = "ran" | "cached" | "failed" | "skipped";
+type ChainFn = (...args: string[]) => { out: string; code: number };
+
+// Run the chain CLI as a real process in `cwd`. Combine stdout+stderr (status
+// prefixes go to stderr) and strip ANSI so the glyphs match cleanly.
+function makeChain(cwd: string): ChainFn {
+  return (...args) => {
+    const r = spawnSync(TSX, [CLI, ...args], { cwd, encoding: "utf8" });
+    const out = `${r.stdout ?? ""}${r.stderr ?? ""}`.replace(/\x1b\[[0-9;]*m/g, "");
+    return { out, code: r.status ?? 1 };
+  };
 }
 
-// A 3-node flow: load (reads a file) → summarize (ai) → title (ai).
-// `prefix`/`titleText` let us "edit" a prompt between runs.
-function writeFlow(dir: string, summaryPrefix: string, titleText: string): void {
+// Parse "✓ load" / "⊘ load" / "✗ load" / "– load" lines into { id: status }.
+const GLYPH: Record<string, Status> = { "✓": "ran", "⊘": "cached", "✗": "failed", "–": "skipped" };
+function parseStatuses(out: string): Record<string, Status> {
+  const map: Record<string, Status> = {};
+  for (const line of out.split("\n")) {
+    const m = /^([✓⊘✗–])\s+(\w+)/.exec(line.trim());
+    if (m) map[m[2]!] = GLYPH[m[1]!]!;
+  }
+  return map;
+}
+
+// ---- flow fixtures (written into the temp dir by each scenario's setup) ----
+
+const cat = `profiles:\n  default: { cmd: 'cat' }\n`;
+
+/** a → b → c, all ai. `pc` "edits" the leaf, `pa` the root. */
+function linear(dir: string, pa = "a", pc = "c"): void {
   writeFileSync(
     join(dir, "flow.yaml"),
-    `profiles:
-  default: { cmd: 'cat' }   # G2 fake model: echoes the rendered prompt
-steps:
-  load:
-    type: cmd
-    run: 'cat input.txt'
-    inputs: ['input.txt']    # declared -> cacheable
-  summarize:
-    type: ai
-    from: load
-    prompt: '${summaryPrefix}: {{ $json }}'
-  title:
-    type: ai
-    from: summarize
-    prompt: '${titleText}'
+    `${cat}steps:
+  a: { type: ai, prompt: '${pa}' }
+  b: { type: ai, from: a, prompt: '{{ $json }}' }
+  c: { type: ai, from: b, prompt: '${pc}' }
 `,
   );
 }
 
-describe("chain — end to end", () => {
-  it("walks the full iteration loop", () => {
-    const dir = mkdtempSync(join(tmpdir(), "chain-e2e-"));
-    writeFileSync(join(dir, "input.txt"), "the quick brown fox");
-    writeFlow(dir, "SUMMARY", "TITLE v1");
+interface Fixture {
+  name: string;
+  setup?: (dir: string, chain: ChainFn) => void; // prior runs / file writes
+  args: string[]; // the run under test
+  expect: {
+    code?: number;
+    status?: Record<string, Status>;
+    outMatch?: RegExp;
+    files?: string[]; // relative paths that must exist after
+  };
+}
 
-    // 1. COLD RUN — nothing cached yet, every node runs.
-    let r = chain(dir, "run", "flow.yaml");
-    expect(r.code).toBe(0);
-    expect(r.out).toMatch(/✓ load/);
-    expect(r.out).toMatch(/✓ summarize/);
-    expect(r.out).toMatch(/✓ title/);
-    // data really flowed: summarize embedded load's output
-    expect(readFileSync(join(dir, ".chain/outputs/summarize.out"), "utf8")).toBe(
-      "SUMMARY: the quick brown fox",
-    );
+const FIXTURES: Fixture[] = [
+  {
+    name: "init-scaffold: chain init → run offline → every node ran",
+    setup: (_d, chain) => chain("init"),
+    args: ["run", "flow.yaml", "--profile", "fake"],
+    expect: {
+      code: 0,
+      status: { load: "ran", summarize: "ran" },
+      files: ["flow.yaml", ".gitignore", "input.txt"],
+    },
+  },
+  {
+    name: "init-refuse: init over an existing flow.yaml → exit 1, no clobber",
+    setup: (_d, chain) => chain("init"),
+    args: ["init"],
+    expect: { code: 1, outMatch: /refusing to overwrite/ },
+  },
+  {
+    name: "cached-on-rerun: identical flow → everything cached",
+    setup: (dir, chain) => {
+      linear(dir);
+      chain("run", "flow.yaml"); // cold
+    },
+    args: ["run", "flow.yaml"],
+    expect: { status: { a: "cached", b: "cached", c: "cached" } },
+  },
+  {
+    name: "edit-downstream: only the edited leaf re-runs",
+    setup: (dir, chain) => {
+      linear(dir, "a", "c1");
+      chain("run", "flow.yaml");
+      linear(dir, "a", "c2"); // edit leaf c
+    },
+    args: ["run", "flow.yaml"],
+    expect: { status: { a: "cached", b: "cached", c: "ran" } },
+  },
+  {
+    name: "edit-upstream: root edit cascades to all downstream (no stale)",
+    setup: (dir, chain) => {
+      linear(dir, "a1", "c");
+      chain("run", "flow.yaml");
+      linear(dir, "a2", "c"); // edit root a
+    },
+    args: ["run", "flow.yaml"],
+    expect: { status: { a: "ran", b: "ran", c: "ran" } },
+  },
+  {
+    name: "cmd-inputs: cmd reads input.txt (cwd + declared-input cacheable)",
+    setup: (dir, chain) => {
+      writeFileSync(join(dir, "in.txt"), "hello");
+      writeFileSync(
+        join(dir, "flow.yaml"),
+        `${cat}steps:\n  load: { type: cmd, run: 'cat in.txt', inputs: ['in.txt'] }\n  sum: { type: ai, from: load, prompt: '{{ $json }}' }\n`,
+      );
+      chain("run", "flow.yaml"); // cold
+    },
+    args: ["run", "flow.yaml"],
+    expect: { status: { load: "cached", sum: "cached" } },
+  },
+  {
+    name: "pin-scratch: --pin runs into scratch, real outputs untouched",
+    setup: (dir, chain) => {
+      linear(dir);
+      chain("run", "flow.yaml"); // populate real outputs
+      writeFileSync(join(dir, "sample.txt"), "PINNED");
+    },
+    args: ["run", "flow.yaml", "--pin", "b=sample.txt"],
+    expect: { outMatch: /scratch run/, files: [".chain/outputs/c.out", ".chain/scratch"] },
+  },
+  {
+    name: "multi-input-reorder: reordering `from` invalidates the node (from-order)",
+    setup: (dir, chain) => {
+      const flow = (order: string) =>
+        `${cat}steps:\n  A: { type: ai, prompt: 'AAA' }\n  B: { type: ai, prompt: 'BBB' }\n  M: { type: ai, from: ${order}, prompt: '{{ $json }}' }\n`;
+      writeFileSync(join(dir, "flow.yaml"), flow("[A, B]"));
+      chain("run", "flow.yaml"); // cold
+      writeFileSync(join(dir, "flow.yaml"), flow("[B, A]")); // reorder → $json source changes
+    },
+    args: ["run", "flow.yaml"],
+    expect: { status: { A: "cached", B: "cached", M: "ran" } },
+  },
+  {
+    name: "validate-fail: a dangling from: is rejected before anything runs",
+    setup: (dir) =>
+      writeFileSync(
+        join(dir, "flow.yaml"),
+        `${cat}steps:\n  a: { type: ai, from: ghost, prompt: 'x' }\n`,
+      ),
+    args: ["validate", "flow.yaml"],
+    expect: { code: 1, outMatch: /from: "ghost" does not exist/ },
+  },
+];
 
-    // 2. WARM RUN — identical flow, everything served from cache (no model call).
-    r = chain(dir, "run", "flow.yaml");
-    expect(r.out).toMatch(/⊘ load/);
-    expect(r.out).toMatch(/⊘ summarize/);
-    expect(r.out).toMatch(/⊘ title/);
+describe("chain — E2E workflow matrix", () => {
+  for (const f of FIXTURES) {
+    it(f.name, () => {
+      const dir = mkdtempSync(join(tmpdir(), "chain-e2e-"));
+      const chain = makeChain(dir);
+      f.setup?.(dir, chain);
+      const r = chain(...f.args);
 
-    // 3. EDIT A DOWNSTREAM PROMPT — only `title` re-runs; upstream stays cached.
-    writeFlow(dir, "SUMMARY", "TITLE v2");
-    r = chain(dir, "run", "flow.yaml");
-    expect(r.out).toMatch(/⊘ load/);
-    expect(r.out).toMatch(/⊘ summarize/);
-    expect(r.out).toMatch(/✓ title/);
-
-    // 4. EDIT AN UPSTREAM PROMPT — summarize AND its downstream title re-run.
-    //    This is the anti-stale guarantee: editing upstream never serves an old
-    //    downstream from cache.
-    writeFlow(dir, "DIGEST", "TITLE v2");
-    r = chain(dir, "run", "flow.yaml");
-    expect(r.out).toMatch(/⊘ load/); // load (cmd w/ declared input) unchanged
-    expect(r.out).toMatch(/✓ summarize/);
-    expect(r.out).toMatch(/✓ title/);
-
-    // 5. PIN A SAMPLE — trial-run a downstream against a fixed upstream value.
-    //    Writes ONLY to .chain/scratch; real outputs are untouched.
-    const realTitle = readFileSync(join(dir, ".chain/outputs/title.out"), "utf8");
-    writeFileSync(join(dir, "sample.txt"), "PINNED SUMMARY");
-    r = chain(dir, "run", "flow.yaml", "--pin", "summarize=sample.txt");
-    expect(r.out).toMatch(/scratch run/);
-    expect(existsSync(join(dir, ".chain/scratch"))).toBe(true);
-    // real output unchanged after the trial
-    expect(readFileSync(join(dir, ".chain/outputs/title.out"), "utf8")).toBe(realTitle);
-
-    // 6. BREAK THE FLOW — a dangling `from:` is caught before anything runs.
-    writeFileSync(
-      join(dir, "broken.yaml"),
-      `profiles: { default: { cmd: 'cat' } }
-steps:
-  a: { type: ai, from: ghost, prompt: 'x' }
-`,
-    );
-    r = chain(dir, "validate", "broken.yaml");
-    expect(r.code).toBe(1);
-    expect(r.out).toMatch(/from: "ghost" does not exist/);
-  });
+      if (f.expect.code !== undefined) expect(r.code, r.out).toBe(f.expect.code);
+      if (f.expect.status) {
+        const got = parseStatuses(r.out);
+        for (const [id, st] of Object.entries(f.expect.status)) {
+          expect(got[id], `node ${id} in:\n${r.out}`).toBe(st);
+        }
+      }
+      if (f.expect.outMatch) expect(r.out).toMatch(f.expect.outMatch);
+      for (const fp of f.expect.files ?? []) {
+        expect(existsSync(join(dir, fp)), `expected file ${fp}`).toBe(true);
+      }
+    });
+  }
 });

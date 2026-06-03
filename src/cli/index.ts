@@ -21,6 +21,7 @@ import {
   FlowLock,
   type NodeResult,
 } from "../engine/index.js";
+import { runInit } from "./init.js";
 
 const PREFIX: Record<NodeResult["status"], string> = {
   ran: "\x1b[32m✓\x1b[0m",
@@ -77,6 +78,10 @@ function listFlows(dir: string): string[] {
 async function main(argv: string[]): Promise<number> {
   const [cmd, ...args] = argv;
 
+  if (cmd === "init") {
+    return runInit(args);
+  }
+
   if (cmd === "ls") {
     const dir = resolve(args[0] ?? ".");
     const flows = listFlows(dir);
@@ -87,7 +92,9 @@ async function main(argv: string[]): Promise<number> {
 
   const file = args[0];
   if (!cmd || !file || !["run", "validate"].includes(cmd)) {
-    console.error("usage: chain <run|validate> <flow.yaml> [flags]  |  chain ls [dir]");
+    console.error(
+      "usage: chain init [dir] | chain <run|validate> <flow.yaml> [flags] | chain ls [dir]",
+    );
     return 2;
   }
 
