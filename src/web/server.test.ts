@@ -21,7 +21,7 @@ const post = (base: string, path: string, b: unknown) =>
   fetch(base + path, { method: "POST", body: JSON.stringify(b) });
 
 describe("web server", () => {
-  it("lists empty, creates a flow, runs it offline, rejects an invalid save", async () => {
+  it("lists empty, creates a flow, edits a node, rejects an invalid save", async () => {
     const dir = mkdtempSync(join(tmpdir(), "chain-web-"));
     const { base, close } = await listen(dir);
     try {
@@ -34,10 +34,8 @@ describe("web server", () => {
       expect(created.path).toContain("blog.yaml");
       expect(existsSync(join(dir, "blog.yaml"))).toBe(true);
 
-      // run it offline — streamed NDJSON, one line per node as it settles
-      const runText = await post(base, "/api/run", { path: join(dir, "blog.yaml"), profile: "fake" }).then((r) => r.text());
-      const runResults = runText.trim().split("\n").map((l) => JSON.parse(l));
-      expect(runResults.map((n: { status: string }) => n.status)).toEqual(["ran", "ran"]);
+      // NOTE: actually running the flow needs the real model (no fake profile);
+      // that path is covered by the browser E2E. Here we stay offline.
 
       // a broken save is rejected with errors (壞不落地)
       const bad = await post(base, "/api/save", {

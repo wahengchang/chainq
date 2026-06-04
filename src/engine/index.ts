@@ -8,7 +8,9 @@ export type {
   ProfileSpec,
   NodeResult,
   NodeStatus,
+  Item,
 } from "./types.js";
+export { textItem, itemsText } from "./types.js";
 export {
   parseFlow,
   topoOrder,

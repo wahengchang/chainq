@@ -14,3 +14,9 @@ e2e-viz.html
 test-results/
 playwright-report/
 playwright/.cache/
+
+# local dev workspace for chain ui
+playground/
+
+# Claude Code 個人設定
+.claude/settings.local.json

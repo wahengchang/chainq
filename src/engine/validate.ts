@@ -6,6 +6,7 @@
 // — one validator, never two (eng review code-quality rule).
 
 import { topoOrder, upstreamsOf } from "./dag.js";
+import { promptRefs } from "./render.js";
 import type { Flow } from "./types.js";
 
 export interface ValidationError {
@@ -38,12 +39,44 @@ export function validate(flow: Flow): ValidationError[] {
       }
     }
 
+    // prompt references must be wired in `from:` — else they silently render
+    // verbatim at run time (only declared upstreams are loaded). Catches the
+    // {{ $node["X"] }} / {{ $('X') }} / {{ $json }} footgun before any model runs.
+    if (node.prompt) {
+      const refs = promptRefs(node.prompt);
+      const ups = upstreamsOf(node);
+      if (refs.usesJson && ups.length === 0) {
+        errors.push({ node: id, message: `prompt uses {{ $json }} but the step has no from:` });
+      }
+      for (const ref of refs.nodes) {
+        if (!ups.includes(ref)) {
+          errors.push({
+            node: id,
+            message: `prompt references $node["${ref}"] but it is not in from:${suggest(ref, ups)}`,
+          });
+        }
+      }
+    }
+
     // shape sanity
     if (node.type === "ai" && !node.prompt) {
       errors.push({ node: id, message: `ai step has no prompt` });
     }
     if (node.type === "cmd" && !node.run) {
       errors.push({ node: id, message: `cmd step has no run` });
+    }
+    // collection operators: input arity
+    const ups = upstreamsOf(node);
+    if (node.type === "merge") {
+      if (ups.length !== 2) {
+        errors.push({ node: id, message: `merge needs exactly 2 inputs (from: [a, b]), got ${ups.length}` });
+      }
+      if (node.mode === "byKey" && !node.key) {
+        errors.push({ node: id, message: `merge mode byKey needs a 'key' field` });
+      }
+    }
+    if ((node.type === "splitOut" || node.type === "aggregate") && ups.length !== 1) {
+      errors.push({ node: id, message: `${node.type} needs exactly 1 input, got ${ups.length}` });
     }
   }
 

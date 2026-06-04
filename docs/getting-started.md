@@ -55,8 +55,7 @@ my-first-flow/
 
 ```yaml
 profiles:
-  default: { cmd: 'claude -p' }   # the real model (needs login)
-  fake:    { cmd: 'cat' }          # a stand-in that just echoes — for trying things offline
+  default: { cmd: 'claude -p' }   # the real local model (needs: claude login)
 
 steps:
   load:
@@ -75,10 +74,10 @@ the `from:` line.
 
 ## 3. Run it
 
-**Offline first** (no login, uses the `fake` profile so you see it work):
+Every `ai` step calls the real local model, so log in once with `claude login`, then:
 
 ```bash
-chain run flow.yaml --profile fake
+chain run flow.yaml
 ```
 ```
 plan: 1 ai call(s) · 0 reused · 0 skipped
@@ -86,18 +85,12 @@ plan: 1 ai call(s) · 0 reused · 0 skipped
 ✓ summarize   ← ran
 ```
 
-**For real** (uses `claude -p` — log in once with `claude login`):
-
-```bash
-chain run flow.yaml
-```
-
 ## 4. The whole point: edit a prompt, re-run cheaply
 
 Run it again without changing anything:
 
 ```bash
-chain run flow.yaml --profile fake
+chain run flow.yaml
 ```
 ```
 plan: 0 ai call(s) · 2 reused · 0 skipped
@@ -120,7 +113,7 @@ A project can hold many flows. Make another:
 
 ```bash
 chain new tweets              # creates tweets.yaml (a 2-step starter chain)
-chain run tweets.yaml --profile fake
+chain run tweets.yaml
 chain ls                      # list every flow in this project
 ```
 
@@ -148,7 +141,8 @@ chain ls                      # list every flow in this project
 - **Flow** = one YAML file = a chain of steps.
 - **Step types:** `ai` (calls the model), `cmd` (runs a shell command), `assemble` (just shuffles data).
 - **`from:`** wires a step to the one(s) it reads. `{{ $json }}` is that input; `{{ $json.field }}`
-  picks a field out of JSON.
+  picks a field out of JSON. **Multi-input** (n8n-style): `from: [a, b]` — `{{ $json }}` is the first
+  (`a`); reach any named upstream with `{{ $node["b"] }}` or the n8n alias `{{ $('b') }}`.
 - **Profiles** map a name to a model command. `default` is real; swap in `fake` (or `--profile fake`)
   to run offline.
 - **Cache:** edit a step → it and everything downstream re-run; everything else is reused.

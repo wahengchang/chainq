@@ -12,6 +12,10 @@ const REPO_ROOT = join(HARNESS_DIR, "..", "..");
 const TSX = join(REPO_ROOT, "node_modules", ".bin", "tsx");
 const CLI = join(REPO_ROOT, "src", "cli", "index.ts");
 
+/** Is the real `claude` CLI on PATH? There is no fake model — scenarios that
+ * actually RUN ai nodes gate on this and skip when it's absent (e.g. CI). */
+export const haveClaude = spawnSync("which", ["claude"]).status === 0;
+
 export interface CliResult {
   out: string; // stdout + stderr, ANSI stripped
   code: number;

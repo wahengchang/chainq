@@ -13,7 +13,8 @@ import { cmdToArgv, resolveProfile } from "./profiles.js";
 import { renderPrompt } from "./render.js";
 import { runSubprocess } from "./proc.js";
 import { nodeDisposition, planRun, type PlanDeps, type RunPlan } from "./plan.js";
-import type { Flow, NodeResult } from "./types.js";
+import type { Flow, NodeResult, Item, MergeMode } from "./types.js";
+import { textItem } from "./types.js";
 
 export interface RunOptions {
   /** .chain directory (next to the flow file). */
@@ -41,7 +42,7 @@ export interface RunOptions {
  */
 interface RunCtx {
   /** in-operation output cache (successes), so a node runs at most once per op */
-  memo: Map<string, string>;
+  memo: Map<string, Item[]>;
   /** nodes that failed or were skipped this op → halt their downstream (E2) */
   blocked: Set<string>;
 }
@@ -144,8 +145,9 @@ export class Runner {
     // A pinned node is a fixed fact input — never runs, never charges quota.
     const pin = this.opts.pins?.[id];
     if (pin !== undefined) {
-      ctx.memo.set(id, pin);
-      const r: NodeResult = { id, status: "cached", output: pin };
+      const items = [textItem(pin)]; // a pinned sample is one fixed item
+      ctx.memo.set(id, items);
+      const r: NodeResult = { id, status: "cached", output: items };
       this.opts.onResult?.(r);
       return r;
     }
@@ -161,7 +163,7 @@ export class Runner {
       const r: NodeResult = {
         id,
         status: "skipped",
-        output: "",
+        output: [],
         error: `upstream "${failedUp}" did not complete`,
       };
       this.opts.onResult?.(r);
@@ -185,38 +187,89 @@ export class Runner {
     return r;
   }
 
-  // Lowest primitive: resolve inputs, run, persist on success.
+  // Lowest primitive: resolve input items, run, persist on success.
+  // n8n items model: a node runs ONCE PER primary input item. The other upstreams
+  // are paired by index (clamped) and rendered into the template as $json/$('id').
+  // cmd runs once (mode: once — the v1 default). Empty primary items → empty output.
   private async runNode(id: string, key: string, ctx: RunCtx): Promise<NodeResult> {
     const node = this.flow.steps[id]!;
     const ups = upstreamsOf(node).filter((u) => this.flow.steps[u]);
-    const outputs: Record<string, string> = {};
-    for (const u of ups) outputs[u] = ctx.memo.get(u) ?? this.store.load(u);
+    const itemsOf = (u: string): Item[] => ctx.memo.get(u) ?? this.store.load(u);
 
+    const primary = ups[0];
     try {
-      let output: string;
-      if (node.type === "cmd") {
-        const res = await runSubprocess(cmdToArgv(node.run ?? ""), "", {
-          timeoutMs: this.opts.timeoutMs,
-          cwd: this.baseDir,
+      let output: Item[];
+
+      if (node.type === "splitOut") {
+        // collection op: each input item's array field → one output item per element
+        output = [];
+        (primary ? itemsOf(primary) : []).forEach((it, i) => {
+          const base = coerceJson(it.json);
+          const arr = node.field ? (base as Record<string, unknown>)?.[node.field] : base;
+          if (!Array.isArray(arr)) {
+            throw new Error(
+              `splitOut: item ${i} ${node.field ? `field "${node.field}"` : "value"} is not an array`,
+            );
+          }
+          for (const el of arr) output.push({ json: el, pairedItem: i });
         });
-        if (res.timedOut) return this.fail(id, "timed out");
-        if (res.code !== 0) return this.fail(id, res.stderr || `exit ${res.code}`);
-        output = res.stdout;
-      } else {
-        const rendered = renderPrompt(node.prompt ?? "", { outputs, primary: ups[0] });
-        if (node.type === "assemble") {
-          output = rendered; // pure data assembly, no external call
+      } else if (node.type === "aggregate") {
+        // collection op: all input items → ONE item holding the array (empty → [])
+        const values = (primary ? itemsOf(primary) : []).map((it) =>
+          node.field ? (coerceJson(it.json) as Record<string, unknown>)?.[node.field] : it.json,
+        );
+        output = [{ json: values }];
+      } else if (node.type === "merge") {
+        // collection op: combine two input streams (n8n Merge)
+        const a = ups[0] ? itemsOf(ups[0]) : [];
+        const b = ups[1] ? itemsOf(ups[1]) : [];
+        output = mergeItems(a, b, (node.mode as MergeMode) ?? "append", node.key);
+      } else if (node.type === "cmd") {
+        if (node.mode === "perItem") {
+          // run the command once per input item, piping the item value to stdin
+          output = [];
+          const items = primary ? itemsOf(primary) : [];
+          for (let i = 0; i < items.length; i++) {
+            const res = await runSubprocess(cmdToArgv(node.run ?? ""), itemValue(items[i]!), {
+              timeoutMs: this.opts.timeoutMs,
+              cwd: this.baseDir,
+            });
+            if (res.timedOut) return this.fail(id, "timed out");
+            if (res.code !== 0) return this.fail(id, res.stderr || `exit ${res.code}`);
+            output.push(textItem(res.stdout, i));
+          }
         } else {
-          const profile = resolveProfile(this.flow, this.opts.profileOverride ?? node.profile);
-          const res = await runSubprocess(cmdToArgv(profile.cmd), rendered, {
+          // mode: once (default) — run a single time, no stdin
+          const res = await runSubprocess(cmdToArgv(node.run ?? ""), "", {
             timeoutMs: this.opts.timeoutMs,
             cwd: this.baseDir,
           });
           if (res.timedOut) return this.fail(id, "timed out");
-          if (res.code !== 0) {
-            return this.fail(id, res.stderr || `exit ${res.code}`, isAuthError(res.stderr));
+          if (res.code !== 0) return this.fail(id, res.stderr || `exit ${res.code}`);
+          output = [textItem(res.stdout)];
+        }
+      } else {
+        const runCount = primary ? itemsOf(primary).length : 1; // root runs once
+        output = [];
+        // pass every upstream's full items; render pairs by index / supports .all()
+        const itemsByUp: Record<string, Item[]> = {};
+        for (const u of ups) itemsByUp[u] = itemsOf(u);
+        for (let i = 0; i < runCount; i++) {
+          const rendered = renderPrompt(node.prompt ?? "", { items: itemsByUp, primary, index: i });
+          if (node.type === "assemble") {
+            output.push(textItem(rendered, i)); // pure data assembly, no external call
+          } else {
+            const profile = resolveProfile(this.flow, this.opts.profileOverride ?? node.profile);
+            const res = await runSubprocess(cmdToArgv(profile.cmd), rendered, {
+              timeoutMs: this.opts.timeoutMs,
+              cwd: this.baseDir,
+            });
+            if (res.timedOut) return this.fail(id, "timed out");
+            if (res.code !== 0) {
+              return this.fail(id, res.stderr || `exit ${res.code}`, isAuthError(res.stderr));
+            }
+            output.push(textItem(res.stdout, i));
           }
-          output = res.stdout;
         }
       }
 
@@ -231,10 +284,59 @@ export class Runner {
   }
 
   private fail(id: string, error: string, authExpired = false): NodeResult {
-    return { id, status: "failed", output: "", error, authExpired };
+    return { id, status: "failed", output: [], error, authExpired };
   }
 }
 
 function isAuthError(stderr: string): boolean {
   return /\b(auth|login|unauthorized|forbidden|expired|not\s+logged\s*in)\b/i.test(stderr);
+}
+
+/** An item's value as a string for {{ }} rendering — raw text stays raw, structured
+ * values are JSON-stringified (so the existing path selectors can re-parse them). */
+function itemValue(item: Item): string {
+  return typeof item.json === "string" ? item.json : JSON.stringify(item.json);
+}
+
+/** Coerce an item value to structured JSON: a string is parsed (so a cmd node that
+ * echoes `["a","b"]` becomes a real array); anything else is returned as-is. */
+function coerceJson(v: unknown): unknown {
+  if (typeof v !== "string") return v;
+  try {
+    return JSON.parse(v);
+  } catch {
+    return v; // not JSON — leave as the raw string (splitOut will then error clearly)
+  }
+}
+
+/** Shallow-merge two item values into one object (scalars wrap as { value }). */
+function mergeObjects(a: unknown, b: unknown): Record<string, unknown> {
+  const obj = (v: unknown): Record<string, unknown> =>
+    typeof v === "object" && v !== null ? (v as Record<string, unknown>) : { value: v };
+  return { ...obj(coerceJson(a)), ...obj(coerceJson(b)) };
+}
+
+/** Merge two input streams (n8n Merge node): append | byPosition | byKey. */
+function mergeItems(a: Item[], b: Item[], mode: MergeMode, key?: string): Item[] {
+  if (mode === "append") return [...a, ...b];
+  if (mode === "byPosition") {
+    const out: Item[] = [];
+    for (let i = 0; i < Math.min(a.length, b.length); i++) {
+      out.push({ json: mergeObjects(a[i]!.json, b[i]!.json), pairedItem: i });
+    }
+    return out;
+  }
+  if (mode === "byKey") {
+    if (!key) throw new Error("merge byKey requires a `key` field");
+    const bByKey = new Map<unknown, unknown>();
+    for (const it of b) bByKey.set((coerceJson(it.json) as Record<string, unknown>)?.[key], it.json);
+    const out: Item[] = [];
+    a.forEach((it, i) => {
+      const av = coerceJson(it.json) as Record<string, unknown>;
+      const match = bByKey.get(av?.[key]);
+      if (match !== undefined) out.push({ json: mergeObjects(av, match), pairedItem: i });
+    });
+    return out;
+  }
+  throw new Error(`merge: unknown mode "${mode}"`);
 }

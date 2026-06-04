@@ -1,7 +1,6 @@
-# A tiny offline demo flow. Uses the `cat` fake model (G2) so it runs with
-# no API key and no network — output of each ai step is its rendered prompt.
+# A tiny demo flow. Every step calls the real local model (needs: claude login).
 profiles:
-  default: { cmd: 'cat' }
+  default: { cmd: 'claude -p' }
 
 steps:
   greet:

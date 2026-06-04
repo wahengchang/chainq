@@ -6,12 +6,19 @@
 //
 //   profiles:                      steps:
 //     default: { cmd: 'claude -p' }   fetch:     { type: cmd, run: 'cat in.txt', inputs: ['in.txt'] }
-//     fake:    { cmd: 'cat' }          summarize: { type: ai, from: fetch, prompt: '...{{ $json }}' }
+//                                     summarize: { type: ai, from: fetch, prompt: '...{{ $json }}' }
 
-export type NodeType = "ai" | "cmd" | "assemble";
+// ai/cmd/assemble run per-item; splitOut/aggregate/merge are COLLECTION operators
+// (they see the whole input items array, not one item at a time) — the n8n model.
+export type NodeType = "ai" | "cmd" | "assemble" | "splitOut" | "aggregate" | "merge";
+
+/** Merge combine strategy (n8n Merge node). */
+export type MergeMode = "append" | "byPosition" | "byKey";
+/** cmd execution cardinality. */
+export type CmdMode = "once" | "perItem";
 
 export interface ProfileSpec {
-  /** Command template, e.g. 'claude -p' or the G2 fake 'cat'. */
+  /** Command template for the local CLI model, e.g. 'claude -p'. */
   cmd: string;
 }
 
@@ -33,6 +40,13 @@ export interface FlowNode {
   inputs?: string[];
   /** ai: which profile to use. Defaults to 'default'. */
   profile?: string;
+  /** splitOut/aggregate: a single property name of the (object) item to split out /
+   * aggregate. Omitted → operate on the whole item value. */
+  field?: string;
+  /** merge: combine strategy (default 'append'). cmd: 'once' (default) | 'perItem'. */
+  mode?: MergeMode | CmdMode;
+  /** merge byKey: the property name both sides are joined on. */
+  key?: string;
 }
 
 export interface Flow {
@@ -43,10 +57,34 @@ export interface Flow {
 
 export type NodeStatus = "ran" | "cached" | "failed" | "skipped";
 
+/**
+ * The unit that flows on every wire (n8n-style items model). A node's output is
+ * a LIST of items; a node runs once per input item. `json` is the item's value —
+ * raw text for an ai/cmd node (NOT auto-parsed), a parsed element after Split Out.
+ * `pairedItem` records which input item this derived from (for $('id') paired
+ * lookup + Merge by-position); absent on root / collection outputs.
+ */
+export interface Item {
+  json: unknown;
+  pairedItem?: number;
+}
+
+/** Wrap raw command/model text as a single item (the 1-in-1-out base case). */
+export function textItem(text: string, pairedItem?: number): Item {
+  return pairedItem === undefined ? { json: text } : { json: text, pairedItem };
+}
+
+/** Flatten output items back to text (raw strings stay raw; structured → JSON).
+ * Used for CLI/web display and assertions; one item = its text (1-in-1-out). */
+export function itemsText(items: Item[]): string {
+  return items.map((i) => (typeof i.json === "string" ? i.json : JSON.stringify(i.json))).join("\n");
+}
+
 export interface NodeResult {
   id: string;
   status: NodeStatus;
-  output: string;
+  /** The node's output items. Empty list = no data (skipped/failed/empty fan-out). */
+  output: Item[];
   /** Present when status === 'failed'. */
   error?: string;
   /** Distinguishes a login-expired failure from an ordinary one (E1). */

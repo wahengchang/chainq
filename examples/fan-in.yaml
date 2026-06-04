@@ -1,0 +1,49 @@
+# 多輸入（fan-in）範例：
+#   trigger ──┬─→ node1 ─┐
+#             └─→ node2 ─┤
+#                        └─→ node3（同時吃 node1 + node2）─→ result
+#
+# 重點在 node3：用 from: [node1, node2] 宣告兩條上游，
+# 在 prompt 裡用 {{ $node["node1"] }} / {{ $node["node2"] }} 各取一條。
+#
+# 跑（每個 ai 節點都呼叫真實模型，需先 claude login）：
+#   chain run examples/fan-in.yaml
+profiles:
+  default: { cmd: 'claude -p' }
+
+steps:
+  # 觸發點：給一個日本城市名（其餘節點都從這裡長出去）
+  trigger:
+    type: ai
+    prompt: 'output one city name in Japan (no other information)'
+
+  # 角度一：在地美食
+  node1:
+    type: ai
+    from: trigger
+    prompt: '3 must-eat foods in {{ $json }}, very short, in zh-tw'
+
+  # 角度二：必看景點
+  node2:
+    type: ai
+    from: trigger
+    prompt: '3 must-see attractions in {{ $json }}, very short, in zh-tw'
+
+  # 合流：同時吃 node1（美食）與 node2（景點），排成一日行程
+  node3:
+    type: ai
+    from: [node1, node2]
+    prompt: |
+      把以下美食與景點排成一份順暢的一日遊行程（早上→中午→下午→晚上），用 zh-tw：
+
+      【美食】
+      {{ $('node1') }}
+
+      【景點】
+      {{ $('node2') }}
+
+  # 產出：把行程改寫成給台灣旅客的一則推文
+  result:
+    type: ai
+    from: node3
+    prompt: 'rewrite this itinerary into one tweet for Taiwan travelers, in zh-tw: {{ $json }}'

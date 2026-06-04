@@ -13,7 +13,7 @@
 import { parse as parseYaml } from "yaml";
 import type { Flow, FlowNode, NodeType } from "./types.js";
 
-const NODE_TYPES: readonly NodeType[] = ["ai", "cmd", "assemble"];
+const NODE_TYPES: readonly NodeType[] = ["ai", "cmd", "assemble", "splitOut", "aggregate", "merge"];
 
 export function parseFlow(yamlText: string): Flow {
   const raw = parseYaml(yamlText) as Record<string, unknown> | null;
@@ -33,7 +33,9 @@ export function parseFlow(yamlText: string): Flow {
   for (const [id, spec] of Object.entries(stepsRaw)) {
     const type = spec.type as NodeType;
     if (!NODE_TYPES.includes(type)) {
-      throw new Error(`step "${id}" has invalid type "${String(spec.type)}" (expected ai|cmd|assemble)`);
+      throw new Error(
+        `step "${id}" has invalid type "${String(spec.type)}" (expected ${NODE_TYPES.join("|")})`,
+      );
     }
     const node: FlowNode = { id, type };
     if (spec.from !== undefined) node.from = spec.from as string | string[];
@@ -41,6 +43,9 @@ export function parseFlow(yamlText: string): Flow {
     if (typeof spec.run === "string") node.run = spec.run;
     if (typeof spec.profile === "string") node.profile = spec.profile;
     if (Array.isArray(spec.inputs)) node.inputs = spec.inputs as string[];
+    if (typeof spec.field === "string") node.field = spec.field;
+    if (typeof spec.mode === "string") node.mode = spec.mode as FlowNode["mode"];
+    if (typeof spec.key === "string") node.key = spec.key;
     steps[id] = node;
   }
 

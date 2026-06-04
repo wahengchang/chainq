@@ -4,8 +4,10 @@
 import { describe, it, expect } from "vitest";
 import { newProject } from "../harness/project.js";
 import { linear, multiInput } from "../fixtures/flows.js";
+import { haveClaude } from "../harness/cli.js";
 
-describe("iterate", () => {
+// These RUN ai nodes (no fake model) → real `claude -p`. Gated; skipped without it.
+describe.skipIf(!haveClaude)("iterate", () => {
   it("--pin runs into scratch; real outputs are untouched", () => {
     const p = newProject().write("flow.yaml", linear());
     p.chain("run", "flow.yaml"); // populate real .chain/outputs

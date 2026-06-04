@@ -1,17 +1,23 @@
-// Creating a new project: scaffold → run offline → don't clobber.
+// Creating a new project: scaffold structure (offline) → run with the real model
+// (gated) → don't clobber.
 
 import { describe, it, expect } from "vitest";
 import { newProject } from "../harness/project.js";
+import { haveClaude } from "../harness/cli.js";
 
 describe("init", () => {
-  it("scaffolds a runnable project that runs offline", () => {
+  it("scaffolds a project (flow.yaml + .gitignore + input.txt)", () => {
     const p = newProject();
     expect(p.chain("init").code).toBe(0);
     expect(p.exists("flow.yaml")).toBe(true);
     expect(p.exists(".gitignore")).toBe(true);
     expect(p.exists("input.txt")).toBe(true);
+  });
 
-    const { status } = p.run(["run", "flow.yaml", "--profile", "fake"]);
+  it.skipIf(!haveClaude)("the scaffolded flow runs end-to-end (real model)", () => {
+    const p = newProject();
+    p.chain("init");
+    const { status } = p.run(["run", "flow.yaml"]); // no fake model — real claude -p
     expect(status).toMatchObject({ load: "ran", summarize: "ran" });
   });
 

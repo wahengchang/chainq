@@ -6,6 +6,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Runner } from "./run.js";
+import { itemsText } from "./types.js";
 import type { Flow } from "./types.js";
 
 const dir = () => mkdtempSync(join(tmpdir(), "chain-test-"));
@@ -21,8 +22,8 @@ describe("Runner — G2 fake model", () => {
       },
     };
     const r = await new Runner(flow, { chainDir: dir() }).runChain();
-    expect(r.find((x) => x.id === "a")!.output).toContain("hello");
-    expect(r.find((x) => x.id === "b")!.output).toContain("got: hello");
+    expect(itemsText(r.find((x) => x.id === "a")!.output)).toContain("hello");
+    expect(itemsText(r.find((x) => x.id === "b")!.output)).toContain("got: hello");
     expect(r.every((x) => x.status === "ran")).toBe(true);
   });
 
@@ -111,7 +112,7 @@ describe("Runner — G2 fake model", () => {
     };
     const res = await new Runner(flow, { chainDir: d, pins: { a: "PINNED" } }).runToNode("b");
     expect(res.find((x) => x.id === "a")!.status).toBe("cached");
-    expect(res.find((x) => x.id === "b")!.output).toContain("PINNED");
+    expect(itemsText(res.find((x) => x.id === "b")!.output)).toContain("PINNED");
   });
 
   it("a failed upstream halts its downstream (skipped, no crash) — E2", async () => {

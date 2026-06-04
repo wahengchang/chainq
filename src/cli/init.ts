@@ -1,19 +1,16 @@
 // `chain init [dir] [--force]` — scaffold a new chain project.
 //
-// Writes a runnable starter: a flow.yaml with a real `claude -p` default profile
-// AND a `fake: cat` profile so it runs offline immediately, a .gitignore for the
-// .chain/ work dir, and a sample input. Refuses to clobber an existing flow.yaml
-// unless --force.
+// Writes a runnable starter: a flow.yaml with a `claude -p` default profile, a
+// .gitignore for the .chain/ work dir, and a sample input. Refuses to clobber an
+// existing flow.yaml unless --force.
 
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 const FLOW_TEMPLATE = `# A chain flow: ONE YAML file = one prompt chain.
-#   offline (no API key):  chain run flow.yaml --profile fake
-#   real (needs login):    chain run flow.yaml          # uses 'claude -p'
+#   chain run flow.yaml          # every ai step calls the model (needs: claude login)
 profiles:
   default: { cmd: 'claude -p' }   # your local CLI model
-  fake:    { cmd: 'cat' }          # echoes the prompt back — for offline runs/tests
 
 steps:
   load:
@@ -51,7 +48,6 @@ export function runInit(args: string[]): number {
   console.error(`        ${join(dir, ".gitignore")}`);
   console.error(`        ${inputPath}`);
   console.error(`\nnext:`);
-  console.error(`  chain run flow.yaml --profile fake   # offline, no login needed`);
-  console.error(`  chain run flow.yaml                  # real (first: claude login)`);
+  console.error(`  chain run flow.yaml                  # first: claude login`);
   return 0;
 }

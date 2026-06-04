@@ -1,0 +1,8 @@
+# Mock: M references {{ $node["B"] }} but is only wired to A — must fail validation
+# (a prompt reference with no matching `from:` edge).
+profiles:
+  default: { cmd: 'claude -p' }
+steps:
+  A: { type: ai, prompt: 'AAA' }
+  B: { type: ai, prompt: 'BBB' }
+  M: { type: ai, from: A, prompt: '{{ $json }} {{ $node["B"] }}' }

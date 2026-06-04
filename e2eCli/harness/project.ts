@@ -5,7 +5,7 @@
 //   p.chain("run", "flow.yaml");                       // first run
 //   expect(p.run(["run", "flow.yaml"]).status).toMatchObject({ a: "cached" });
 
-import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runCli, showCli, type CliResult } from "./cli.js";
@@ -33,6 +33,11 @@ export class Project {
 
   exists(rel: string): boolean {
     return existsSync(join(this.dir, rel));
+  }
+
+  /** Read a file from the project (e.g. a node's persisted output). */
+  read(rel: string): string {
+    return readFileSync(join(this.dir, rel), "utf8");
   }
 
   /** Run the CLI streaming its real colored output to the terminal (demo mode). */

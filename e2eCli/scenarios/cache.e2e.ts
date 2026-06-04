@@ -4,8 +4,10 @@
 import { describe, it, expect } from "vitest";
 import { newProject } from "../harness/project.js";
 import { linear } from "../fixtures/flows.js";
+import { haveClaude } from "../harness/cli.js";
 
-describe("cache", () => {
+// These RUN ai nodes (no fake model) → real `claude -p`. Gated; skipped without it.
+describe.skipIf(!haveClaude)("cache", () => {
   it("re-running an unchanged flow serves everything from cache", () => {
     const p = newProject().write("flow.yaml", linear());
     p.chain("run", "flow.yaml"); // cold

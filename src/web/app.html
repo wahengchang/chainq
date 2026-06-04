@@ -27,6 +27,7 @@
   /* editor */
   .bar{display:flex;align-items:center;gap:10px;padding:8px 16px;border-bottom:1px solid var(--line);background:var(--panel);z-index:3}
   .bar .path{color:var(--dim);font-size:11px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .profilepill{font-size:11px;color:var(--ran);border:1px solid var(--line);border-radius:3px;padding:3px 8px;letter-spacing:.02em}
   .stage{position:relative;height:calc(100vh - 49px);overflow:auto;
     background:radial-gradient(circle,var(--panel2) 1px,transparent 1px);background-size:22px 22px}
   .flowrow{display:flex;align-items:flex-start;flex-wrap:wrap;gap:0;padding:30px}
@@ -53,6 +54,12 @@
   .outbadge{font-size:10px;margin-bottom:5px;letter-spacing:.02em;font-weight:600}
   .outbadge.g-ran{color:var(--ran)} .outbadge.g-cached{color:var(--cached)} .outbadge.g-failed{color:var(--bad)}
   .arrow{align-self:center;color:var(--dim);padding:0 8px}
+  /* true-DAG canvas: depth columns + wires that show fan-out / fan-in */
+  .gwrap{position:relative;width:max-content;padding:30px 40px}
+  .gcols{position:relative;display:flex;gap:64px;align-items:flex-start;z-index:1}
+  .gcol{display:flex;flex-direction:column;gap:26px;justify-content:center}
+  svg.wires{position:absolute;left:0;top:0;pointer-events:none;z-index:0;overflow:visible}
+  .node.multi{box-shadow:0 0 0 1px rgba(224,166,77,.35)}
   .addnode{padding:0 30px 30px}
   /* n8n-style floating node panel */
   .backdrop{position:absolute;inset:0;background:rgba(0,0,0,.5);z-index:4}
@@ -101,7 +108,9 @@
     <button onclick="back()">← projects</button>
     <span class="path" id="path"></span>
     <button onclick="toggleRaw()" id="rawBtn">{ } raw</button>
-    <select id="profile"><option value="">default (claude -p)</option><option value="fake">fake (offline)</option></select>
+    <!-- profile is always the real local model (claude -p); every run calls the model. -->
+    <input type="hidden" id="profile" value="">
+    <span class="profilepill" title="every run calls the real local model (claude -p)">● claude -p · real</span>
     <button class="primary" onclick="runAll()">▷ Run all</button>
     <button onclick="runAll(true)" title="ignore cache — really call the model for every node">↻ fresh</button>
   </div>
@@ -191,30 +200,81 @@ async function loadNodes(){
   if(!ok){setMsg("canvasMsg","err","could not parse — use { } raw to fix it");$("graph").innerHTML="";return;}
   setMsg("canvasMsg","","");nodes=data.nodes;renderGraph();
 }
-function renderGraph(){
-  const g=$("graph");g.innerHTML="";
-  nodes.forEach((n,i)=>{
-    if(i>0){const a=document.createElement("div");a.className="arrow";a.textContent="→";g.appendChild(a);}
-    const r=results[n.id];
-    const d=document.createElement("div");d.className="node "+(r?r.status:"");
-    const glyph=r?('<span class="glyph g-'+r.status+(r.status==="running"?" spin":"")+'">'+G[r.status]+'</span>'):'<span class="glyph g-pending">○</span>';
-    // show the result ON the card (no modal) once it runs, with a ran/cached badge
-    const BADGE={ran:"✓ ran · called the model",cached:"⊘ cached · reused, no call",failed:"✗ failed",skipped:"– skipped"};
-    let out="";
-    if(r&&r.status==="running")out='<div class="nodeout dim">◌ running…</div>';
-    else if(r&&(r.error||r.output)){
-      const badge='<div class="outbadge g-'+r.status+'">'+(BADGE[r.status]||r.status)+'</div>';
-      out='<div class="nodeout'+(r.status==="failed"?" bad":"")+'">'+badge+esc(r.error||r.output)+'</div>';
-    }
-    d.innerHTML='<div class="noderun-wrap">'
-        +'<button class="noderun" title="run to here (reuse cache)" onclick="event.stopPropagation();runTo(\''+n.id+'\')">▷</button>'
-        +'<button class="noderun" title="re-run fresh — really call the model" onclick="event.stopPropagation();runTo(\''+n.id+'\',true)">↻</button>'
-      +'</div>'
-      +'<div class="nh">'+glyph+'<span class="nn">'+n.id+'</span><span class="nt">'+n.type+'</span></div>'
-      +'<div class="npreview">'+esc((n.prompt||n.run||"").slice(0,70))+'</div>'+out;
-    d.onclick=()=>selectNode(n.id);g.appendChild(d);
-  });
+// depth of each node = longest path from a start node (fixpoint, robust to any
+// declaration order). Drives the column layout so fan-out / fan-in reads L→R.
+function nodeDepths(){
+  const by={};nodes.forEach(n=>by[n.id]=n);
+  const d={};nodes.forEach(n=>d[n.id]=0);
+  for(let pass=0;pass<nodes.length;pass++){
+    let changed=false;
+    nodes.forEach(n=>{(n.from||[]).forEach(u=>{
+      if(by[u]&&d[u]+1>d[n.id]){d[n.id]=d[u]+1;changed=true;}
+    });});
+    if(!changed)break;
+  }
+  return d;
 }
+// build one node card — identical card UX (status, output badge, run buttons, click).
+function nodeCard(n){
+  const r=results[n.id];
+  const multi=(n.from||[]).length>1;
+  const d=document.createElement("div");d.className="node "+(r?r.status:"")+(multi?" multi":"");
+  d.dataset.id=n.id;
+  const glyph=r?('<span class="glyph g-'+r.status+(r.status==="running"?" spin":"")+'">'+G[r.status]+'</span>'):'<span class="glyph g-pending">○</span>';
+  const BADGE={ran:"✓ ran · called the model",cached:"⊘ cached · reused, no call",failed:"✗ failed",skipped:"– skipped"};
+  let out="";
+  if(r&&r.status==="running")out='<div class="nodeout dim">◌ running…</div>';
+  else if(r&&(r.error||r.output)){
+    const badge='<div class="outbadge g-'+r.status+'">'+(BADGE[r.status]||r.status)+'</div>';
+    out='<div class="nodeout'+(r.status==="failed"?" bad":"")+'">'+badge+esc(r.error||r.output)+'</div>';
+  }
+  const fromLine=(n.from||[]).length
+    ? '<div class="npreview" style="color:var(--accent)">from ['+esc(n.from.join(", "))+']'+(multi?" ← 多輸入":"")+'</div>' : '';
+  d.innerHTML='<div class="noderun-wrap">'
+      +'<button class="noderun" title="run to here (reuse cache)" onclick="event.stopPropagation();runTo(\''+n.id+'\')">▷</button>'
+      +'<button class="noderun" title="re-run fresh — really call the model" onclick="event.stopPropagation();runTo(\''+n.id+'\',true)">↻</button>'
+    +'</div>'
+    +'<div class="nh">'+glyph+'<span class="nn">'+n.id+'</span><span class="nt">'+n.type+'</span></div>'
+    +fromLine
+    +'<div class="npreview">'+esc((n.prompt||n.run||"").slice(0,70))+'</div>'+out;
+  d.onclick=()=>selectNode(n.id);
+  return d;
+}
+function renderGraph(){
+  const g=$("graph");g.className="gwrap";g.innerHTML="";
+  const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");
+  svg.setAttribute("class","wires");g.appendChild(svg);
+  const cols=document.createElement("div");cols.className="gcols";g.appendChild(cols);
+  const depth=nodeDepths();
+  const maxD=Math.max(0,...nodes.map(n=>depth[n.id]));
+  for(let c=0;c<=maxD;c++){
+    const colEl=document.createElement("div");colEl.className="gcol";
+    nodes.filter(n=>depth[n.id]===c).forEach(n=>colEl.appendChild(nodeCard(n)));
+    cols.appendChild(colEl);
+  }
+  drawWires(svg,g);
+}
+// draw a curved connector for every `from` edge (real wiring, incl. fan-in).
+function drawWires(svg,wrap){
+  const base=wrap.getBoundingClientRect();
+  const card=id=>wrap.querySelector('.node[data-id="'+CSS.escape(id)+'"]');
+  svg.setAttribute("width",wrap.scrollWidth);svg.setAttribute("height",wrap.scrollHeight);
+  let paths="";
+  nodes.forEach(n=>{
+    const to=card(n.id);if(!to)return;
+    const tr=to.getBoundingClientRect();
+    (n.from||[]).forEach(f=>{
+      const fe=card(f);if(!fe)return;
+      const fr=fe.getBoundingClientRect();
+      const x1=fr.right-base.left,y1=fr.top+fr.height/2-base.top;
+      const x2=tr.left-base.left, y2=tr.top+tr.height/2-base.top;
+      const mx=(x1+x2)/2;
+      paths+='<path d="M'+x1+','+y1+' C'+mx+','+y1+' '+mx+','+y2+' '+x2+','+y2+'" fill="none" stroke="var(--accent)" stroke-width="2" opacity="0.7"/>';
+    });
+  });
+  svg.innerHTML=paths;
+}
+window.addEventListener("resize",()=>{const g=$("graph");if(g&&g.classList.contains("gwrap")){const s=g.querySelector("svg.wires");if(s)drawWires(s,g);}});
 function selectNode(id){
   selected=id;const n=nodes.find(x=>x.id===id);if(!n)return;
   $("modal").classList.remove("hidden");

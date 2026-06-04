@@ -13,10 +13,10 @@ const run = (p: Project, ...args: string[]): void => {
   p.show(...args);
 };
 
-head("init — scaffold a brand-new project, then run it offline");
+head("init — scaffold a brand-new project, then run it (real model)");
 const p1 = newProject();
 run(p1, "init");
-run(p1, "run", "flow.yaml", "--profile", "fake");
+run(p1, "run", "flow.yaml");
 
 head("cache — cold run (everything ✓ ran)");
 const p2 = newProject().write("flow.yaml", linear());

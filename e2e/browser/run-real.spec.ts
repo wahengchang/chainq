@@ -14,7 +14,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const REPO = join(here, "..", "..");
 const TSX = join(REPO, "node_modules", ".bin", "tsx");
 const CLI = join(REPO, "src", "cli", "index.ts");
-const USER_FLOW = join(REPO, "test060316.yaml");
+const USER_FLOW = join(REPO, "e2eMock", "test060316.yaml"); // shared E2E mock flow
 
 const haveClaude = spawnSync("which", ["claude"]).status === 0;
 
@@ -54,8 +54,7 @@ test("↻ re-run with the real profile actually calls claude -p", async ({ page 
   await page.goto(baseURL);
   await expect(page.locator(".node").first()).toBeVisible();
 
-  // the REAL profile (value="" → "default (claude -p)")
-  await page.locator("#profile").selectOption({ value: "" });
+  // there is no fake/offline profile anymore — every run is the real model.
 
   // capture proof the subprocess spawned: poll `pgrep claude` while it runs
   let sawProcess = false;

@@ -319,7 +319,7 @@ positions → .chain/layout.json keyed by node id; never in main YAML
 - **D2 — delete a middle node = n8n-style auto-bridge.** Deleting B rewires its downstream's `from:` to B's upstream (gap closes, chain stays connected). Ambiguous multi-in/multi-out → fall back to a confirm dialog.
 
 **Plumbing (decided)**
-- Edge A→B sets B's `from`; `from` = string (single) or list (multi-input), first = `$json`, all addressable via `$node["A"]` (or the n8n-style alias `$('A')`); edge order = list order.
+- Edge A→B sets B's `from`; `from` = string (single) or list (multi-input), first = `$json`, all addressable via `$node["A"]`; edge order = list order.
 - Cycle check incremental on connect → reject edge live; `validate()` backstop.
 - Layout sidecar keyed by node id; missing → auto-layout (dagre/elk); orphan → GC on save; positions never affect execution.
 - New node: inline-editable name = YAML key. Rename migrates cache/pin/layout (rename-migration from first review).

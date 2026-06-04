@@ -37,6 +37,41 @@ steps:
     expect(validate(flow).some((e) => /profile "deflt" not found/.test(e.message))).toBe(true);
   });
 
+  it("flags a prompt referencing an upstream not wired in from:", () => {
+    const flow = parseFlow(`
+profiles:
+  default: { cmd: 'cat' }
+steps:
+  a: { type: ai, prompt: 'x' }
+  b: { type: ai, prompt: 'y' }
+  m: { type: ai, from: a, prompt: '{{ $json }} {{ $node["b"] }}' }
+`); // m reads b but only wired to a
+    const errs = validate(flow);
+    expect(errs.some((e) => e.node === "m" && /\$node\["b"\] but it is not in from/.test(e.message))).toBe(true);
+  });
+
+  it("accepts $node / $('id') / $json when all are wired in from:", () => {
+    const flow = parseFlow(`
+profiles:
+  default: { cmd: 'cat' }
+steps:
+  a: { type: ai, prompt: 'x' }
+  b: { type: ai, prompt: 'y' }
+  m: { type: ai, from: [a, b], prompt: "{{ $json }} {{ $node[\\"b\\"] }} {{ $('a') }}" }
+`);
+    expect(validate(flow)).toEqual([]);
+  });
+
+  it("flags {{ $json }} on a root step with no from:", () => {
+    const flow = parseFlow(`
+profiles:
+  default: { cmd: 'cat' }
+steps:
+  a: { type: ai, prompt: '{{ $json }}' }
+`);
+    expect(validate(flow).some((e) => e.node === "a" && /has no from/.test(e.message))).toBe(true);
+  });
+
   it("collects ALL errors, not just the first", () => {
     const flow = parseFlow(`
 profiles:

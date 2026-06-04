@@ -6,6 +6,7 @@ import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Runner } from "./run.js";
+import { itemsText } from "./types.js";
 import type { Flow } from "./types.js";
 
 const dir = () => mkdtempSync(join(tmpdir(), "chain-test-"));
@@ -52,7 +53,7 @@ describe("cmd cwd", () => {
     // so this only passes if the subprocess runs in baseDir.
     const res = await new Runner(flow, { chainDir: join(d, ".chain"), baseDir: d }).runChain();
     expect(res[0]!.status).toBe("ran");
-    expect(res[0]!.output).toContain("hello-from-basedir");
+    expect(itemsText(res[0]!.output)).toContain("hello-from-basedir");
   });
 });
 

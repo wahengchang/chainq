@@ -20,7 +20,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 import { parseDocument } from "yaml";
-import { parseFlow, validate, Runner, upstreamsOf, renderPrompt } from "../engine/index.js";
+import { parseFlow, validate, Runner, upstreamsOf, renderPrompt, itemsText, type Item } from "../engine/index.js";
 import { NEW_FLOW_TEMPLATE } from "../cli/new.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -108,15 +108,15 @@ async function handle(req: IncomingMessage, res: ServerResponse, opts: WebOption
     if (!n) return json(res, 404, { error: "no such node" });
     const ups = upstreamsOf(n).filter((u) => flow.steps[u]);
     const outDir = join(dirname(fp), ".chain", "outputs");
-    const outputs: Record<string, string> = {};
+    const items: Record<string, Item[]> = {};
     let haveAll = ups.length > 0;
     for (const u of ups) {
       const f = join(outDir, `${u}.out`);
-      if (existsSync(f)) outputs[u] = readFileSync(f, "utf8");
+      if (existsSync(f)) items[u] = JSON.parse(readFileSync(f, "utf8")) as Item[];
       else haveAll = false;
     }
     const tmpl = typeof template === "string" ? template : (n.prompt ?? "");
-    const rendered = renderPrompt(tmpl, { outputs, primary: ups[0] });
+    const rendered = renderPrompt(tmpl, { items, primary: ups[0], index: 0 }); // preview = first item
     return json(res, 200, { rendered, haveInputs: haveAll, noUpstream: ups.length === 0 });
   }
 
@@ -258,9 +258,19 @@ async function streamRun(
     baseDir,
     profileOverride: profile || undefined,
     fresh,
+    // real `claude -p` calls can run long (reasoning, big inputs). Give the web
+    // UI a generous 5-min ceiling so a genuine model call isn't killed as a
+    // false "timed out" — the CLI default (120s) is too tight for the UI.
+    timeoutMs: 300_000,
     onResult: (r) =>
       res.write(
-        JSON.stringify({ id: r.id, status: r.status, output: r.output, error: r.error ?? null }) + "\n",
+        JSON.stringify({
+          id: r.id,
+          status: r.status,
+          output: itemsText(r.output), // flatten items → text for the UI
+          items: r.output.length, // item count (items model)
+          error: r.error ?? null,
+        }) + "\n",
       ),
   });
   try {

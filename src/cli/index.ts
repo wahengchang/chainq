@@ -144,11 +144,15 @@ async function main(argv: string[]): Promise<number> {
       profileOverride: flags.profile,
       pins: flags.pins,
       onResult: (r) => {
+        const n = r.output.length;
+        // show item count for ran/cached (items model) — makes fan-out visible
+        const count =
+          r.status === "ran" || r.status === "cached" ? ` (${n} item${n === 1 ? "" : "s"})` : "";
         const tail =
           r.status === "failed"
             ? `  ${r.authExpired ? "[login expired] " : ""}${r.error}`
             : "";
-        console.error(`${PREFIX[r.status]} ${r.id}${tail}`);
+        console.error(`${PREFIX[r.status]} ${r.id}${count}${tail}`);
         if (r.status === "failed") failed = true;
       },
     });

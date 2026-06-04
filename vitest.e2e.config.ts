@@ -6,7 +6,9 @@ export default defineConfig({
   test: {
     globals: true,
     environment: "node",
-    include: ["e2e/**/*.e2e.ts"],
+    // CLI E2E lives entirely under the top-level e2eCli/ folder (physically
+    // separate from the browser suite in e2e/browser/, which runs under Playwright).
+    include: ["e2eCli/**/*.e2e.ts"],
     exclude: [...configDefaults.exclude, "**/._*"],
     testTimeout: 30_000, // each scenario spawns several real CLI processes
   },

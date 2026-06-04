@@ -23,19 +23,17 @@ from cache.
 ```bash
 npx tsx src/cli/index.ts init my-flow        # scaffolds flow.yaml + .gitignore + input.txt
 cd my-flow
-chain run flow.yaml --profile fake           # run offline (the cat fake model, no login)
-chain run flow.yaml                          # run for real (first: claude login)
+chain run flow.yaml                          # every ai step calls the model (first: claude login)
 ```
 
-`init` writes a starter `flow.yaml` with both a real `default: claude -p` profile and a
-`fake: cat` profile, so a fresh project runs offline immediately. It refuses to overwrite
-an existing `flow.yaml` unless you pass `--force`.
+`init` writes a starter `flow.yaml` with a `default: claude -p` profile. It refuses to
+overwrite an existing `flow.yaml` unless you pass `--force`.
 
 A project holds many flows — add another workflow any time:
 
 ```bash
 chain new tweets          # generates tweets.yaml (a 2-node starter chain)
-chain run tweets.yaml --profile fake
+chain run tweets.yaml
 chain ls                  # list every flow in the project
 ```
 
@@ -43,15 +41,15 @@ chain ls                  # list every flow in the project
 
 ```bash
 npm install
-npm test                                       # 47 unit tests, offline (G2 fake model)
-npm run e2e                                     # E2E framework — drives the real CLI (see e2e/)
-npx tsx src/cli/index.ts run examples/demo.yaml
-npx tsx src/cli/index.ts run examples/demo.yaml --fresh   # ignore cache
+npm test                                       # unit tests (offline)
+npm run e2e:cli                                # CLI E2E — drives the real CLI (see e2eCli/)
 npx tsx src/cli/index.ts validate examples/demo.yaml
+npx tsx src/cli/index.ts run examples/demo.yaml          # calls the real model (claude login)
 ```
 
-The demo uses a `cat` "fake model" profile, so it runs with no API key and no network.
-Point a profile at `claude -p` for the real thing.
+Every run calls the real local model (`claude -p`) — there is no fake/offline profile.
+CLI E2E gates model-running scenarios on `claude` being on PATH; structural tests
+(validate / scaffold / ls) run offline.
 
 ## How it works
 
@@ -67,8 +65,7 @@ ONE engine (src/engine), two callers (CLI now, UI next):
 
 Cache correctness is a **Merkle key**: each node's key folds in its upstreams' keys, so
 editing a node invalidates exactly its transitive downstream and nothing else. A `cmd`
-node with no declared `inputs:` is treated as uncacheable (always re-runs). The whole
-engine self-tests offline by swapping any profile for `cat`.
+node with no declared `inputs:` is treated as uncacheable (always re-runs).
 
 ## Layout
 

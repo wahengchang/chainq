@@ -1,53 +1,26 @@
-# CLAUDE.md — chain
+## 工作原則
 
-`chain`：把一串 prompt 寫在一個 YAML 檔，跑在**本地 CLI 模型**（`claude -p`、`codex -m`）當子行程，不用 API key。核心價值是**迭代迴圈**：改一個 prompt → 只重跑受影響的節點 + 下游 → 看結果，未變動的步驟用快取重用（Merkle 失效）。
+0. **你只說繁體中文。**
 
----
+1. **前端體驗是第一優先。** 本專案重度依賴 UI 操作,網頁端表現直接決定產品價值。取捨一律站在使用者視角。
 
-## 給 Claude 的工作規則（重要，務必遵守）
+2. **每個 UI 改動都要用 Playwright 實測,並親眼看到互動跑過。** UI 極易損壞、交互複雜;不要只回報「passed」,實際跑過一次才算數。
 
-### 1. 前端品質是第一優先（the user cares deeply about the frontend）
-這個專案的使用者對**畫面/互動**非常執著。動 UI 時：
-- 行為要符合直覺。**按鈕做一件事**：`▷` run 按鈕只負責「跑 + 在卡片上就地顯示結果」，**絕不**順便打開編輯 modal；點卡片本體才開編輯面板。兩者不可混淆。
-- 狀態要看得見：跑的時候要有 `◌ running…`、跑完要有明確結果與 `✓ ran · called the model` / `⊘ cached · reused` 徽章。不要讓使用者以為「按了沒反應」。
-- 真實 vs 快取要分得清楚。瞬間回應通常是快取（`⊘`），不是沒跑。
-- 主檔：`src/web/app.html`（單頁 UI）、`src/web/server.ts`（本地 http server，無框架）。
+3. **可信來自可觀察,而非斷言。** 內部正確不等於已交付——狀態與結果都要是使用者能當場確認的。
 
-### 2. 每次更新後，跑一次畫面給使用者看（ALWAYS show the screen）
-**只要動了 UI，改完一定要用 Playwright headed + 慢動作跑一次對應的 e2e**，讓使用者親眼看到瀏覽器自己操作、確認真的有效——不要只回報「passed」就結束。
+4. **一個操作只做一件被預期的事。** 不在使用者沒要求時觸發隱性副作用;可預測優先於聰明。
 
-```bash
-SLOWMO=700 npx playwright test e2e/ui/run.spec.ts --headed
-```
+5. **交付要還原現場。** 改完即可被看到、確認、接續使用,才算完成。
 
-- 用 **headed**（會在使用者螢幕開真的瀏覽器），不是 headless。
-- 用 `SLOWMO`（700–900）讓每個動作看得清楚（否則 1.9s 一閃而過）。
-- 動到「跑節點 / 真的呼叫模型」的功能，要跑 `e2e/ui/run-real.spec.ts`（用真的 `claude -p`，會驗證真的有 spawn `claude` 子行程）。
-- 改完 UI 後**重啟 server**（`APP_HTML` 在啟動時讀一次，不重啟看不到新版）並把新網址告訴使用者。
+6. **善用本機已安裝的 gstack。** 執行工作前,先 review gstack 的指令(如 `/plan-eng-review`、`/review` 等),在合適環節納入使用。
 
-> 一句話：**每個 UI 改動 = 改 code + 更新 e2e + headed 跑一次給我看 + 重啟並給我網址。**
+## 完成的定義(動到 UI 就必須做到,否則不算完成)
 
----
+任何 UI 改動,結束回合前必須:
 
-## 怎麼跑（環境陷阱）
+1. 用 Playwright **headed + SLOWMO(700–900)** 跑對應的 e2e——讓 Playwright **自動彈出真的瀏覽器、自己操作**這次改動的互動給我看,我不需要手動開任何東西。
+2. **不接受只回報「passed」或只給我網址**;要 Playwright 自動驅動瀏覽器,讓我親眼看到它自己跑一遍。
+3. 視覺化要反映**真實狀態**(跑真引擎、真資料),不是寫死的示意流程。
+4. 跑之前先重啟 server(`APP_HTML` 啟動時讀一次),確保演的是最新版。
 
-- **永遠用 `npx tsx`，不要用 `node`。** import 路徑寫 `.js` 但其實指向 `.ts`，`node` 會 `ERR_MODULE_NOT_FOUND`。凡是想打 `node` 的地方都改打 `npx tsx`。
-- CLI：`npx tsx src/cli/index.ts <init|new|ui|run|validate|ls>`
-- Web UI：`npx tsx src/cli/index.ts ui [flow.yaml]`（綁 127.0.0.1，啟動時印網址）
-- 單元測試：`npm test`（vitest）
-- 瀏覽器 e2e：`npm run e2e:ui:headed`（看畫面）、`npm run e2e:ui`（Playwright UI 模式可逐步重播）
-- 型別檢查：`npm run typecheck`
-- macOS 在非 HFS 外接碟會產生 `._*` AppleDouble 檔，會打斷 glob——測試設定已用 `**/._*` 排除，別移除。
-
-## 程式結構
-
-- `src/engine/` — 引擎（CLI 與 UI 共用，唯一邏輯所在）：`dag` 拓樸/環檢測、`cache` Merkle 失效（upstream 順序有意義，**勿 sort**）、`run` Runner（每次操作獨立 `RunCtx`）、`render` 變數代入、`plan` 先預測再執行（不燒額度先給 preflight）、`proc` 子行程。
-- `src/cli/` — 薄包裝，無引擎邏輯。
-- `src/web/` — 本地 UI server + `app.html`。
-- `e2e/` — Playwright（`e2e/ui/`）+ fixture-driven CLI e2e。
-
-## 慣例
-
-- 跑出來的東西「壞不落地」：寫檔前一定先 `validate`，驗證失敗回 400 不寫檔。
-- 改 YAML 用 `yaml` 的 `parseDocument` + `setIn`/`deleteIn` 保留註解與排版。
-- 快取行為：未變動節點重跑會瞬間回快取（`⊘`），這是設計，不是 bug；要強制真的呼叫模型用 `--fresh`（CLI）或 UI 的 `↻ re-run`。
+> 規則:不是給我網址叫我自己看,而是 Playwright 自動開瀏覽器、自動操作演一遍給我看。做完不是終點,「自動演過一次」才是。

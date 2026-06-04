@@ -30,9 +30,9 @@ import { join } from "node:path";
 import { canonicalize } from "./canonical.js";
 import { resolveProfile } from "./profiles.js";
 import { topoOrder, upstreamsOf } from "./dag.js";
-import type { Flow } from "./types.js";
+import type { Flow, Item } from "./types.js";
 
-const ENGINE_VERSION = 1; // bump to bust all caches when key computation changes
+const ENGINE_VERSION = 2; // 2: outputs are now Item[] (n8n items model), not raw strings
 
 function sha256(s: string | Uint8Array): string {
   return createHash("sha256").update(s).digest("hex");
@@ -80,6 +80,10 @@ export function computeKeys(
       profileCmd,
       inputFileHashes,
       upstreamKeys,
+      // collection-op / cmd-mode config: editing these must invalidate the node
+      field: node.field ?? null,
+      mode: node.mode ?? null,
+      key: node.key ?? null,
     });
     keys.set(id, sha256(material));
   }
@@ -134,16 +138,18 @@ export class CacheStore {
     return existsSync(join(this.outputsDir, entry.outputFile));
   }
 
-  load(id: string): string {
+  load(id: string): Item[] {
     const entry = this.state[id];
     if (!entry) throw new Error(`no cached output for "${id}"`);
-    return readFileSync(join(this.outputsDir, entry.outputFile), "utf8");
+    const raw = readFileSync(join(this.outputsDir, entry.outputFile), "utf8");
+    return JSON.parse(raw) as Item[];
   }
 
-  /** Persist a successful run. Atomic: temp file + rename, never a half write. */
-  put(id: string, key: string, output: string): void {
+  /** Persist a successful run. Atomic: temp file + rename, never a half write.
+   * Output items are stored as pretty JSON so .out files stay human-readable. */
+  put(id: string, key: string, output: Item[]): void {
     const outputFile = `${id}.out`;
-    atomicWrite(join(this.outputsDir, outputFile), output);
+    atomicWrite(join(this.outputsDir, outputFile), JSON.stringify(output, null, 2));
     this.state[id] = { key, outputFile };
     atomicWrite(this.statePath, JSON.stringify(this.state, null, 2));
   }

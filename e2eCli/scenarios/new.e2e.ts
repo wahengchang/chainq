@@ -2,15 +2,20 @@
 
 import { describe, it, expect } from "vitest";
 import { newProject } from "../harness/project.js";
+import { haveClaude } from "../harness/cli.js";
 
 describe("new", () => {
-  it("creates a new workflow file that validates and runs offline", () => {
+  it("creates a new workflow file that validates", () => {
     const p = newProject();
     expect(p.chain("new", "blog").code).toBe(0);
     expect(p.exists("blog.yaml")).toBe(true);
-
     expect(p.chain("validate", "blog.yaml").code).toBe(0);
-    const { status } = p.run(["run", "blog.yaml", "--profile", "fake"]);
+  });
+
+  it.skipIf(!haveClaude)("the new workflow runs end-to-end (real model)", () => {
+    const p = newProject();
+    p.chain("new", "blog");
+    const { status } = p.run(["run", "blog.yaml"]); // no fake model — real claude -p
     expect(status).toMatchObject({ draft: "ran", refine: "ran" });
   });
 

@@ -2,21 +2,26 @@
 // path selectors from the design §4.2). The tier-2 read-only JS sandbox
 // ({{ a + b }}) stays deferred (security surface, eng review).
 //
-//   {{ $json }}                whole primary-upstream output
-//   {{ $json.title }}          a field
-//   {{ $json.items[2].text }}  nested + array index
-//   {{ $json.items[-1].text }} negative index (from the end)
-//   {{ $json.items[*].title }} pluck a column → JSON array
-//   {{ $node["id"] }}          another named upstream (whole / + path)
-//   {{ $node["id"].x.y }}
+// items model: a node runs once per primary input item; `index` selects which.
+//   {{ $json }}                whole current item value (raw text stays raw)
+//   {{ $json.title }}          a field of the current item
+//   {{ $json[0] }} {{ $json[*] }}  root-level array index / column pluck
+//   {{ $json.items[-1].text }} nested + negative index
+//   {{ $node["id"] }} {{ $('id') }}        the PAIRED item of upstream id (n8n $('Node').item)
+//   {{ $('id').item.x }}                   explicit paired item + path
+//   {{ $('id').all() }} {{ $('id').all()[*].x }}   ALL items of upstream id as a JSON array
 //
 // Unknown expressions are left verbatim so they're visible, not silently blanked.
 
+import type { Item } from "./types.js";
+
 export interface RenderInputs {
-  /** id -> that upstream's output text */
-  outputs: Record<string, string>;
-  /** the primary upstream id (first in `from`), if any */
+  /** id -> that upstream's full items (n8n items model) */
+  items: Record<string, Item[]>;
+  /** the primary upstream id (first in `from`), if any — binds $json */
   primary?: string;
+  /** which item index this render is for (per-item execution); default 0 */
+  index?: number;
 }
 
 const EXPR = /\{\{\s*(.*?)\s*\}\}/g;
@@ -28,36 +33,80 @@ export function renderPrompt(template: string, inputs: RenderInputs): string {
   });
 }
 
+/** What upstreams a template refers to — so validate can check they're wired in `from:`. */
+export interface PromptRefs {
+  /** uses {{ $json }} / {{ $json.path }} / {{ $json[...] }} (binds to the primary upstream). */
+  usesJson: boolean;
+  /** ids named via {{ $node["id"] }} or the alias {{ $('id') }}. */
+  nodes: string[];
+}
+
+export function promptRefs(template: string): PromptRefs {
+  const nodes = new Set<string>();
+  let usesJson = false;
+  const re = /\{\{\s*(.*?)\s*\}\}/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(template)) !== null) {
+    const expr = m[1]!.trim();
+    if (/^\$json(?:[.[]|$)/.test(expr)) usesJson = true;
+    const nm =
+      /^\$node\[["']([^"']+)["']\]/.exec(expr) ?? /^\$\(\s*["']([^"']+)["']\s*\)/.exec(expr);
+    if (nm) nodes.add(nm[1]!);
+  }
+  return { usesJson, nodes: [...nodes] };
+}
+
+/** The item paired to `index` (clamped to the upstream's last item). */
+function paired(items: Item[] | undefined, index: number): Item | undefined {
+  if (!items || items.length === 0) return undefined;
+  return items[Math.min(index, items.length - 1)];
+}
+
 function resolveExpr(expr: string, inputs: RenderInputs): string | undefined {
-  // $json[.path]
-  let m = /^\$json(?:\.(.+))?$/.exec(expr);
+  const idx = inputs.index ?? 0;
+
+  // $json[.path | [i] | [*]] — the current primary item
+  let m = /^\$json\b([.[].*)?$/.exec(expr);
   if (m) {
     if (!inputs.primary) return undefined;
-    return select(inputs.outputs[inputs.primary], m[1]);
+    const cur = paired(inputs.items[inputs.primary], idx);
+    return cur === undefined ? undefined : selectVal(cur.json, m[1]);
   }
-  // $node["id"][.path]
-  m = /^\$node\[["']([^"']+)["']\](?:\.(.+))?$/.exec(expr);
+
+  // $node["id"] / $('id'), optionally .all() or .item, then a path
+  m =
+    /^\$node\[["']([^"']+)["']\](.*)$/.exec(expr) ??
+    /^\$\(\s*["']([^"']+)["']\s*\)(.*)$/.exec(expr);
   if (m) {
     const id = m[1]!;
-    if (!(id in inputs.outputs)) return undefined;
-    return select(inputs.outputs[id], m[2]);
+    const rest = m[2] ?? "";
+    const its = inputs.items[id];
+    if (its === undefined) return undefined;
+    const allM = /^\.all\(\)(.*)$/.exec(rest);
+    if (allM) return selectVal(its.map((i) => i.json), allM[1]); // all items as an array
+    const itemM = /^\.item\b(.*)$/.exec(rest);
+    const path = itemM ? itemM[1] : rest;
+    const cur = paired(its, idx);
+    return cur === undefined ? undefined : selectVal(cur.json, path);
   }
   return undefined;
 }
 
-/** Apply a dotted path (with [n] / [-1] / [*]) to an upstream's output text. */
-function select(raw: string | undefined, path?: string): string | undefined {
-  if (raw === undefined) return undefined;
-  if (!path) return raw; // {{ $json }} — whole output, verbatim
+/** Apply a path selector to a value. `value` may be structured already (split-out
+ * elements) or a raw string (ai/cmd text) which is parsed on demand. */
+function selectVal(value: unknown, pathExpr?: string): string | undefined {
+  if (!pathExpr) return stringify(value); // whole value — raw text stays raw
+  const root = typeof value === "string" ? tryParse(value) : value;
+  const path = pathExpr.replace(/^\./, ""); // ".a.b" → "a.b"; "[0]" stays "[0]"
+  return stringify(walk(root, tokenize(path)));
+}
 
-  let root: unknown;
+function tryParse(s: string): unknown {
   try {
-    root = JSON.parse(raw);
+    return JSON.parse(s);
   } catch {
-    return undefined; // not JSON → no fields to select
+    return s; // not JSON → no fields to select (walk returns undefined → verbatim)
   }
-  const value = walk(root, tokenize(path));
-  return stringify(value);
 }
 
 type Accessor = { kind: "key"; key: string } | { kind: "index"; index: number | "*" };
