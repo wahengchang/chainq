@@ -126,8 +126,9 @@ function nodeCard(n){
     +'</div>'
     +'<div class="nh">'+glyph+'<span class="nn">'+esc(n.id)+'</span>'+xn+typeChip(n.type)+'</div>'
     +fromLine
-    +'<div class="npreview">'+esc((n.prompt||n.run||"").slice(0,70))+'</div>'+out;
-  d.onclick=()=>selectNode(n.id);
+    +'<div class="npreview">'+esc((n.prompt||n.run||"").slice(0,70))+'</div>'+out
+    +'<div class="port" title="drag onto another node to connect →"></div>';
+  d.onclick=()=>{if(connecting)return;selectNode(n.id);}; // a drag-connect must not also open the panel
   return d;
 }
 function renderGraph(){
@@ -165,6 +166,54 @@ function drawWires(svg,wrap){
   svg.innerHTML=paths;
 }
 window.addEventListener("resize",()=>{const g=$("graph");if(g&&g.classList.contains("gwrap")){const s=g.querySelector("svg.wires");if(s)drawWires(s,g);}});
+
+// ---- P2-b drag-to-connect ----
+// Drag a node's output port onto another node → add the source to that node's
+// `from` via /api/connect (the backend keeps order + validates壞不落地). `connecting`
+// suppresses the trailing card click so a drag never also opens the panel.
+let connecting=false;
+function nodeUnder(e){const el=document.elementFromPoint(e.clientX,e.clientY);return el?el.closest(".node"):null;}
+function startConnect(source,ev){
+  ev.preventDefault();ev.stopPropagation();
+  const g=$("graph");const svg=g.querySelector("svg.wires");if(!svg)return;
+  const base=g.getBoundingClientRect();
+  const sc=g.querySelector('.node[data-id="'+CSS.escape(source)+'"]');if(!sc)return;
+  const sr=sc.getBoundingClientRect();
+  const x1=sr.right-base.left,y1=sr.top+sr.height/2-base.top; // wrap-relative (matches drawWires)
+  const temp=document.createElementNS("http://www.w3.org/2000/svg","path");
+  temp.setAttribute("fill","none");temp.setAttribute("stroke","var(--accent)");
+  temp.setAttribute("stroke-width","2");temp.setAttribute("stroke-dasharray","5,4");
+  svg.appendChild(temp);connecting=true;g.classList.add("connecting");
+  const move=e=>{
+    const x2=e.clientX-base.left,y2=e.clientY-base.top,mx=(x1+x2)/2;
+    temp.setAttribute("d","M"+x1+","+y1+" C"+mx+","+y1+" "+mx+","+y2+" "+x2+","+y2);
+    g.querySelectorAll(".node.drop").forEach(el=>el.classList.remove("drop"));
+    const t=nodeUnder(e);if(t&&t.dataset.id!==source)t.classList.add("drop");
+  };
+  const up=async e=>{
+    document.removeEventListener("pointermove",move);document.removeEventListener("pointerup",up);
+    g.classList.remove("connecting");temp.remove();g.querySelectorAll(".node.drop").forEach(el=>el.classList.remove("drop"));
+    const t=nodeUnder(e);
+    if(t&&t.dataset.id!==source)await connectTo(source,t.dataset.id);
+    setTimeout(()=>{connecting=false;},0); // let the trailing click see connecting=true, then clear
+  };
+  document.addEventListener("pointermove",move);document.addEventListener("pointerup",up);
+}
+async function connectTo(source,target){
+  const t=nodes.find(n=>n.id===target);if(!t)return;
+  const from=[...(t.from||[])];
+  if(from.includes(source))return setMsg("canvasMsg","","");
+  from.push(source);
+  const{ok,data}=await api("/api/connect",{method:"POST",body:JSON.stringify({path:current,node:target,from})});
+  if(!ok)return setMsg("canvasMsg","err",errs(data)||"connect failed");
+  await loadNodes();setMsg("canvasMsg","ok","connected "+source+" → "+target); // after re-render (loadNodes clears canvasMsg)
+}
+// one delegated listener — the cards are rebuilt every render, the port isn't.
+document.addEventListener("pointerdown",e=>{
+  const port=e.target.closest&&e.target.closest(".port");if(!port)return;
+  const card=port.closest(".node");if(card)startConnect(card.dataset.id,e);
+});
+
 function selectNode(id){
   selected=id;const n=nodes.find(x=>x.id===id);if(!n)return;
   $("modal").classList.remove("hidden");
