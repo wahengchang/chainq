@@ -190,9 +190,35 @@ function selectNode(id){
   $("pnOut").textContent=ro?(ro.status==="running"?"running…":(ro.error||ro.output||"(empty)")):"Run to see this node's output.";
   const lab={ran:'<span class="g-ran">✓ ran · called the model</span>',cached:'<span class="g-cached">⊘ cached · reused, no call</span>',failed:'<span class="g-failed">✗ failed</span>',skipped:'<span class="g-skipped">– skipped</span>',running:'<span class="g-running">◌ running…</span>'};
   $("pnOutStatus").innerHTML=ro?(lab[ro.status]||""):"";
+  $("pnTypeFields").innerHTML=renderTypeFields(n);   // P2-a: type-specific editor
   setMsg("pnMsg","","");renderPreview();
   if(n.type!=="input")loadItems(id);   // P1-b: show the per-item content (items model)
 }
+// P2-a: type-specific config the panel can set without dropping to raw YAML —
+// splitOut/aggregate `field`, merge `mode`/`key`, cmd `mode`. ai/assemble/input
+// have none here (assemble/ai edit `prompt`, input edits `params`).
+function renderTypeFields(n){
+  const opt=(cur,v)=>'<option value="'+v+'"'+(cur===v?" selected":"")+'>'+v+'</option>';
+  if(n.type==="splitOut"||n.type==="aggregate")
+    return '<label>field — property to '+(n.type==="splitOut"?"split out":"aggregate")+' (blank = whole item)</label>'
+      +'<input id="tfField" spellcheck="false" value="'+esc(n.field||"")+'" placeholder="e.g. items">';
+  if(n.type==="merge"){
+    const m=n.mode||"append";
+    return '<label>mode — how to combine the two inputs</label>'
+      +'<select id="tfMode" onchange="onMergeMode()">'+opt(m,"append")+opt(m,"byPosition")+opt(m,"byKey")+'</select>'
+      +'<div id="tfKeyWrap"'+(m==="byKey"?"":' class="hidden"')+' style="margin-top:8px">'
+      +'<label>key — property both sides join on</label>'
+      +'<input id="tfKey" spellcheck="false" value="'+esc(n.key||"")+'" placeholder="e.g. id"></div>';
+  }
+  if(n.type==="cmd"){
+    const m=n.mode||"once";
+    return '<label>mode — run the command…</label>'
+      +'<select id="tfMode">'+opt(m,"once")+opt(m,"perItem")+'</select>'
+      +'<div class="dim" style="font-size:11px;margin-top:4px">once = whole input at once · perItem = once per input item</div>';
+  }
+  return "";
+}
+function onMergeMode(){const w=$("tfKeyWrap");if(w)w.classList.toggle("hidden",$("tfMode").value!=="byKey");}
 // render an Item[] (the n8n items model) item by item — value per item, with the
 // paired-item lineage tag when present. null = not run yet; [] = ran, 0 items.
 function renderItems(items){
@@ -251,12 +277,24 @@ async function renameSelected(){
 function closeNode(){selected=null;$("modal").classList.add("hidden");}
 async function saveNode(){
   const n=nodes.find(x=>x.id===selected);if(!n)return;
-  const field=n.type==="cmd"?"run":"prompt";
-  let r=await api("/api/set",{method:"POST",body:JSON.stringify({path:current,node:selected,field,value:$("pnPrompt").value})});
-  if(!r.ok)return setMsg("pnMsg","err",errs(r.data)||"save failed");
-  r=await api("/api/set-from",{method:"POST",body:JSON.stringify({path:current,node:selected,from:$("pnFrom").value})});
-  if(!r.ok)return setMsg("pnMsg","err",errs(r.data)||"save failed");
-  setMsg("pnMsg","ok","saved ✓");await loadNodes();selectNode(selected);
+  // each node type owns different fields — write exactly those, not always prompt.
+  // (key before mode for merge: setting mode=byKey while key is unset would be a
+  // NEW validate error and get rejected, leaving mode unsaved.)
+  const sets=[];
+  if(n.type==="cmd"){sets.push(["run",$("pnPrompt").value]);if($("tfMode"))sets.push(["mode",$("tfMode").value]);}
+  else if(n.type==="ai"||n.type==="assemble"){sets.push(["prompt",$("pnPrompt").value]);}
+  else if(n.type==="splitOut"||n.type==="aggregate"){if($("tfField"))sets.push(["field",$("tfField").value]);}
+  else if(n.type==="merge"){if($("tfKey"))sets.push(["key",$("tfKey").value]);if($("tfMode"))sets.push(["mode",$("tfMode").value]);}
+  for(const [f,v] of sets){
+    const r=await api("/api/set",{method:"POST",body:JSON.stringify({path:current,node:selected,field:f,value:v})});
+    if(!r.ok)return setMsg("pnMsg","err",errs(r.data)||"save failed");
+  }
+  if(n.type!=="input"){   // input is a trigger — it must not have a `from`
+    const r=await api("/api/set-from",{method:"POST",body:JSON.stringify({path:current,node:selected,from:$("pnFrom").value})});
+    if(!r.ok)return setMsg("pnMsg","err",errs(r.data)||"save failed");
+  }
+  await loadNodes();selectNode(selected);
+  setMsg("pnMsg","ok","saved ✓");   // after the re-render (selectNode clears pnMsg) so it actually shows
 }
 // read an NDJSON stream, calling onNode for each node result as it arrives
 async function streamRun(url,bodyObj){
@@ -335,4 +373,4 @@ boot();
 // Migration bridge: these handlers are still referenced by inline onclick= in
 // app.html (and in runtime-generated card markup), so a module must expose them
 // on window. Converting to addEventListener is the follow-up.
-Object.assign(window,{listFlows,createFlow,back,toggleRaw,runAll,runNode,saveNode,deleteNode,closeNode,addNode,saveRaw,renameSelected,schedulePreview,insertVar,runTo,setInputVal});
+Object.assign(window,{listFlows,createFlow,back,toggleRaw,runAll,runNode,saveNode,deleteNode,closeNode,addNode,saveRaw,renameSelected,schedulePreview,insertVar,runTo,setInputVal,onMergeMode});
