@@ -12,7 +12,7 @@
 // (they see the whole input items array, not one item at a time) — the n8n model.
 // `input` is the trigger: it has no upstream and emits the flow's seed item(s)
 // from declared params + run-time values (one set → 1 item; many sets → batch).
-export type NodeType = "ai" | "cmd" | "assemble" | "splitOut" | "aggregate" | "merge" | "input";
+export type NodeType = "ai" | "cmd" | "assemble" | "splitOut" | "aggregate" | "merge" | "input" | "write";
 
 /** A declared input parameter (n8n form field). All fields optional, so existing
  * flows (default-only) are unchanged. */
@@ -33,6 +33,13 @@ export interface ParamSpec {
 export type MergeMode = "append" | "byPosition" | "byKey";
 /** cmd execution cardinality. */
 export type CmdMode = "once" | "perItem";
+/** write 成品 file mode. */
+export type WriteMode = "overwrite" | "append";
+/** ai structured-output schema (C4): a minimal field → type map. The model's
+ * output is parsed as JSON and each declared field is checked; extra fields are
+ * allowed. `array`/`object` check the container only (shallow, by design). */
+export type SchemaType = "string" | "number" | "boolean" | "array" | "object";
+export type SchemaSpec = Record<string, SchemaType>;
 
 export interface ProfileSpec {
   /** Command template for the local CLI model, e.g. 'claude -p'. */
@@ -60,10 +67,16 @@ export interface FlowNode {
   /** splitOut/aggregate: a single property name of the (object) item to split out /
    * aggregate. Omitted → operate on the whole item value. */
   field?: string;
-  /** merge: combine strategy (default 'append'). cmd: 'once' (default) | 'perItem'. */
-  mode?: MergeMode | CmdMode;
+  /** merge: combine strategy. cmd: 'once' | 'perItem'. write: 'overwrite' | 'append'. */
+  mode?: MergeMode | CmdMode | WriteMode;
   /** merge byKey: the property name both sides are joined on. */
   key?: string;
+  /** write: output file path (relative to cwd). Supports {{date}} / {{datetime}}. */
+  path?: string;
+  /** ai: declared structured-output schema (C4). When set, the model output is
+   * parsed as JSON and validated; a mismatch triggers one corrective retry, then
+   * fails. The node's output item becomes the parsed object. */
+  schema?: SchemaSpec;
   /** input: declared parameters (name → spec with optional default). Supplied at
    * run time via --input / --input-file; one set → 1 seed item, many → batch. */
   params?: Record<string, ParamSpec>;

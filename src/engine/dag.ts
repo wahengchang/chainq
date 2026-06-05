@@ -13,7 +13,7 @@
 import { parse as parseYaml } from "yaml";
 import type { Flow, FlowNode, NodeType } from "./types.js";
 
-const NODE_TYPES: readonly NodeType[] = ["ai", "cmd", "assemble", "splitOut", "aggregate", "merge", "input"];
+const NODE_TYPES: readonly NodeType[] = ["ai", "cmd", "assemble", "splitOut", "aggregate", "merge", "input", "write"];
 
 export function parseFlow(yamlText: string): Flow {
   const raw = parseYaml(yamlText) as Record<string, unknown> | null;
@@ -46,8 +46,12 @@ export function parseFlow(yamlText: string): Flow {
     if (typeof spec.field === "string") node.field = spec.field;
     if (typeof spec.mode === "string") node.mode = spec.mode as FlowNode["mode"];
     if (typeof spec.key === "string") node.key = spec.key;
+    if (typeof spec.path === "string") node.path = spec.path;
     if (spec.params && typeof spec.params === "object") {
       node.params = spec.params as FlowNode["params"];
+    }
+    if (spec.schema && typeof spec.schema === "object") {
+      node.schema = spec.schema as FlowNode["schema"];
     }
     steps[id] = node;
   }

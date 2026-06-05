@@ -2,7 +2,7 @@
 // save — over real HTTP against a real temp project.
 
 import { describe, it, expect } from "vitest";
-import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AddressInfo } from "node:net";
@@ -218,6 +218,102 @@ describe("web server", () => {
       expect((await okOut(await run([{ name: "ada" }]))).output).toContain("ada-2");
       // valid: typed count coerces ("9" → 9)
       expect((await okOut(await run([{ name: "bob", count: "9" }]))).output).toContain("bob-9");
+    } finally {
+      close();
+    }
+  });
+
+  // Epic D: a `write` node writes the upstream's text to a real file when the
+  // chain runs. Offline: input → assemble → write needs no model.
+  it("write node writes the upstream content to a file (offline)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "chain-web-write-"));
+    const { base, close } = await listen(dir);
+    const flow = join(dir, "w.yaml");
+    writeFileSync(
+      flow,
+      [
+        "profiles:",
+        "  default: { cmd: 'claude -p' }",
+        "steps:",
+        "  seed:",
+        "    type: input",
+        "    params:",
+        "      msg: { default: hello-world }",
+        "  body:",
+        "    type: assemble",
+        "    from: seed",
+        "    prompt: '{{ $json.msg }}'",
+        "  out:",
+        "    type: write",
+        "    from: body",
+        "    path: result/{{date}}.txt",
+        "",
+      ].join("\n"),
+    );
+    try {
+      const res = await post(base, "/api/run", { path: flow });
+      expect(res.status).toBe(200);
+      await res.text(); // drain the NDJSON stream (write happens during the run)
+
+      // {{date}} expanded → find the written file under result/
+      const today = new Date().toISOString().slice(0, 10);
+      const written = join(dir, "result", `${today}.txt`);
+      expect(existsSync(written)).toBe(true);
+      expect(readFileSync(written, "utf8")).toContain("hello-world");
+    } finally {
+      close();
+    }
+  });
+
+  // C4: an ai step with a `schema` parses + validates the model output and emits a
+  // STRUCTURED item (downstream reads its fields). Offline via a fake model
+  // profile (echo prints canned JSON — idea.md G2), so no real `claude` needed.
+  it("schema: structured ai output flows to downstream fields (offline, fake model)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "chain-web-schema-"));
+    const { base, close } = await listen(dir);
+    const flow = join(dir, "s.yaml");
+    writeFileSync(
+      flow,
+      [
+        `profiles:`,
+        `  default: { cmd: 'echo {"text":"hi-structured"}' }`,
+        `steps:`,
+        `  gen:`,
+        `    type: ai`,
+        `    prompt: 'make json'`,
+        `    schema: { text: string }`,
+        `  use:`,
+        `    type: assemble`,
+        `    from: gen`,
+        `    prompt: '{{ $json.text }}'`,
+        ``,
+      ].join("\n"),
+    );
+    try {
+      const lines = (await (await post(base, "/api/run", { path: flow })).text())
+        .trim().split("\n").map((l) => JSON.parse(l) as any);
+      const use = lines.find((r) => r.id === "use");
+      expect(use.status).toBe("ran");
+      expect(use.output).toContain("hi-structured"); // {{ $json.text }} resolved → structured
+    } finally {
+      close();
+    }
+  });
+
+  it("schema: a persistent mismatch fails the step after one retry (offline)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "chain-web-schema2-"));
+    const { base, close } = await listen(dir);
+    const flow = join(dir, "s.yaml");
+    writeFileSync(
+      flow,
+      [`profiles:`, `  default: { cmd: 'echo not-json' }`, `steps:`,
+       `  gen:`, `    type: ai`, `    prompt: 'x'`, `    schema: { text: string }`, ``].join("\n"),
+    );
+    try {
+      const gen = (await (await post(base, "/api/run", { path: flow })).text())
+        .trim().split("\n").map((l) => JSON.parse(l) as any).find((r) => r.id === "gen");
+      expect(gen.status).toBe("failed");
+      expect(String(gen.error).toLowerCase()).toMatch(/json|schema/);
     } finally {
       close();
     }

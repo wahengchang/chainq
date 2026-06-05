@@ -17,7 +17,7 @@ const errs=d=>(d.errors||[]).map(e=>"✗ "+e.node+": "+e.message).join("\n");
 const G={ran:"✓",cached:"⊘",failed:"✗",skipped:"–",pending:"○",running:"◌"};
 // node-type display — collection operators (see the items model) get a symbol +
 // accent so split/aggregate/merge read differently from per-item ai/cmd steps.
-const TYPE_GLYPH={ai:"✦ ai",cmd:"$ cmd",assemble:"⊕ assemble",splitOut:"⤙ split out",aggregate:"⤚ aggregate",merge:"⋈ merge",input:"▶ input"};
+const TYPE_GLYPH={ai:"✦ ai",cmd:"$ cmd",assemble:"⊕ assemble",splitOut:"⤙ split out",aggregate:"⤚ aggregate",merge:"⋈ merge",input:"▶ input",write:"⤓ write"};
 const COLLECTION=new Set(["splitOut","aggregate","merge"]);
 const typeChip=t=>'<span class="ntype'+(COLLECTION.has(t)?" col":"")+'">'+esc(TYPE_GLYPH[t]||t)+'</span>';
 let current=null,nodes=[],selected=null,results={},previewTimer=null;
@@ -332,6 +332,14 @@ function renderTypeFields(n){
       +'<select id="tfMode">'+opt(m,"once")+opt(m,"perItem")+'</select>'
       +'<div class="dim" style="font-size:11px;margin-top:4px">once = whole input at once · perItem = once per input item</div>';
   }
+  if(n.type==="write"){
+    const m=n.mode||"overwrite";
+    return '<label>path — output file (supports {{date}} / {{datetime}})</label>'
+      +'<input id="tfPath" spellcheck="false" value="'+esc(n.path||"")+'" placeholder="e.g. out/{{date}}.md">'
+      +'<label style="margin-top:8px">mode</label>'
+      +'<select id="tfMode">'+opt(m,"overwrite")+opt(m,"append")+'</select>'
+      +'<div class="dim" style="font-size:11px;margin-top:4px">writes the upstream\'s text to the file when this node runs</div>';
+  }
   return "";
 }
 function onMergeMode(){const w=$("tfKeyWrap");if(w)w.classList.toggle("hidden",$("tfMode").value!=="byKey");}
@@ -402,6 +410,7 @@ async function saveNode(){
   else if(n.type==="ai"||n.type==="assemble"){sets.push(["prompt",$("pnPrompt").value]);}
   else if(n.type==="splitOut"||n.type==="aggregate"){if($("tfField"))sets.push(["field",$("tfField").value]);}
   else if(n.type==="merge"){if($("tfKey"))sets.push(["key",$("tfKey").value]);if($("tfMode"))sets.push(["mode",$("tfMode").value]);}
+  else if(n.type==="write"){if($("tfPath"))sets.push(["path",$("tfPath").value]);if($("tfMode"))sets.push(["mode",$("tfMode").value]);}
   for(const [f,v] of sets){
     const r=await api("/api/set",{method:"POST",body:JSON.stringify({path:current,node:selected,field:f,value:v})});
     if(!r.ok)return setMsg("pnMsg","err",errs(r.data)||"save failed");
