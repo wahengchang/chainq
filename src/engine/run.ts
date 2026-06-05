@@ -408,7 +408,12 @@ function coerceJson(v: unknown): unknown {
   try {
     return JSON.parse(v);
   } catch {
-    return v; // not JSON — leave as the raw string (splitOut will then error clearly)
+    /* not clean JSON — try extracting it from ``` fences / surrounding prose */
+  }
+  try {
+    return extractJson(v); // shared with the schema path: models love wrapping JSON in ```json
+  } catch {
+    return v; // genuinely not JSON — leave as the raw string (splitOut errors clearly)
   }
 }
 

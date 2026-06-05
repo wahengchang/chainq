@@ -337,4 +337,27 @@ describe("web server", () => {
       close();
     }
   });
+
+  // splitOut/aggregate tolerate ```json fences + prose (coerceJson falls back to
+  // extractJson) — models love wrapping JSON, and the scenario docs warned this
+  // broke splitOut. Offline via a fake model (cat a fenced fixture).
+  it("splitOut tolerates a ```json-fenced array from the model (offline)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "chain-web-fence-"));
+    const { base, close } = await listen(dir);
+    const flow = join(dir, "f.yaml");
+    writeFileSync(join(dir, "fixture.json"), "```json\n[{\"t\":\"a\"},{\"t\":\"b\"},{\"t\":\"c\"}]\n```\n");
+    writeFileSync(
+      flow,
+      ["profiles:", "  default: { cmd: 'cat fixture.json' }", "steps:",
+       "  ideas: { type: ai, prompt: 'x' }", "  split: { type: splitOut, from: ideas }", ""].join("\n"),
+    );
+    try {
+      const split = (await (await post(base, "/api/run", { path: flow })).text())
+        .trim().split("\n").map((l) => JSON.parse(l) as any).find((r) => r.id === "split");
+      expect(split.status).toBe("ran");
+      expect(split.items).toBe(3); // fence stripped → array → 3 items
+    } finally {
+      close();
+    }
+  });
 });
