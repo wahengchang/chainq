@@ -23,14 +23,24 @@ export interface RenderInputs {
   /** which item index this render is for (per-item execution); default 0 */
   index?: number;
   /**
-   * The current primary item's `pairedItem` — the index it traces back to in its
-   * own input. Cross-references ($('id') / $node["id"] / .item) to OTHER upstreams
-   * resolve through this, NOT the loop index, so a fan-out (splitOut) that changes
-   * cardinality still pairs each item to the right upstream row (n8n paired-item).
-   * Single-hop: correct for the primary's direct input or a 1:1 ancestor chain.
-   * Defaults to `index` when absent (1-in-1-out chains, where they're equal).
+   * The current primary item's `pairedItem` — the single-hop index it traces back
+   * to in its own direct input. Kept as a back-compat fallback for callers that
+   * don't supply `lineage`, and for references to upstreams that sit OFF the
+   * primary spine. Defaults to `index` when absent (1-in-1-out chains).
    */
   pairedIndex?: number;
+  /**
+   * Multi-hop paired-item lineage: ancestorId -> the source item index in that
+   * ancestor for the current primary item. Built in run.ts by composing
+   * `pairedItem` up the primary-input spine (the `from[0]` chain), so
+   * $('id') / $node["id"] / .item to OTHER upstreams pairs to the right row
+   * through CHAINED fan-outs and (collapsing to the first source row) across an
+   * aggregate — not just one hop. A reference whose id is present here uses
+   * lineage[id]; anything off the spine falls back to `pairedIndex`. Optional:
+   * a 1-in-1-out render (or any caller not tracking lineage) omits it with no
+   * behavior change.
+   */
+  lineage?: Record<string, number>;
 }
 
 const EXPR = /\{\{\s*(.*?)\s*\}\}/g;
@@ -114,9 +124,13 @@ function resolveExpr(expr: string, inputs: RenderInputs): string | undefined {
     if (allM) return selectVal(its.map((i) => i.json), allM[1]); // all items as an array
     const itemM = /^\.item\b(.*)$/.exec(rest);
     const path = itemM ? itemM[1] : rest;
-    // the paired item of OTHER upstreams follows the current item's lineage
-    // (pairedIndex); a self-reference ($('primary')) is just the current item.
-    const refIdx = id === inputs.primary ? idx : inputs.pairedIndex ?? idx;
+    // The paired item of OTHER upstreams follows the current item's lineage:
+    // prefer the multi-hop walk (lineage[id], correct through chained fan-outs
+    // and across aggregates), fall back to the single-hop pairedIndex for ids off
+    // the primary spine, then the loop index. A self-reference ($('primary')) is
+    // always just the current item.
+    const refIdx =
+      id === inputs.primary ? idx : inputs.lineage?.[id] ?? inputs.pairedIndex ?? idx;
     const cur = paired(its, refIdx);
     return cur === undefined ? undefined : selectVal(cur.json, path);
   }

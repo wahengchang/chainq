@@ -85,6 +85,53 @@ describe("renderPrompt — path selectors (items model)", () => {
     expect(renderPrompt("{{ $json }}", inputs)).toBe("2"); // primary still by loop index
   });
 
+  it("multi-hop: $('seed') uses the lineage map, not the single-hop pairedIndex", () => {
+    // Two-level fan-out: seed → splitA → splitB. The current render is splitB[1] (=b),
+    // which traces splitB[1].pairedItem=1 in splitA, and splitA[1].pairedItem=0 in seed.
+    // Single-hop (pairedIndex=1) would wrongly land on seed[1]=Y; lineage[seed]=0 → X.
+    const inputs = {
+      primary: "splitB",
+      index: 1,
+      pairedIndex: 1, // ← splitB[1].pairedItem; the WRONG index to use against seed
+      lineage: { splitB: 1, splitA: 1, seed: 0 }, // ← composed walk to the real source row
+      items: {
+        splitB: [{ json: "a" }, { json: "b" }, { json: "c" }],
+        seed: [{ json: json({ tag: "X" }) }, { json: json({ tag: "Y" }) }],
+      },
+    };
+    expect(renderPrompt("{{ $('seed').item.tag }}", inputs)).toBe("X"); // lineage wins over pairedIndex
+    expect(renderPrompt("{{ $json }}", inputs)).toBe("b"); // primary still by loop index
+  });
+
+  it("multi-hop: an id absent from lineage falls back to pairedIndex (off-spine / back-compat)", () => {
+    // `aux` is referenced but not on the primary spine, so it isn't in the lineage
+    // map — resolution falls back to the single-hop pairedIndex (legacy behavior).
+    const inputs = {
+      primary: "split",
+      index: 1,
+      pairedIndex: 0,
+      lineage: { split: 1, seed: 0 }, // no `aux` key
+      items: {
+        split: [{ json: "1" }, { json: "2" }],
+        aux: [{ json: json({ k: "A" }) }, { json: json({ k: "B" }) }],
+      },
+    };
+    expect(renderPrompt("{{ $('aux').item.k }}", inputs)).toBe("A"); // pairedIndex 0 → aux[0]
+  });
+
+  it("multi-hop: with no lineage map at all, behavior is unchanged (single-hop pairedIndex)", () => {
+    const inputs = {
+      primary: "split",
+      index: 1,
+      pairedIndex: 0, // no `lineage` field present
+      items: {
+        split: [{ json: "1", pairedItem: 0 }, { json: "2", pairedItem: 0 }],
+        seed: [{ json: json({ tag: "X" }) }, { json: json({ tag: "Y" }) }],
+      },
+    };
+    expect(renderPrompt("{{ $('seed').item.tag }}", inputs)).toBe("X");
+  });
+
   it("a self-reference {{ $('primary') }} stays the current item even with a pairedIndex", () => {
     const inputs = {
       primary: "x",
