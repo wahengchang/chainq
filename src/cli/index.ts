@@ -19,6 +19,7 @@ import {
   validate,
   Runner,
   FlowLock,
+  parseVal,
   type NodeResult,
 } from "../engine/index.js";
 import { runInit } from "./init.js";
@@ -40,15 +41,6 @@ interface Flags {
   profile?: string;
   pins: Record<string, string>;
   input?: Record<string, unknown>[];
-}
-
-/** Parse a `--input k=v` value: JSON if it parses (numbers/bools/arrays), else string. */
-function parseVal(v: string): unknown {
-  try {
-    return JSON.parse(v);
-  } catch {
-    return v;
-  }
 }
 
 /** A --input-file holds one object, a JSON array of objects, or JSONL (one per line).

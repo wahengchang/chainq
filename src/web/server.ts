@@ -31,6 +31,7 @@ import {
   nodeStarter,
   nodeIdError,
   CacheStore,
+  coerceInput,
   type Item,
   type NodeType,
 } from "../engine/index.js";
@@ -125,6 +126,7 @@ async function handle(req: IncomingMessage, res: ServerResponse, opts: WebOption
       mode: n.mode ?? null, // merge strategy / cmd cardinality
       key: n.key ?? null, // merge byKey
       inputs: n.inputs ?? null, // cmd declared input files
+      params: n.params ?? null, // input: declared params (the form fields the editor draws)
     }));
     return json(res, 200, { nodes });
   }
@@ -282,14 +284,14 @@ async function handle(req: IncomingMessage, res: ServerResponse, opts: WebOption
   // Run the flow, STREAMING each node's result as it settles (NDJSON) so the UI
   // lights up one node at a time, in execution order — not all at once.
   if (method === "POST" && path === "/api/run") {
-    const { path: file = "", profile = "", fresh } = await body(req);
-    return streamRun(res, resolve(file), profile, Boolean(fresh), (runner) => runner.runChain());
+    const b = (await body(req)) as RunBody;
+    return streamRun(res, resolve(b.path ?? ""), b.profile ?? "", Boolean(b.fresh), (runner) => runner.runChain(), b.input);
   }
 
   // Run UP TO one node (its upstream cone) — streamed, same as /api/run.
   if (method === "POST" && path === "/api/run-node") {
-    const { path: file = "", node = "", profile = "", fresh } = await body(req);
-    return streamRun(res, resolve(file), profile, Boolean(fresh), (runner) => runner.runToNode(node));
+    const b = (await body(req)) as RunBody;
+    return streamRun(res, resolve(b.path ?? ""), b.profile ?? "", Boolean(b.fresh), (runner) => runner.runToNode(b.node ?? ""), b.input);
   }
 
   // Rewire a node's `from` (which upstream steps feed it; first = $json).
@@ -343,14 +345,29 @@ async function body(req: IncomingMessage): Promise<Record<string, string>> {
   return raw ? (JSON.parse(raw) as Record<string, string>) : {};
 }
 
+// The /api/run* payload — `input` is an array of objects, so it can't ride the
+// string-valued `body()` return type; the run handlers cast to this.
+type RunBody = {
+  path?: string;
+  node?: string;
+  profile?: string;
+  fresh?: unknown;
+  input?: Record<string, unknown>[];
+};
+
 // Run a flow, streaming each node's result as one NDJSON line as it settles.
 // Validation errors come back as a normal JSON 400 (before the stream starts).
+// `input` carries the input-node params form values (like CLI --input): coerced
+// here (server is the authority), then folded into the Merkle cache key by the
+// Runner. An all-empty input becomes undefined (coerceInput) so it shares the
+// no-input cache key instead of computing a fresh one.
 async function streamRun(
   res: ServerResponse,
   fp: string,
   profile: string,
   fresh: boolean,
   run: (runner: Runner) => Promise<unknown>,
+  input?: Record<string, unknown>[],
 ): Promise<void> {
   const flow = parseFlow(readFileSync(fp, "utf8"));
   if (profile && !flow.profiles[profile]) {
@@ -366,6 +383,7 @@ async function streamRun(
     baseDir,
     profileOverride: profile || undefined,
     fresh,
+    input: coerceInput(flow, input),
     // real `claude -p` calls can run long (reasoning, big inputs). Give the web
     // UI a generous 5-min ceiling so a genuine model call isn't killed as a
     // false "timed out" — the CLI default (120s) is too tight for the UI.
