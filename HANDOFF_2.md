@@ -72,6 +72,11 @@ Files: `render.ts`, `run.ts`. Tests: 2 in `render.test.ts` + `e2eCli/scenarios/p
 > the primary's direct input or a 1:1 ancestor chain. A full multi-hop **lineage walk**
 > (correct through aggregates / multi-layer fan-out) is **not** implemented. Marked in
 > the `render.ts` comment. This is "What's next" item P-LINEAGE below.
+>
+> ✅ **RESOLVED (`feat/lineage`, P-LINEAGE).** The multi-hop lineage walk shipped:
+> `run.ts` `lineageOf()` composes `pairedItem` up the primary spine, so `$('id').item`
+> is correct across two-level fan-outs and collapses to the first source row across an
+> aggregate. Only references off the primary spine still use the single-hop fallback.
 
 ### 3. `--input-file` rejects non-object entries (codex finding ②, fixed)
 A JSONL line `"abc"` / `123` or a top-level array of primitives used to be cast to a
@@ -100,7 +105,8 @@ payload → `Runner({..., input})`; node panel for `input` lets you fill params 
 **P3 — per-type panel editors** (splitOut/aggregate `field`, merge `mode`+`key`);
   `saveNode()` in `app.js` still writes `prompt` for every non-`cmd` type.
 **P4 — cleanup** (per `draft.md` §5): temp pages, UI tests drive real `chain ui`.
-**P-LINEAGE — full multi-hop paired-item walk** (engine; upgrade the single-hop fix in §2).
+~~**P-LINEAGE — full multi-hop paired-item walk**~~ ✅ DONE (`feat/lineage`) — upgraded the
+single-hop fix from §2 to a lineage walk; correct across two-level fan-out + aggregate.
 
 See `HANDOFF.md` "What's next" for the full canvas backlog (P1–P3 overlap it).
 
@@ -119,8 +125,9 @@ npm run e2e:cli          # 40 e2eCli e2e — gated tests call REAL claude (needs
 `e2eCli/` suite). Browser e2e is the separate Playwright `e2e:ui:*` set.
 
 ## Gotchas specific to this session
-- **Single-hop pairing** (§2 limitation) — don't assume `$('id').item` is correct across
-  an `aggregate` or a two-level fan-out yet.
+- ~~**Single-hop pairing** (§2 limitation)~~ — RESOLVED on `feat/lineage` (P-LINEAGE):
+  `$('id').item` is now correct across two-level fan-outs and aggregates (first source
+  row). Only off-primary-spine references still use the single-hop fallback.
 - **Web input cache pollution** (P0) — until P0 lands, do not run `type: input` flows from
   the web editor expecting the cache to reflect a chosen input; it runs defaults.
 - **`delete_dot_underscore.sh`** is an untracked macOS `._*` cleanup helper (NAS artifact),

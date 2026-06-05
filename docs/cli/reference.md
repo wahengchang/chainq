@@ -79,7 +79,7 @@ Resolved against the **current item** (each node runs once per input item).
 | `{{ $json.field }}` | a field of the current item (parses it as JSON first) |
 | `{{ $json[0] }}` `{{ $json[-1] }}` | array index (negative = from the end) |
 | `{{ $json[*] }}` `{{ $json.items[*].x }}` | pluck a column → a JSON array |
-| `{{ $node["id"] }}` / `{{ $('id') }}` | the item of upstream `id` **paired** to the current index |
+| `{{ $node["id"] }}` / `{{ $('id') }}` | the item of upstream `id` **paired** to the current item — traced through its lineage, so it stays correct across multi-level fan-outs |
 | `{{ $('id').item }}` | same as above, explicit |
 | `{{ $('id').all() }}` | **all** of upstream `id`'s items, as a JSON array |
 

@@ -13,7 +13,7 @@
 |---|---|---|---|---|
 | 引擎 | types · dag | 資料模型(Item·7型別)· 拓樸/環 | `types.ts`·`dag.ts` / dag.test×6 | ✅ |
 | 引擎 | run | items 逐項 · 集合運算子 · loop | `run.ts` / run×10·partial×4 | ✅ |
-| 引擎 | render | `$json`/`$('id')` 取值 · rewriteRefs · paired-item | `render.ts` / render×14 | ✅ 基本／⚠️ 跨多跳(↓) |
+| 引擎 | render | `$json`/`$('id')` 取值 · rewriteRefs · paired-item(多跳 lineage) | `render.ts` / render×17 | ✅ |
 | 引擎 | validate | 接線/環檢查 · 壞不落地安全網 | `validate.ts` / validate×7 | ✅ |
 | 引擎 | cache | Merkle 快取 · rename 保 cache | `cache.ts` / cache×10 | ✅ |
 | 引擎 | rename · node | 改 key+下游連動 · nodeStarter · id 白名單 | `rename.ts`·`node.ts` / rename×13·node×6 | ✅ |
@@ -49,12 +49,13 @@
 | 型別專屬編輯器 | (validate 已認 field/mode/key) | `saveNode` 對非 cmd 一律寫 prompt | ❌ |
 | render 預覽非 ai 型別 | `/api/render` | 只給 ai | 🟡 |
 
-### 子表:paired-item 跨多跳 lineage（⚠️ 引擎已知限制,P-LINEAGE）
+### 子表:paired-item 跨多跳 lineage（✅ 已完成,P-LINEAGE · `feat/lineage`）
 
 | 細項 | 說明 | 錨點 | 完成度 |
 |---|---|---|---|
-| single-hop 配對 | `$('id').item` 對「primary 的直接輸入 / 1:1 祖先鏈」正確(本 session codex 抓的靜默錯配已修) | `render.ts:30,119` · `pairing.e2e.ts` | ✅ |
-| 多跳 lineage walk | 跨 `aggregate` / 兩層 fan-out 的正確配對 | 未實作(`render.ts` 註解標明) | ❌ ⚠️ 別假設 `$('id').item` 跨 aggregate 仍正確 |
+| single-hop 配對 | `$('id').item` 對「primary 的直接輸入 / 1:1 祖先鏈」正確 | `render.ts` · `pairing.e2e.ts` | ✅ |
+| 多跳 lineage walk | 跨**兩層 fan-out** 正確;跨 `aggregate` 收斂到第一來源列(折疊後唯一有定義的答案) | `run.ts` `lineageOf()` · `render.ts` `lineage` · `render.test.ts`+3 · `pairing.e2e.ts`+2 | ✅ |
+| 已知邊界 | 「非 primary 脊椎」的引用(如 `from:[A,B]` 的次要輸入 B)仍走單跳 fallback | `render.ts` `resolveExpr` 註解 | ⚠️ 超出 P-LINEAGE 目標範圍 |
 
 ---
 
@@ -67,7 +68,7 @@
 | **P2-a** | **型別專屬編輯器**(field/mode/key;修 saveNode) | splitOut/merge 加得出來但設定不了 | 後端齊 |
 | **P2-b** | **拖拉連線**(`/api/connect`) | 編輯手感大躍進(像 n8n) | 後端齊 |
 | **P3** | 位置持久化(`/api/layout`)· 前端 `@ts-check`+拆檔 · render 預覽非 ai | 體驗/維護性,非核心 | — |
-| **P-LINEAGE** | paired-item 多跳 lineage walk(升級 single-hop) | 引擎已知限制:跨 `aggregate`/兩層 fan-out 會錯配,目前靠單跳擋住 | 引擎 |
+| ~~P-LINEAGE~~ ✅ | paired-item 多跳 lineage walk(已升級 single-hop) | **已完成(`feat/lineage`)**:跨兩層 fan-out 正確、跨 aggregate 收斂第一來源列 | 引擎 |
 | **延後/風險** | FlowLock 接線(跨 process)· Loop Over Items · `/api/list` 遞迴 | ⚠️/低頻 | — |
 
 > **決策現況**:畫布架構已走「**原生 vanilla ES module**」(UI 已抽成 `ui/app.js`),**React Flow 未採用**。HANDOFF_2 把它列為「未決」,但實作已落地;P2 拖拉/位置若做起來太痛再議。
@@ -92,11 +93,11 @@
     7型別·拓樸      items·loop·    Merkle·壞不落地    改key連動·
     ✅ dag×6        $json·rewrite  ✅ cache×10·       id白名單
                     ✅ run×10·     validate×7        ✅ rename×13·
-                    render×14                         node×6
+                    render×17                         node×6
                       （＋ plan×6 · lock×2 ⚠️ 未接線）
    註1:input 節點型別 ✅,但只有 CLI 餵得了參數,web 餵不了(見 ③)
-   註2:render paired-item 只到 single-hop ⚠️;跨 aggregate/兩層 fan-out 的
-        多跳 lineage 未做(P-LINEAGE),別假設 `$('id').item` 跨 aggregate 正確
+   註2:render paired-item 多跳 lineage 已完成(P-LINEAGE · feat/lineage):跨兩層
+        fan-out 正確、跨 aggregate 收斂到第一來源列;僅「非 primary 脊椎」引用仍走單跳
 ```
 
 ### ② CLI　src/cli　✅（6 指令 · 15 e2e 檔 · ~40 測）
