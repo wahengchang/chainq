@@ -6,3 +6,17 @@ dist/
 # macOS AppleDouble files (this repo lives on a non-HFS drive)
 ._*
 .DS_Store
+
+# generated E2E visualizer
+e2e-viz.html
+
+# playwright
+test-results/
+playwright-report/
+playwright/.cache/
+
+# local dev workspace for chain ui
+playground/
+
+# Claude Code 個人設定
+.claude/settings.local.json

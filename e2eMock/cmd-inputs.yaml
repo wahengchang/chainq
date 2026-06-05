@@ -1,0 +1,7 @@
+# Mock: a cmd that reads a file (tests cwd + declared-input caching) → ai.
+# The scenario writes in.txt next to it before running.
+profiles:
+  default: { cmd: 'claude -p' }
+steps:
+  load: { type: cmd, run: 'cat in.txt', inputs: ['in.txt'] }
+  sum: { type: ai, from: load, prompt: '{{ $json }}' }

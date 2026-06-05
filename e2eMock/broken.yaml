@@ -1,0 +1,5 @@
+# Mock: a dangling `from:` — must fail validation (node "a" points at non-existent "ghost").
+profiles:
+  default: { cmd: 'claude -p' }
+steps:
+  a: { type: ai, from: ghost, prompt: 'x' }

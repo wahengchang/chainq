@@ -1,0 +1,20 @@
+# Shared mock flow — single source of truth for both test suites.
+profiles:
+  default: { cmd: 'claude -p' }
+
+steps:
+  draft:
+    type: ai
+    prompt: 'output a region name in macau (no need other inforamtion)'
+
+  refine:
+    type: ai
+    from: draft
+    prompt: '3 very short idea of what do to in: {{ $json }} in zh-tw'
+  step3:
+    type: ai
+    from: refine
+    prompt: 'rewrite it to a tweet , for taiwan travelers: {{ $json }}
+
+
+      *in zh-tw'

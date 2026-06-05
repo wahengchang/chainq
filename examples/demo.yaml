@@ -1,0 +1,13 @@
+# A tiny demo flow. Every step calls the real local model (needs: claude login).
+profiles:
+  default: { cmd: 'claude -p' }
+
+steps:
+  greet:
+    type: ai
+    prompt: '{"name": "chain", "kind": "prompt-chain tool"}'
+
+  describe:
+    type: ai
+    from: greet
+    prompt: 'Building {{ $json.name }}, a {{ $json.kind }}.'

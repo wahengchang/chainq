@@ -1,0 +1,256 @@
+// chain editor — single-page app logic, served as a native ES module (no build,
+// no bundler). Extracted from app.html inline <script> so the UI is a real module
+// file, not a blob inside HTML. Next steps (eng review): // @ts-check strictness
+// and a canvas/panel/api split.
+
+const $=(id)=>document.getElementById(id);
+const api=(u,o)=>fetch(u,o).then(async r=>({ok:r.ok,status:r.status,data:await r.json().catch(()=>({}))}));
+const esc=s=>(s==null?"":String(s)).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+const errs=d=>(d.errors||[]).map(e=>"✗ "+e.node+": "+e.message).join("\n");
+const G={ran:"✓",cached:"⊘",failed:"✗",skipped:"–",pending:"○",running:"◌"};
+// node-type display — collection operators (see the items model) get a symbol +
+// accent so split/aggregate/merge read differently from per-item ai/cmd steps.
+const TYPE_GLYPH={ai:"✦ ai",cmd:"$ cmd",assemble:"⊕ assemble",splitOut:"⤙ split out",aggregate:"⤚ aggregate",merge:"⋈ merge",input:"▶ input"};
+const COLLECTION=new Set(["splitOut","aggregate","merge"]);
+const typeChip=t=>'<span class="ntype'+(COLLECTION.has(t)?" col":"")+'">'+esc(TYPE_GLYPH[t]||t)+'</span>';
+let current=null,nodes=[],selected=null,results={},previewTimer=null;
+// transitive upstream of a node (its input cone)
+function ancestors(id){const set=new Set();let stack=[...(nodes.find(n=>n.id===id)?.from||[])];
+  while(stack.length){const c=stack.pop();if(set.has(c))continue;set.add(c);const n=nodes.find(x=>x.id===c);if(n)stack=stack.concat(n.from||[]);}return [...set];}
+function setRunningUI(ids){ids.forEach(id=>results[id]={status:"running"});renderGraph();}
+
+async function boot(){const{data}=await api("/api/context");$("dir").value=data.cwd;if(data.initialFlow)return open(data.initialFlow);listFlows();}
+async function listFlows(){
+  const{data}=await api("/api/list?dir="+encodeURIComponent($("dir").value));
+  $("dir").value=data.dir;const box=$("flows");box.classList.remove("hidden");
+  if(!data.flows.length){box.innerHTML='<div class="empty">empty — create your first flow below</div>';return;}
+  box.innerHTML=data.flows.map(f=>'<div class="flow" data-f="'+f+'">'+f+'</div>').join("");
+  box.querySelectorAll(".flow").forEach(el=>el.onclick=()=>open(data.dir.replace(/\/$/,"")+"/"+el.dataset.f));
+}
+async function createFlow(){
+  const name=$("name").value.trim();if(!name)return setMsg("createMsg","err","name required");
+  const{ok,data}=await api("/api/create",{method:"POST",body:JSON.stringify({dir:$("dir").value,name})});
+  if(!ok)return setMsg("createMsg","err",data.error||"create failed");open(data.path);
+}
+async function open(path){current=path;selected=null;results={};$("path").textContent=path;
+  $("create").classList.add("hidden");$("editor").classList.remove("hidden");showNodes();await loadNodes();}
+function back(){$("editor").classList.add("hidden");$("create").classList.remove("hidden");listFlows();}
+
+async function loadNodes(){
+  const{ok,data}=await api("/api/parse?path="+encodeURIComponent(current));
+  if(!ok){setMsg("canvasMsg","err","could not parse — use { } raw to fix it");$("graph").innerHTML="";return;}
+  setMsg("canvasMsg","","");nodes=data.nodes;renderGraph();
+}
+// depth of each node = longest path from a start node (fixpoint, robust to any
+// declaration order). Drives the column layout so fan-out / fan-in reads L→R.
+function nodeDepths(){
+  const by={};nodes.forEach(n=>by[n.id]=n);
+  const d={};nodes.forEach(n=>d[n.id]=0);
+  for(let pass=0;pass<nodes.length;pass++){
+    let changed=false;
+    nodes.forEach(n=>{(n.from||[]).forEach(u=>{
+      if(by[u]&&d[u]+1>d[n.id]){d[n.id]=d[u]+1;changed=true;}
+    });});
+    if(!changed)break;
+  }
+  return d;
+}
+// build one node card — identical card UX (status, output badge, run buttons, click).
+function nodeCard(n){
+  const r=results[n.id];
+  const multi=(n.from||[]).length>1;
+  const col=COLLECTION.has(n.type);
+  const d=document.createElement("div");d.className="node "+(r?r.status:"")+(multi?" multi":"")+(col?" col":"");
+  d.dataset.id=n.id;
+  // ×N item-count badge: how many items this node emitted (items model). Shown
+  // after a run streams the count back; hidden for the 1-in-1-out base case.
+  const xn=(r&&r.items!=null&&r.items!==1)?'<span class="xn" title="items emitted on this wire">×'+r.items+'</span>':'';
+  const glyph=r?('<span class="glyph g-'+r.status+(r.status==="running"?" spin":"")+'">'+G[r.status]+'</span>'):'<span class="glyph g-pending">○</span>';
+  const BADGE={ran:"✓ ran · called the model",cached:"⊘ cached · reused, no call",failed:"✗ failed",skipped:"– skipped"};
+  let out="";
+  if(r&&r.status==="running")out='<div class="nodeout dim">◌ running…</div>';
+  else if(r&&(r.error||r.output)){
+    const badge='<div class="outbadge g-'+r.status+'">'+(BADGE[r.status]||r.status)+'</div>';
+    out='<div class="nodeout'+(r.status==="failed"?" bad":"")+'">'+badge+esc(r.error||r.output)+'</div>';
+  }
+  const fromLine=(n.from||[]).length
+    ? '<div class="npreview" style="color:var(--accent)">from ['+esc(n.from.join(", "))+']'+(multi?" ← 多輸入":"")+'</div>' : '';
+  d.innerHTML='<div class="noderun-wrap">'
+      +'<button class="noderun" title="run to here (reuse cache)" onclick="event.stopPropagation();runTo(\''+n.id+'\')">▷</button>'
+      +'<button class="noderun" title="re-run fresh — really call the model" onclick="event.stopPropagation();runTo(\''+n.id+'\',true)">↻</button>'
+    +'</div>'
+    +'<div class="nh">'+glyph+'<span class="nn">'+esc(n.id)+'</span>'+xn+typeChip(n.type)+'</div>'
+    +fromLine
+    +'<div class="npreview">'+esc((n.prompt||n.run||"").slice(0,70))+'</div>'+out;
+  d.onclick=()=>selectNode(n.id);
+  return d;
+}
+function renderGraph(){
+  const g=$("graph");g.className="gwrap";g.innerHTML="";
+  const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");
+  svg.setAttribute("class","wires");g.appendChild(svg);
+  const cols=document.createElement("div");cols.className="gcols";g.appendChild(cols);
+  const depth=nodeDepths();
+  const maxD=Math.max(0,...nodes.map(n=>depth[n.id]));
+  for(let c=0;c<=maxD;c++){
+    const colEl=document.createElement("div");colEl.className="gcol";
+    nodes.filter(n=>depth[n.id]===c).forEach(n=>colEl.appendChild(nodeCard(n)));
+    cols.appendChild(colEl);
+  }
+  drawWires(svg,g);
+}
+// draw a curved connector for every `from` edge (real wiring, incl. fan-in).
+function drawWires(svg,wrap){
+  const base=wrap.getBoundingClientRect();
+  const card=id=>wrap.querySelector('.node[data-id="'+CSS.escape(id)+'"]');
+  svg.setAttribute("width",wrap.scrollWidth);svg.setAttribute("height",wrap.scrollHeight);
+  let paths="";
+  nodes.forEach(n=>{
+    const to=card(n.id);if(!to)return;
+    const tr=to.getBoundingClientRect();
+    (n.from||[]).forEach(f=>{
+      const fe=card(f);if(!fe)return;
+      const fr=fe.getBoundingClientRect();
+      const x1=fr.right-base.left,y1=fr.top+fr.height/2-base.top;
+      const x2=tr.left-base.left, y2=tr.top+tr.height/2-base.top;
+      const mx=(x1+x2)/2;
+      paths+='<path d="M'+x1+','+y1+' C'+mx+','+y1+' '+mx+','+y2+' '+x2+','+y2+'" fill="none" stroke="var(--accent)" stroke-width="2" opacity="0.7"/>';
+    });
+  });
+  svg.innerHTML=paths;
+}
+window.addEventListener("resize",()=>{const g=$("graph");if(g&&g.classList.contains("gwrap")){const s=g.querySelector("svg.wires");if(s)drawWires(s,g);}});
+function selectNode(id){
+  selected=id;const n=nodes.find(x=>x.id===id);if(!n)return;
+  $("modal").classList.remove("hidden");
+  $("pnId").value=n.id;$("pnType").textContent=n.type;
+  const isCmd=n.type==="cmd";
+  $("pnPrompt").value=isCmd?(n.run||""):(n.prompt||"");
+  $("pnFrom").value=(n.from||[]).join(", ");
+  // INPUT: each upstream's last output
+  const ups=n.from||[];
+  $("pnInput").innerHTML = !ups.length
+    ? '<span class="dim">no upstream — this is a start node</span>'
+    : ups.map((u,i)=>{const r=results[u];const tag=i===0?'$json':('$node["'+u+'"]');
+        const val=r?esc(r.output||r.error||"(empty)"):'<span class="dim">(run to see)</span>';
+        return '<div class="infield" onclick="insertVar(\''+u+'\','+(i===0)+')" title="click to insert into the prompt">'
+          +'<span class="ins">↵ insert</span><span class="intag">'+tag+'</span> ← '+u
+          +'<div class="inval">'+val+'</div></div>';}).join("");
+  // OUTPUT
+  const ro=results[n.id];
+  $("pnOut").className="mbody"+(ro&&ro.status==="failed"?" out err":(ro&&ro.status==="running"?" dim":(ro?"":" dim")));
+  $("pnOut").textContent=ro?(ro.status==="running"?"running…":(ro.error||ro.output||"(empty)")):"Run to see this node's output.";
+  const lab={ran:'<span class="g-ran">✓ ran · called the model</span>',cached:'<span class="g-cached">⊘ cached · reused, no call</span>',failed:'<span class="g-failed">✗ failed</span>',skipped:'<span class="g-skipped">– skipped</span>',running:'<span class="g-running">◌ running…</span>'};
+  $("pnOutStatus").innerHTML=ro?(lab[ro.status]||""):"";
+  setMsg("pnMsg","","");renderPreview();
+}
+function schedulePreview(){clearTimeout(previewTimer);previewTimer=setTimeout(renderPreview,350);}
+async function renderPreview(){
+  if(!selected)return;const n=nodes.find(x=>x.id===selected);
+  if(!n||n.type!=="ai"){$("pnRendered").textContent="(rendered preview is for ai steps)";return;}
+  const{ok,data}=await api("/api/render",{method:"POST",body:JSON.stringify({path:current,node:selected,template:$("pnPrompt").value})});
+  if(!ok)return;
+  if(data.noUpstream){$("pnRendered").textContent=data.rendered||"(empty)";return;}
+  $("pnRendered").className="mbody";$("pnRendered").style.color="var(--ran)";
+  $("pnRendered").innerHTML=esc(data.rendered)+(data.haveInputs?"":'<div class="dim" style="margin-top:6px;color:var(--dim)">↑ {{ }} stay literal until you ▷ Run to here (fills from real input)</div>');
+}
+// inline rename via /api/rename — the engine rewrites the key + every downstream
+// from: + every prompt $('id') ref, and moves the cached output, all atomically
+// (壞不落地). No-op if unchanged; reverts the field on failure.
+let renaming=false;
+async function renameSelected(){
+  if(!selected||renaming)return;
+  const to=$("pnId").value.trim();
+  if(!to||to===selected){$("pnId").value=selected;return;}
+  renaming=true;
+  const{ok,data}=await api("/api/rename",{method:"POST",body:JSON.stringify({path:current,node:selected,to})});
+  renaming=false;
+  if(!ok){setMsg("pnMsg","err",errs(data)||"rename failed");$("pnId").value=selected;return;}
+  selected=to;setMsg("pnMsg","ok","renamed ✓");await loadNodes();selectNode(to);
+}
+function closeNode(){selected=null;$("modal").classList.add("hidden");}
+async function saveNode(){
+  const n=nodes.find(x=>x.id===selected);if(!n)return;
+  const field=n.type==="cmd"?"run":"prompt";
+  let r=await api("/api/set",{method:"POST",body:JSON.stringify({path:current,node:selected,field,value:$("pnPrompt").value})});
+  if(!r.ok)return setMsg("pnMsg","err",errs(r.data)||"save failed");
+  r=await api("/api/set-from",{method:"POST",body:JSON.stringify({path:current,node:selected,from:$("pnFrom").value})});
+  if(!r.ok)return setMsg("pnMsg","err",errs(r.data)||"save failed");
+  setMsg("pnMsg","ok","saved ✓");await loadNodes();selectNode(selected);
+}
+// read an NDJSON stream, calling onNode for each node result as it arrives
+async function streamRun(url,bodyObj){
+  const r=await fetch(url,{method:"POST",body:JSON.stringify(bodyObj)});
+  if(!r.ok)return{ok:false,data:await r.json().catch(()=>({}))};
+  const reader=r.body.getReader(),dec=new TextDecoder();let buf="";
+  while(true){const{done,value}=await reader.read();if(done)break;
+    buf+=dec.decode(value,{stream:true});let i;
+    while((i=buf.indexOf("\n"))>=0){const line=buf.slice(0,i).trim();buf=buf.slice(i+1);if(line){try{onNode(JSON.parse(line));}catch(e){}}}}
+  return{ok:true};
+}
+function onNode(rec){
+  if(rec.error&&!rec.id){setMsg("canvasMsg","err",rec.error);return;}
+  results[rec.id]={status:rec.status,output:rec.output,error:rec.error,items:rec.items};
+  renderGraph();                       // each node flips the instant it finishes
+  if(selected===rec.id)selectNode(selected);
+}
+async function runNode(force){
+  if(!selected)return;
+  $("pnOut").className="mbody dim";$("pnOut").textContent="running…";$("pnOutStatus").innerHTML='<span class="g-running">◌ running…</span>';
+  setRunningUI([selected,...ancestors(selected)]);
+  const r=await streamRun("/api/run-node",{path:current,node:selected,profile:$("profile").value,fresh:!!force});
+  if(!r.ok){renderGraph();return setMsg("pnMsg","err",errs(r.data)||"run failed");}
+}
+// run-to-here straight from a node's ▷ button — runs inline, NO modal.
+// The result shows on the card itself (see renderGraph). Click the card body
+// (not ▷) if you want to open the editor panel.
+async function runTo(id,fresh){
+  setRunningUI([id,...ancestors(id)]);
+  const r=await streamRun("/api/run-node",{path:current,node:id,profile:$("profile").value,fresh:!!fresh});
+  if(!r.ok){renderGraph();return setMsg("canvasMsg","err",errs(r.data)||"run failed");}
+}
+// click a variable in INPUT → insert it into the prompt at the cursor (no typos)
+function insertVar(id,primary){
+  const expr=primary?'{{ $json }}':'{{ $node["'+id+'"] }}';
+  const ta=$("pnPrompt");const s=ta.selectionStart??ta.value.length,e=ta.selectionEnd??s;
+  ta.value=ta.value.slice(0,s)+expr+ta.value.slice(e);
+  ta.focus();ta.selectionStart=ta.selectionEnd=s+expr.length;
+  schedulePreview();
+}
+async function deleteNode(){
+  if(!selected)return;
+  const{ok,data}=await api("/api/delete-node",{method:"POST",body:JSON.stringify({path:current,node:selected})});
+  if(!ok)return setMsg("pnMsg","err",errs(data)||"delete failed");
+  closeNode();await loadNodes();
+}
+// Add a step via the engine's nodeStarter (server-side, single source of truth
+// for each type's minimal fields). The node is unwired — drag/edit `from` next.
+async function addNode(){
+  const type=$("addType")?$("addType").value:"ai";
+  let i=1,id;do{id="step"+(nodes.length+i);i++;}while(nodes.some(n=>n.id===id));
+  const{ok,data}=await api("/api/add-node",{method:"POST",body:JSON.stringify({path:current,id,type})});
+  if(!ok)return setMsg("canvasMsg","err",errs(data)||"add failed");
+  await loadNodes();selectNode(id);
+}
+async function runAll(fresh){
+  setRunningUI(nodes.map(n=>n.id));
+  const r=await streamRun("/api/run",{path:current,profile:$("profile").value,fresh:!!fresh});
+  if(!r.ok){results={};renderGraph();return setMsg("canvasMsg","err",errs(r.data)||"run failed");}
+}
+let rawOn=false;
+async function toggleRaw(){rawOn=!rawOn;
+  if(rawOn){const{data}=await api("/api/read?path="+encodeURIComponent(current));$("yaml").value=data.yaml||"";
+    $("nodeView").classList.add("hidden");$("rawView").classList.remove("hidden");$("rawBtn").textContent="◧ nodes";}
+  else{showNodes();loadNodes();}
+}
+function showNodes(){rawOn=false;$("rawView").classList.add("hidden");$("nodeView").classList.remove("hidden");$("rawBtn").textContent="{ } raw";}
+async function saveRaw(){const{ok,data}=await api("/api/save",{method:"POST",body:JSON.stringify({path:current,yaml:$("yaml").value})});
+  setMsg("rawMsg",ok?"ok":"err",ok?"saved ✓":errs(data));}
+function setMsg(id,cls,t){const e=$(id);if(!e)return;e.className="msg "+cls;e.textContent=t;}
+window.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("modal").classList.contains("hidden"))closeNode();});
+boot();
+
+// Migration bridge: these handlers are still referenced by inline onclick= in
+// app.html (and in runtime-generated card markup), so a module must expose them
+// on window. Converting to addEventListener is the follow-up.
+Object.assign(window,{listFlows,createFlow,back,toggleRaw,runAll,runNode,saveNode,deleteNode,closeNode,addNode,saveRaw,renameSelected,schedulePreview,insertVar,runTo});
