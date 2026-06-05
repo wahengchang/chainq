@@ -77,8 +77,11 @@ async function createFlow(){
   const{ok,data}=await api("/api/create",{method:"POST",body:JSON.stringify({dir:$("dir").value,name})});
   if(!ok)return setMsg("createMsg","err",data.error||"create failed");open(data.path);
 }
-async function open(path){current=path;selected=null;results={};inputVals={};$("path").textContent=path;
-  $("create").classList.add("hidden");$("editor").classList.remove("hidden");showNodes();await loadNodes();}
+async function open(path){current=path;selected=null;results={};inputVals={};layout={};manual=false;$("path").textContent=path;
+  $("create").classList.add("hidden");$("editor").classList.remove("hidden");showNodes();await loadLayout();await loadNodes();}
+// load saved node positions; any saved layout switches the canvas to free positioning.
+async function loadLayout(){const{data}=await api("/api/layout?path="+encodeURIComponent(current));
+  layout=(data&&data.layout)||{};manual=Object.keys(layout).length>0;}
 function back(){$("editor").classList.add("hidden");$("create").classList.remove("hidden");listFlows();}
 
 async function loadNodes(){
@@ -128,22 +131,41 @@ function nodeCard(n){
     +fromLine
     +'<div class="npreview">'+esc((n.prompt||n.run||"").slice(0,70))+'</div>'+out
     +'<div class="port" title="drag onto another node to connect →"></div>';
-  d.onclick=()=>{if(connecting)return;selectNode(n.id);}; // a drag-connect must not also open the panel
+  d.onclick=()=>{if(connecting||movingNode)return;selectNode(n.id);}; // a drag (connect or reposition) must not also open the panel
   return d;
 }
 function renderGraph(){
-  const g=$("graph");g.className="gwrap";g.innerHTML="";
+  const g=$("graph");g.className="gwrap"+(manual?" manual":"");g.innerHTML="";g.style.width="";g.style.height="";
   const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");
   svg.setAttribute("class","wires");g.appendChild(svg);
-  const cols=document.createElement("div");cols.className="gcols";g.appendChild(cols);
-  const depth=nodeDepths();
-  const maxD=Math.max(0,...nodes.map(n=>depth[n.id]));
-  for(let c=0;c<=maxD;c++){
-    const colEl=document.createElement("div");colEl.className="gcol";
-    nodes.filter(n=>depth[n.id]===c).forEach(n=>colEl.appendChild(nodeCard(n)));
-    cols.appendChild(colEl);
+  if(manual){
+    // free positions: saved layout, falling back to the auto layout for unsaved nodes
+    const auto=autoPositions();let maxX=0,maxY=0;
+    nodes.forEach(n=>{
+      const card=nodeCard(n);const p=layout[n.id]||auto[n.id]||{x:0,y:0};
+      card.style.position="absolute";card.style.left=p.x+"px";card.style.top=p.y+"px";
+      g.appendChild(card);maxX=Math.max(maxX,p.x);maxY=Math.max(maxY,p.y);
+    });
+    g.style.width=(maxX+260)+"px";g.style.height=(maxY+200)+"px"; // size the wrap so it scrolls
+  }else{
+    const cols=document.createElement("div");cols.className="gcols";g.appendChild(cols);
+    const depth=nodeDepths();
+    const maxD=Math.max(0,...nodes.map(n=>depth[n.id]));
+    for(let c=0;c<=maxD;c++){
+      const colEl=document.createElement("div");colEl.className="gcol";
+      nodes.filter(n=>depth[n.id]===c).forEach(n=>colEl.appendChild(nodeCard(n)));
+      cols.appendChild(colEl);
+    }
   }
   drawWires(svg,g);
+}
+// auto layout used by manual mode for nodes with no saved position — mirrors the
+// depth-column auto layout so a freshly-dragged graph keeps its readable shape.
+function autoPositions(){
+  const depth=nodeDepths();const byCol={};const pos={};
+  nodes.forEach(n=>{const c=depth[n.id];(byCol[c]=byCol[c]||[]).push(n.id);});
+  Object.keys(byCol).forEach(c=>byCol[c].forEach((id,i)=>{pos[id]={x:Number(c)*288,y:i*128};}));
+  return pos;
 }
 // draw a curved connector for every `from` edge (real wiring, incl. fan-in).
 function drawWires(svg,wrap){
@@ -172,6 +194,9 @@ window.addEventListener("resize",()=>{const g=$("graph");if(g&&g.classList.conta
 // `from` via /api/connect (the backend keeps order + validates壞不落地). `connecting`
 // suppresses the trailing card click so a drag never also opens the panel.
 let connecting=false;
+// P3 node positions: `layout` = id→{x,y} (persisted in .chain/layout via /api/layout);
+// `manual` = use free positions (set once any node is dragged or a saved layout loads).
+let manual=false,layout={},movingNode=false,layoutTimer=null;
 function nodeUnder(e){const el=document.elementFromPoint(e.clientX,e.clientY);return el?el.closest(".node"):null;}
 function startConnect(source,ev){
   ev.preventDefault();ev.stopPropagation();
@@ -210,9 +235,43 @@ async function connectTo(source,target){
 }
 // one delegated listener — the cards are rebuilt every render, the port isn't.
 document.addEventListener("pointerdown",e=>{
-  const port=e.target.closest&&e.target.closest(".port");if(!port)return;
-  const card=port.closest(".node");if(card)startConnect(card.dataset.id,e);
+  if(!e.target.closest)return;
+  const port=e.target.closest(".port");
+  if(port){const c=port.closest(".node");if(c)startConnect(c.dataset.id,e);return;}
+  // body drag → reposition (not on a run button; only inside the canvas)
+  const card=e.target.closest(".node");
+  if(card&&!e.target.closest(".noderun")&&$("graph").contains(card))startMove(card.dataset.id,e);
 });
+
+// ---- P3 drag-to-reposition + persist ----
+// Capture the current (auto-laid-out) positions as absolute coords, so switching
+// to manual mode on the first drag doesn't make nodes jump.
+function snapshotPositions(){
+  const g=$("graph");const base=g.getBoundingClientRect();
+  nodes.forEach(n=>{const c=g.querySelector('.node[data-id="'+CSS.escape(n.id)+'"]');
+    if(c){const r=c.getBoundingClientRect();layout[n.id]={x:r.left-base.left,y:r.top-base.top};}});
+}
+function saveLayout(){clearTimeout(layoutTimer);
+  layoutTimer=setTimeout(()=>{api("/api/layout",{method:"POST",body:JSON.stringify({path:current,layout})});},400);}
+function startMove(id,ev){
+  const g=$("graph");const ox=ev.clientX,oy=ev.clientY;let moving=false,start;
+  const move=e=>{
+    if(!moving){
+      if(Math.abs(e.clientX-ox)+Math.abs(e.clientY-oy)<4)return; // under threshold → still a click
+      ev.preventDefault();
+      if(!manual){snapshotPositions();manual=true;renderGraph();}
+      start=layout[id]||{x:0,y:0};moving=true;movingNode=true;
+    }
+    const nx=Math.max(0,start.x+(e.clientX-ox)),ny=Math.max(0,start.y+(e.clientY-oy));
+    layout[id]={x:nx,y:ny};
+    const c=g.querySelector('.node[data-id="'+CSS.escape(id)+'"]');
+    if(c){c.style.left=nx+"px";c.style.top=ny+"px";}
+    const svg=g.querySelector("svg.wires");if(svg)drawWires(svg,g);
+  };
+  const up=()=>{document.removeEventListener("pointermove",move);document.removeEventListener("pointerup",up);
+    if(moving){saveLayout();setTimeout(()=>{movingNode=false;},0);}}; // let the trailing click see movingNode
+  document.addEventListener("pointermove",move);document.addEventListener("pointerup",up);
+}
 
 function selectNode(id){
   selected=id;const n=nodes.find(x=>x.id===id);if(!n)return;
@@ -221,6 +280,7 @@ function selectNode(id){
   const isCmd=n.type==="cmd";
   $("pnPrompt").value=isCmd?(n.run||""):(n.prompt||"");
   $("pnFrom").value=(n.from||[]).join(", ");
+  $("pnFromWrap").classList.toggle("hidden",n.type==="input"); // input is a trigger — no `from`
   // INPUT: an `input` trigger shows its params form (runtime values); any other
   // node shows each upstream's last output (click to insert into the prompt).
   const ups=n.from||[];
@@ -302,7 +362,8 @@ async function loadItems(id){
 function schedulePreview(){clearTimeout(previewTimer);previewTimer=setTimeout(renderPreview,350);}
 async function renderPreview(){
   if(!selected)return;const n=nodes.find(x=>x.id===selected);
-  if(!n||n.type!=="ai"){$("pnRendered").textContent="(rendered preview is for ai steps)";return;}
+  // ai AND assemble both render a {{ }} prompt template — preview applies to both.
+  if(!n||(n.type!=="ai"&&n.type!=="assemble")){$("pnRendered").textContent="(rendered preview is for ai / assemble steps)";return;}
   const{ok,data}=await api("/api/render",{method:"POST",body:JSON.stringify({path:current,node:selected,template:$("pnPrompt").value})});
   if(!ok)return;
   if(data.noUpstream){$("pnRendered").textContent=data.rendered||"(empty)";return;}

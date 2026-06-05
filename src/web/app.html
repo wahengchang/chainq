@@ -44,6 +44,9 @@
   .node:hover .port{opacity:1}
   .gwrap.connecting{cursor:crosshair} .gwrap.connecting .port{opacity:1}
   .node.drop{box-shadow:0 0 0 2px var(--ran)}
+  /* P3: free node positions (drag the body). Default is auto column layout; once
+     you drag a node the canvas switches to absolute positions, persisted via /api/layout. */
+  .gwrap.manual .node{cursor:move}
   .node.ran{border-left:3px solid var(--ran)} .node.cached{border-left:3px solid var(--cached)}
   .node.failed{border-left:3px solid var(--bad)} .node.skipped{opacity:.6}
   .node.running{border-left:3px solid var(--accent);animation:pulse 1.1s ease-in-out infinite}
@@ -170,8 +173,10 @@
           <div class="mcol">
             <div class="chead">input</div>
             <div class="mbody">
-              <label style="margin-top:0">from (first = <span class="intag">$json</span>)</label>
-              <input id="pnFrom" spellcheck="false" placeholder="e.g. draft, other">
+              <div id="pnFromWrap">
+                <label style="margin-top:0">from (first = <span class="intag">$json</span>)</label>
+                <input id="pnFrom" spellcheck="false" placeholder="e.g. draft, other">
+              </div>
               <div id="pnTypeFields" style="margin-top:10px"></div>
               <div style="margin-top:10px" id="pnInput" class="dim">Run to see what feeds this node.</div>
             </div>
