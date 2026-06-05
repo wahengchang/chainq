@@ -7,6 +7,7 @@
 
 import { topoOrder, upstreamsOf } from "./dag.js";
 import { promptRefs } from "./render.js";
+import { staticParamErrors } from "./input.js";
 import type { Flow } from "./types.js";
 
 export interface ValidationError {
@@ -78,8 +79,14 @@ export function validate(flow: Flow): ValidationError[] {
     if ((node.type === "splitOut" || node.type === "aggregate") && ups.length !== 1) {
       errors.push({ node: id, message: `${node.type} needs exactly 1 input, got ${ups.length}` });
     }
-    if (node.type === "input" && ups.length > 0) {
-      errors.push({ node: id, message: `input is a trigger — it must not have a 'from' (got ${ups.length})` });
+    if (node.type === "input") {
+      if (ups.length > 0) {
+        errors.push({ node: id, message: `input is a trigger — it must not have a 'from' (got ${ups.length})` });
+      }
+      // static param contract: type literal legal + default coercible to type
+      for (const [name, spec] of Object.entries(node.params ?? {})) {
+        errors.push(...staticParamErrors(id, name, spec));
+      }
     }
   }
 

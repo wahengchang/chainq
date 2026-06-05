@@ -23,7 +23,7 @@ const haveClaude = spawnSync("which", ["claude"]).status === 0;
 // Spawn `chain ui flow.yaml` in `dir`, resolve once it prints its URL.
 function startServer(dir: string): Promise<{ url: string; proc: ChildProcess }> {
   return new Promise((resolve, reject) => {
-    const proc = spawn(TSX, [CLI, "ui", "flow.yaml"], { cwd: dir });
+    const proc = spawn(TSX, [CLI, "ui", "flow.yaml"], { cwd: dir, env: { ...process.env, CHAIN_NO_OPEN: "1" } });
     let buf = "";
     const t = setTimeout(() => reject(new Error("server did not start:\n" + buf)), 20000);
     const onData = (d: Buffer) => {

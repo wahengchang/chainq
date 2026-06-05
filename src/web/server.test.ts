@@ -173,4 +173,53 @@ describe("web server", () => {
       close();
     }
   });
+
+  // Increment 2: the type/required contract is enforced over the API, with the
+  // same errors the CLI gives (validateRunInput is shared). Still offline.
+  it("enforces the input param contract (required + declared type)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "chain-web-contract-"));
+    const { base, close } = await listen(dir);
+    const flow = join(dir, "seed.yaml");
+    writeFileSync(
+      flow,
+      [
+        "profiles:",
+        "  default: { cmd: 'claude -p' }",
+        "steps:",
+        "  seed:",
+        "    type: input",
+        "    params:",
+        "      name: { type: string, required: true }",
+        "      count: { type: number, default: 2 }",
+        "  out:",
+        "    type: assemble",
+        "    from: seed",
+        "    prompt: '{{ $json.name }}-{{ $json.count }}'",
+        "",
+      ].join("\n"),
+    );
+    const run = (input?: unknown) => post(base, "/api/run-node", { path: flow, node: "out", input });
+    const okOut = async (r: Response) =>
+      (await r.text()).trim().split("\n").map((l) => JSON.parse(l) as any).find((x) => x.id === "out");
+    try {
+      // required `name` missing → 400, no run, message names the param
+      const missing = await run(undefined);
+      expect(missing.status).toBe(400);
+      const me = ((await missing.json()) as any).errors;
+      expect(me[0].message).toContain('input "name"');
+      expect(me[0].message).toContain("required");
+
+      // wrong type for `count` → 400
+      const badType = await run([{ name: "ada", count: "lots" }]);
+      expect(badType.status).toBe(400);
+      expect(((await badType.json()) as any).errors[0].message).toContain("number");
+
+      // valid: required supplied, count falls back to its default 2
+      expect((await okOut(await run([{ name: "ada" }]))).output).toContain("ada-2");
+      // valid: typed count coerces ("9" → 9)
+      expect((await okOut(await run([{ name: "bob", count: "9" }]))).output).toContain("bob-9");
+    } finally {
+      close();
+    }
+  });
 });
