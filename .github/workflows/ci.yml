@@ -51,7 +51,9 @@ jobs:
           check_name: Test report — unit + cli-e2e
           detailed_summary: true
           include_passed: true
-          annotate_only: true
+          # annotate_only:false (default) → publish a clickable "Test report"
+          # Check Run on the PR, not just inline annotations + run-page summary.
+          annotate_only: false
       - name: Upload JUnit XML
         if: always()
         uses: actions/upload-artifact@v4
@@ -85,7 +87,9 @@ jobs:
           check_name: Test report — browser e2e
           detailed_summary: true
           include_passed: true
-          annotate_only: true
+          # annotate_only:false (default) → publish a clickable "Test report"
+          # Check Run on the PR, not just inline annotations + run-page summary.
+          annotate_only: false
       - name: Upload JUnit XML
         if: always()
         uses: actions/upload-artifact@v4
