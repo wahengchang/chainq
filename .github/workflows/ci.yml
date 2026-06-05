@@ -1,0 +1,49 @@
+name: CI
+
+# Runs on every PR and on pushes to main. Everything here is OFFLINE and
+# deterministic: tests that shell out to the real `claude -p` model are gated on
+# `haveClaude` (which claude) and skip automatically because `claude` is not on
+# PATH in CI. No API key, no cost, no flakiness. The real-model path is verified
+# locally (claude login) — see e2eCli/README.md and the *-real specs.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A newer push to the same ref cancels the older in-flight run.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: typecheck · unit · cli-e2e (offline)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Unit tests
+        run: npm test
+      - name: CLI e2e (offline scenarios; real-model tests auto-skip)
+        run: npm run e2e:cli
+
+  browser:
+    name: browser e2e (editor, offline)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Install Playwright Chromium + OS deps
+        run: npx playwright install --with-deps chromium
+      - name: Browser e2e (editor.spec is offline; run/run-real auto-skip)
+        run: npm run e2e:ui:headless
