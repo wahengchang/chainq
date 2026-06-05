@@ -45,6 +45,12 @@
   @keyframes spin{to{transform:rotate(360deg)}}
   .spin{display:inline-block;animation:spin .8s linear infinite}
   .nh{display:flex;align-items:center;gap:8px} .nn{flex:1} .nt{color:var(--dim);font-size:10px}
+  /* node-type chip — collection operators (split/aggregate/merge) stand out so the
+     items model is readable on the canvas at a glance */
+  .ntype{color:var(--dim);font-size:9px;border:1px solid var(--line);border-radius:3px;padding:1px 5px;white-space:nowrap}
+  .ntype.col{color:var(--accent);border-color:var(--accent)}
+  .node.col{border-left:3px solid var(--accent)}
+  .xn{font-size:10px;color:var(--accent);border:1px solid var(--accent);border-radius:9px;padding:0 6px;line-height:15px}
   .glyph{width:14px;text-align:center}
   .g-ran{color:var(--ran)} .g-cached{color:var(--cached)} .g-failed{color:var(--bad)} .g-skipped{color:var(--dim)} .g-pending{color:var(--dim)}
   .npreview{color:var(--dim);font-size:11px;margin-top:6px;max-height:32px;overflow:hidden}
@@ -172,6 +178,11 @@ const api=(u,o)=>fetch(u,o).then(async r=>({ok:r.ok,status:r.status,data:await r
 const esc=s=>(s==null?"":String(s)).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 const errs=d=>(d.errors||[]).map(e=>"✗ "+e.node+": "+e.message).join("\n");
 const G={ran:"✓",cached:"⊘",failed:"✗",skipped:"–",pending:"○",running:"◌"};
+// node-type display — collection operators (see the items model) get a symbol +
+// accent so split/aggregate/merge read differently from per-item ai/cmd steps.
+const TYPE_GLYPH={ai:"✦ ai",cmd:"$ cmd",assemble:"⊕ assemble",splitOut:"⤙ split out",aggregate:"⤚ aggregate",merge:"⋈ merge",input:"▶ input"};
+const COLLECTION=new Set(["splitOut","aggregate","merge"]);
+const typeChip=t=>'<span class="ntype'+(COLLECTION.has(t)?" col":"")+'">'+esc(TYPE_GLYPH[t]||t)+'</span>';
 let current=null,nodes=[],selected=null,results={},previewTimer=null;
 // transitive upstream of a node (its input cone)
 function ancestors(id){const set=new Set();let stack=[...(nodes.find(n=>n.id===id)?.from||[])];
@@ -218,8 +229,12 @@ function nodeDepths(){
 function nodeCard(n){
   const r=results[n.id];
   const multi=(n.from||[]).length>1;
-  const d=document.createElement("div");d.className="node "+(r?r.status:"")+(multi?" multi":"");
+  const col=COLLECTION.has(n.type);
+  const d=document.createElement("div");d.className="node "+(r?r.status:"")+(multi?" multi":"")+(col?" col":"");
   d.dataset.id=n.id;
+  // ×N item-count badge: how many items this node emitted (items model). Shown
+  // after a run streams the count back; hidden for the 1-in-1-out base case.
+  const xn=(r&&r.items!=null&&r.items!==1)?'<span class="xn" title="items emitted on this wire">×'+r.items+'</span>':'';
   const glyph=r?('<span class="glyph g-'+r.status+(r.status==="running"?" spin":"")+'">'+G[r.status]+'</span>'):'<span class="glyph g-pending">○</span>';
   const BADGE={ran:"✓ ran · called the model",cached:"⊘ cached · reused, no call",failed:"✗ failed",skipped:"– skipped"};
   let out="";
@@ -234,7 +249,7 @@ function nodeCard(n){
       +'<button class="noderun" title="run to here (reuse cache)" onclick="event.stopPropagation();runTo(\''+n.id+'\')">▷</button>'
       +'<button class="noderun" title="re-run fresh — really call the model" onclick="event.stopPropagation();runTo(\''+n.id+'\',true)">↻</button>'
     +'</div>'
-    +'<div class="nh">'+glyph+'<span class="nn">'+n.id+'</span><span class="nt">'+n.type+'</span></div>'
+    +'<div class="nh">'+glyph+'<span class="nn">'+esc(n.id)+'</span>'+xn+typeChip(n.type)+'</div>'
     +fromLine
     +'<div class="npreview">'+esc((n.prompt||n.run||"").slice(0,70))+'</div>'+out;
   d.onclick=()=>selectNode(n.id);

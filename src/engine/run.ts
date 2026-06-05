@@ -29,6 +29,10 @@ export interface RunOptions {
   scratch?: boolean;
   /** Override every ai node's profile (CLI --profile). Folds into cache keys. */
   profileOverride?: string;
+  /** Run-time input parameter sets (CLI --input / --input-file). One set → one
+   * seed item from each `input` node; many sets → a batch (one item each). Folds
+   * into the input node's cache key. */
+  input?: Record<string, unknown>[];
   /** Per-node timeout. */
   timeoutMs?: number;
   /** Called as each node settles — lets the UI stream ran/cached/failed live. */
@@ -57,7 +61,7 @@ export class Runner {
 
   constructor(private flow: Flow, private opts: RunOptions) {
     this.baseDir = opts.baseDir ?? opts.chainDir;
-    this.keys = computeKeys(flow, this.baseDir, opts.profileOverride);
+    this.keys = computeKeys(flow, this.baseDir, opts.profileOverride, opts.input);
     this.volatile = volatileSet(flow);
     this.store = new CacheStore(opts.chainDir, { scratch: opts.scratch });
   }
@@ -200,7 +204,16 @@ export class Runner {
     try {
       let output: Item[];
 
-      if (node.type === "splitOut") {
+      if (node.type === "input") {
+        // trigger: emit the flow's seed item(s) from declared params + run-time
+        // values. No upstream. One supplied set → one item; many → a batch.
+        const defaults: Record<string, unknown> = {};
+        for (const [name, spec] of Object.entries(node.params ?? {})) {
+          if (spec && spec.default !== undefined) defaults[name] = spec.default;
+        }
+        const sets = this.opts.input && this.opts.input.length ? this.opts.input : [{}];
+        output = sets.map((set, i) => ({ json: { ...defaults, ...set }, pairedItem: i }));
+      } else if (node.type === "splitOut") {
         // collection op: each input item's array field → one output item per element
         output = [];
         (primary ? itemsOf(primary) : []).forEach((it, i) => {
@@ -254,8 +267,11 @@ export class Runner {
         // pass every upstream's full items; render pairs by index / supports .all()
         const itemsByUp: Record<string, Item[]> = {};
         for (const u of ups) itemsByUp[u] = itemsOf(u);
+        const primaryItems = primary ? itemsByUp[primary]! : [];
         for (let i = 0; i < runCount; i++) {
-          const rendered = renderPrompt(node.prompt ?? "", { items: itemsByUp, primary, index: i });
+          // cross-refs to other upstreams pair via this item's lineage, not loop index
+          const pairedIndex = primaryItems[i]?.pairedItem ?? i;
+          const rendered = renderPrompt(node.prompt ?? "", { items: itemsByUp, primary, index: i, pairedIndex });
           if (node.type === "assemble") {
             output.push(textItem(rendered, i)); // pure data assembly, no external call
           } else {

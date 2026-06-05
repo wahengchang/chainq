@@ -30,4 +30,6 @@ export {
   type Disposition,
 } from "./plan.js";
 export { FlowLock } from "./lock.js";
-export { renderPrompt } from "./render.js";
+export { renderPrompt, promptRefs, rewriteRefs, type PromptRefs } from "./render.js";
+export { renameNode } from "./rename.js";
+export { isValidNodeId, nodeIdError, nodeStarter } from "./node.js";

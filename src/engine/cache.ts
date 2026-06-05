@@ -59,6 +59,7 @@ export function computeKeys(
   flow: Flow,
   baseDir: string,
   profileOverride?: string,
+  input?: Record<string, unknown>[],
 ): Map<string, string> {
   const keys = new Map<string, string>();
   for (const id of topoOrder(flow)) {
@@ -66,6 +67,9 @@ export function computeKeys(
     const profileCmd =
       node.type === "ai" ? resolveProfile(flow, profileOverride ?? node.profile).cmd : null;
     const inputFileHashes = (node.inputs ?? []).map((p) => hashFile(join(baseDir, p)));
+    // input node: the resolved params + run-time values ARE its content — fold
+    // them in so changing --input invalidates the trigger and its downstream.
+    const inputMaterial = node.type === "input" ? { params: node.params ?? null, input: input ?? null } : null;
     // NOT sorted: `from` order is significant — $json binds to the first
     // upstream (run.ts), so reordering changes behavior and MUST change the key.
     const upstreamKeys = upstreamsOf(node)
@@ -84,6 +88,7 @@ export function computeKeys(
       field: node.field ?? null,
       mode: node.mode ?? null,
       key: node.key ?? null,
+      input: inputMaterial,
     });
     keys.set(id, sha256(material));
   }
@@ -151,6 +156,25 @@ export class CacheStore {
     const outputFile = `${id}.out`;
     atomicWrite(join(this.outputsDir, outputFile), JSON.stringify(output, null, 2));
     this.state[id] = { key, outputFile };
+    atomicWrite(this.statePath, JSON.stringify(this.state, null, 2));
+  }
+
+  /** Move a node's cached state + output file from oldId to newId, so a rename
+   * keeps its cache instead of forcing a recompute. Safe because the Merkle key
+   * folds in content + upstream keys, NOT the id — the output stays valid. Best
+   * effort: a missing entry / file just means the node recomputes next run. */
+  rename(oldId: string, newId: string): void {
+    const entry = this.state[oldId];
+    if (!entry) return; // never ran → nothing cached to move
+    const newFile = `${newId}.out`;
+    try {
+      const from = join(this.outputsDir, entry.outputFile);
+      if (existsSync(from)) renameSync(from, join(this.outputsDir, newFile));
+    } catch {
+      /* best-effort: leave the recompute to happen on next run */
+    }
+    delete this.state[oldId];
+    this.state[newId] = { key: entry.key, outputFile: newFile };
     atomicWrite(this.statePath, JSON.stringify(this.state, null, 2));
   }
 }

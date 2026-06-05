@@ -39,10 +39,53 @@ interface Flags {
   steps?: number;
   profile?: string;
   pins: Record<string, string>;
+  input?: Record<string, unknown>[];
+}
+
+/** Parse a `--input k=v` value: JSON if it parses (numbers/bools/arrays), else string. */
+function parseVal(v: string): unknown {
+  try {
+    return JSON.parse(v);
+  } catch {
+    return v;
+  }
+}
+
+/** A --input-file holds one object, a JSON array of objects, or JSONL (one per line).
+ * Every set MUST be a plain object — a primitive/array would become a malformed
+ * seed item (e.g. "abc" → {0:"a",1:"b"}), so we reject it loudly instead. */
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+function parseInputFile(path: string): Record<string, unknown>[] {
+  const txt = readFileSync(path, "utf8").trim();
+  const sets: unknown[] = (() => {
+    try {
+      const parsed = JSON.parse(txt);
+      return Array.isArray(parsed) ? parsed : [parsed];
+    } catch {
+      return txt
+        .split("\n")
+        .map((l) => l.trim())
+        .filter(Boolean)
+        .map((l) => JSON.parse(l) as unknown);
+    }
+  })();
+  for (const set of sets) {
+    if (!isPlainObject(set)) {
+      throw new Error(
+        `--input-file: every input set must be a JSON object, got ${JSON.stringify(set)}`,
+      );
+    }
+  }
+  return sets as Record<string, unknown>[];
 }
 
 function parseFlags(rest: string[], baseDir: string): Flags {
   const flags: Flags = { fresh: false, pins: {} };
+  const inputKv: Record<string, unknown> = {};
+  let inputSets: Record<string, unknown>[] | undefined;
   for (let i = 0; i < rest.length; i++) {
     const a = rest[i]!;
     if (a === "--fresh") flags.fresh = true;
@@ -50,7 +93,14 @@ function parseFlags(rest: string[], baseDir: string): Flags {
     else if (a === "--to") flags.to = rest[++i];
     else if (a === "--steps") flags.steps = Number(rest[++i]);
     else if (a === "--profile") flags.profile = rest[++i];
-    else if (a === "--pin") {
+    else if (a === "--input") {
+      const spec = rest[++i] ?? "";
+      const eq = spec.indexOf("=");
+      if (eq < 0) throw new Error(`--input expects <name>=<value>, got "${spec}"`);
+      inputKv[spec.slice(0, eq)] = parseVal(spec.slice(eq + 1));
+    } else if (a === "--input-file") {
+      inputSets = parseInputFile(resolve(baseDir, rest[++i] ?? ""));
+    } else if (a === "--pin") {
       const spec = rest[++i] ?? "";
       const eq = spec.indexOf("=");
       if (eq < 0) throw new Error(`--pin expects <node>=<file>, got "${spec}"`);
@@ -59,6 +109,10 @@ function parseFlags(rest: string[], baseDir: string): Flags {
       flags.pins[node] = readFileSync(resolve(baseDir, file), "utf8");
     } else throw new Error(`unknown flag: ${a}`);
   }
+  // --input k=v overrides each set from --input-file (or stands alone as one set)
+  const hasKv = Object.keys(inputKv).length > 0;
+  if (inputSets) flags.input = inputSets.map((set) => ({ ...set, ...inputKv }));
+  else if (hasKv) flags.input = [inputKv];
   return flags;
 }
 
@@ -143,6 +197,7 @@ async function main(argv: string[]): Promise<number> {
       scratch: usingPins, // pinned trial runs are isolated to .chain/scratch
       profileOverride: flags.profile,
       pins: flags.pins,
+      input: flags.input,
       onResult: (r) => {
         const n = r.output.length;
         // show item count for ran/cached (items model) — makes fan-out visible

@@ -65,6 +65,36 @@ describe("renderPrompt — path selectors (items model)", () => {
     expect(renderPrompt("{{ $('x').item }}", multi)).toBe("b");
   });
 
+  it("{{ $('id').item }} follows the current item's pairedItem, not the loop index", () => {
+    // `split` fanned seed[0] → two items (both pairedItem 0) then seed[1] → one (pairedItem 1).
+    // Rendering the 2nd split item (loop index 1) must pair back to seed[0] = X, not seed[1].
+    const inputs = {
+      primary: "split",
+      index: 1,
+      pairedIndex: 0, // ← split[1].pairedItem
+      items: {
+        split: [
+          { json: "1", pairedItem: 0 },
+          { json: "2", pairedItem: 0 },
+          { json: "3", pairedItem: 1 },
+        ],
+        seed: [{ json: json({ tag: "X" }) }, { json: json({ tag: "Y" }) }],
+      },
+    };
+    expect(renderPrompt("{{ $('seed').item.tag }}", inputs)).toBe("X"); // not "Y"
+    expect(renderPrompt("{{ $json }}", inputs)).toBe("2"); // primary still by loop index
+  });
+
+  it("a self-reference {{ $('primary') }} stays the current item even with a pairedIndex", () => {
+    const inputs = {
+      primary: "x",
+      index: 1,
+      pairedIndex: 0,
+      items: { x: [{ json: "a", pairedItem: 0 }, { json: "b", pairedItem: 0 }] },
+    };
+    expect(renderPrompt("{{ $('x') }}", inputs)).toBe("b"); // loop index 1, not pairedIndex 0
+  });
+
   it("leaves an unresolvable expression verbatim (visible, not blanked)", () => {
     expect(renderPrompt("{{ $json.nope.deep }}", inputs)).toBe("{{ $json.nope.deep }}");
     expect(renderPrompt("{{ $json }}", { items: {} })).toBe("{{ $json }}"); // no primary

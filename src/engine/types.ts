@@ -10,7 +10,14 @@
 
 // ai/cmd/assemble run per-item; splitOut/aggregate/merge are COLLECTION operators
 // (they see the whole input items array, not one item at a time) — the n8n model.
-export type NodeType = "ai" | "cmd" | "assemble" | "splitOut" | "aggregate" | "merge";
+// `input` is the trigger: it has no upstream and emits the flow's seed item(s)
+// from declared params + run-time values (one set → 1 item; many sets → batch).
+export type NodeType = "ai" | "cmd" | "assemble" | "splitOut" | "aggregate" | "merge" | "input";
+
+/** A declared input parameter (n8n form field). */
+export interface ParamSpec {
+  default?: unknown;
+}
 
 /** Merge combine strategy (n8n Merge node). */
 export type MergeMode = "append" | "byPosition" | "byKey";
@@ -47,6 +54,9 @@ export interface FlowNode {
   mode?: MergeMode | CmdMode;
   /** merge byKey: the property name both sides are joined on. */
   key?: string;
+  /** input: declared parameters (name → spec with optional default). Supplied at
+   * run time via --input / --input-file; one set → 1 seed item, many → batch. */
+  params?: Record<string, ParamSpec>;
 }
 
 export interface Flow {

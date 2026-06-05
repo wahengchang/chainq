@@ -8,14 +8,12 @@ export default defineConfig({
   testMatch: "**/*.spec.ts",
   // This drive is non-HFS; macOS writes a `._*` AppleDouble sidecar per file.
   testIgnore: "**/._*",
-  // Regenerate e2e-viz.html from the real engine before opening the browser.
-  globalSetup: "./e2e/browser/global-setup.ts",
   reporter: "list",
   use: {
     ...devices["Desktop Chrome"],
     trace: "on-first-retry",
     // SLOWMO=900 makes each browser action visibly slow, so you can WATCH the
-    // automation click through the visualizer live (the `e2e:ui:demo` script).
+    // automation drive the real `chain ui` editor live (the `e2e:ui:demo` script).
     launchOptions: { slowMo: Number(process.env.SLOWMO ?? 0) },
   },
 });

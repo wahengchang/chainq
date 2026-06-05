@@ -17,6 +17,8 @@ from cache.
 
 > **New here?** Read [docs/getting-started.md](docs/getting-started.md) — a step-by-step
 > walkthrough from zero to a running chain (no prior knowledge assumed).
+>
+> **CLI docs** (Diátaxis): [docs/cli/](docs/cli/) — tutorial · how-to · reference · explanation.
 
 ## Create a new project
 
@@ -73,7 +75,7 @@ node with no declared `inputs:` is treated as uncacheable (always re-runs).
 src/engine/   parse → DAG → Merkle cache → serial run → validate
 src/cli/      chain run / validate
 examples/     demo flow
-docs/         design.md (design + eng + design reviews), test-plan, tasks
+docs/         cli/ (Diátaxis CLI docs) · design.md · getting-started.md · design/
 ```
 
 ## License

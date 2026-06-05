@@ -22,9 +22,27 @@ export interface RenderInputs {
   primary?: string;
   /** which item index this render is for (per-item execution); default 0 */
   index?: number;
+  /**
+   * The current primary item's `pairedItem` — the index it traces back to in its
+   * own input. Cross-references ($('id') / $node["id"] / .item) to OTHER upstreams
+   * resolve through this, NOT the loop index, so a fan-out (splitOut) that changes
+   * cardinality still pairs each item to the right upstream row (n8n paired-item).
+   * Single-hop: correct for the primary's direct input or a 1:1 ancestor chain.
+   * Defaults to `index` when absent (1-in-1-out chains, where they're equal).
+   */
+  pairedIndex?: number;
 }
 
 const EXPR = /\{\{\s*(.*?)\s*\}\}/g;
+
+// The two ways a prompt names an upstream node. These are the SINGLE SOURCE OF
+// TRUTH for "what is a node reference", shared by promptRefs (read — validate's
+// wiring check), resolveExpr (run), and rewriteRefs (rename). Capture groups:
+//   1 = prefix, 2 = id, 3 = suffix
+// so rename can swap the id while keeping the original quote style. Anchored at
+// the start of an expression; any trailing path/.all()/.item is whatever follows.
+const NODE_REF = /^(\$node\[["'])([^"']+)(["']\])/; // $node["id"]
+const ALIAS_REF = /^(\$\(\s*["'])([^"']+)(["']\s*\))/; // $('id')
 
 export function renderPrompt(template: string, inputs: RenderInputs): string {
   return template.replace(EXPR, (whole, expr: string) => {
@@ -44,16 +62,28 @@ export interface PromptRefs {
 export function promptRefs(template: string): PromptRefs {
   const nodes = new Set<string>();
   let usesJson = false;
-  const re = /\{\{\s*(.*?)\s*\}\}/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(template)) !== null) {
+  for (const m of template.matchAll(EXPR)) {
     const expr = m[1]!.trim();
     if (/^\$json(?:[.[]|$)/.test(expr)) usesJson = true;
-    const nm =
-      /^\$node\[["']([^"']+)["']\]/.exec(expr) ?? /^\$\(\s*["']([^"']+)["']\s*\)/.exec(expr);
-    if (nm) nodes.add(nm[1]!);
+    const nm = NODE_REF.exec(expr) ?? ALIAS_REF.exec(expr);
+    if (nm) nodes.add(nm[2]!); // group 2 = id
   }
   return { usesJson, nodes: [...nodes] };
+}
+
+/** Rename an upstream reference inside a prompt: every {{ $('old') }} /
+ * {{ $node["old"] }} becomes newId, keeping the quote style and any trailing
+ * path / .all() / .item. Only ids INSIDE {{ }} are touched — a literal $('x')
+ * in prose stays as-is. Reuses NODE_REF/ALIAS_REF so it can never drift from how
+ * promptRefs/validate recognise a reference. */
+export function rewriteRefs(template: string, oldId: string, newId: string): string {
+  const swap = (m: string, pre: string, id: string, suf: string) =>
+    id === oldId ? pre + newId + suf : m;
+  return template.replace(EXPR, (whole: string, raw: string) => {
+    const expr = raw.trim();
+    const out = expr.replace(NODE_REF, swap).replace(ALIAS_REF, swap);
+    return out === expr ? whole : `{{ ${out} }}`;
+  });
 }
 
 /** The item paired to `index` (clamped to the upstream's last item). */
@@ -66,7 +96,7 @@ function resolveExpr(expr: string, inputs: RenderInputs): string | undefined {
   const idx = inputs.index ?? 0;
 
   // $json[.path | [i] | [*]] — the current primary item
-  let m = /^\$json\b([.[].*)?$/.exec(expr);
+  const m = /^\$json\b([.[].*)?$/.exec(expr);
   if (m) {
     if (!inputs.primary) return undefined;
     const cur = paired(inputs.items[inputs.primary], idx);
@@ -74,19 +104,20 @@ function resolveExpr(expr: string, inputs: RenderInputs): string | undefined {
   }
 
   // $node["id"] / $('id'), optionally .all() or .item, then a path
-  m =
-    /^\$node\[["']([^"']+)["']\](.*)$/.exec(expr) ??
-    /^\$\(\s*["']([^"']+)["']\s*\)(.*)$/.exec(expr);
-  if (m) {
-    const id = m[1]!;
-    const rest = m[2] ?? "";
+  const nm = NODE_REF.exec(expr) ?? ALIAS_REF.exec(expr);
+  if (nm) {
+    const id = nm[2]!;
+    const rest = expr.slice(nm[0]!.length);
     const its = inputs.items[id];
     if (its === undefined) return undefined;
     const allM = /^\.all\(\)(.*)$/.exec(rest);
     if (allM) return selectVal(its.map((i) => i.json), allM[1]); // all items as an array
     const itemM = /^\.item\b(.*)$/.exec(rest);
     const path = itemM ? itemM[1] : rest;
-    const cur = paired(its, idx);
+    // the paired item of OTHER upstreams follows the current item's lineage
+    // (pairedIndex); a self-reference ($('primary')) is just the current item.
+    const refIdx = id === inputs.primary ? idx : inputs.pairedIndex ?? idx;
+    const cur = paired(its, refIdx);
     return cur === undefined ? undefined : selectVal(cur.json, path);
   }
   return undefined;

@@ -78,6 +78,9 @@ export function validate(flow: Flow): ValidationError[] {
     if ((node.type === "splitOut" || node.type === "aggregate") && ups.length !== 1) {
       errors.push({ node: id, message: `${node.type} needs exactly 1 input, got ${ups.length}` });
     }
+    if (node.type === "input" && ups.length > 0) {
+      errors.push({ node: id, message: `input is a trigger — it must not have a 'from' (got ${ups.length})` });
+    }
   }
 
   // cycle detection (topoOrder throws on a cycle)
