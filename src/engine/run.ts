@@ -14,6 +14,7 @@ import { CacheStore, computeKeys, volatileSet } from "./cache.js";
 import { cmdToArgv, resolveProfile } from "./profiles.js";
 import { renderPrompt } from "./render.js";
 import { runSubprocess } from "./proc.js";
+import { extractJson, schemaErrors, correctionNote } from "./schema.js";
 import { nodeDisposition, planRun, type PlanDeps, type RunPlan } from "./plan.js";
 import type { Flow, NodeResult, Item, MergeMode } from "./types.js";
 import { textItem, itemsText } from "./types.js";
@@ -308,7 +309,35 @@ export class Runner {
             if (res.code !== 0) {
               return this.fail(id, res.stderr || `exit ${res.code}`, isAuthError(res.stderr));
             }
-            output.push(textItem(res.stdout, i));
+            if (node.schema) {
+              // C4: extract JSON → validate → one corrective retry → fail.
+              let parsed: unknown;
+              let errs: string[] = [];
+              try {
+                parsed = extractJson(res.stdout);
+                errs = schemaErrors(parsed, node.schema);
+              } catch (e) {
+                errs = [e instanceof Error ? e.message : String(e)];
+              }
+              if (errs.length) {
+                const retry = await runSubprocess(cmdToArgv(profile.cmd), rendered + correctionNote(errs), {
+                  timeoutMs: this.opts.timeoutMs,
+                  cwd: this.baseDir,
+                });
+                if (retry.timedOut) return this.fail(id, "timed out");
+                if (retry.code !== 0) return this.fail(id, retry.stderr || `exit ${retry.code}`, isAuthError(retry.stderr));
+                try {
+                  parsed = extractJson(retry.stdout);
+                  errs = schemaErrors(parsed, node.schema);
+                } catch (e) {
+                  errs = [e instanceof Error ? e.message : String(e)];
+                }
+                if (errs.length) return this.fail(id, `schema mismatch after retry: ${errs.join("; ")}`);
+              }
+              output.push({ json: parsed, pairedItem: i }); // structured output
+            } else {
+              output.push(textItem(res.stdout, i));
+            }
           }
         }
       }

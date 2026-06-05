@@ -35,6 +35,11 @@ export type MergeMode = "append" | "byPosition" | "byKey";
 export type CmdMode = "once" | "perItem";
 /** write 成品 file mode. */
 export type WriteMode = "overwrite" | "append";
+/** ai structured-output schema (C4): a minimal field → type map. The model's
+ * output is parsed as JSON and each declared field is checked; extra fields are
+ * allowed. `array`/`object` check the container only (shallow, by design). */
+export type SchemaType = "string" | "number" | "boolean" | "array" | "object";
+export type SchemaSpec = Record<string, SchemaType>;
 
 export interface ProfileSpec {
   /** Command template for the local CLI model, e.g. 'claude -p'. */
@@ -68,6 +73,10 @@ export interface FlowNode {
   key?: string;
   /** write: output file path (relative to cwd). Supports {{date}} / {{datetime}}. */
   path?: string;
+  /** ai: declared structured-output schema (C4). When set, the model output is
+   * parsed as JSON and validated; a mismatch triggers one corrective retry, then
+   * fails. The node's output item becomes the parsed object. */
+  schema?: SchemaSpec;
   /** input: declared parameters (name → spec with optional default). Supplied at
    * run time via --input / --input-file; one set → 1 seed item, many → batch. */
   params?: Record<string, ParamSpec>;

@@ -264,4 +264,58 @@ describe("web server", () => {
       close();
     }
   });
+
+  // C4: an ai step with a `schema` parses + validates the model output and emits a
+  // STRUCTURED item (downstream reads its fields). Offline via a fake model
+  // profile (echo prints canned JSON — idea.md G2), so no real `claude` needed.
+  it("schema: structured ai output flows to downstream fields (offline, fake model)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "chain-web-schema-"));
+    const { base, close } = await listen(dir);
+    const flow = join(dir, "s.yaml");
+    writeFileSync(
+      flow,
+      [
+        `profiles:`,
+        `  default: { cmd: 'echo {"text":"hi-structured"}' }`,
+        `steps:`,
+        `  gen:`,
+        `    type: ai`,
+        `    prompt: 'make json'`,
+        `    schema: { text: string }`,
+        `  use:`,
+        `    type: assemble`,
+        `    from: gen`,
+        `    prompt: '{{ $json.text }}'`,
+        ``,
+      ].join("\n"),
+    );
+    try {
+      const lines = (await (await post(base, "/api/run", { path: flow })).text())
+        .trim().split("\n").map((l) => JSON.parse(l) as any);
+      const use = lines.find((r) => r.id === "use");
+      expect(use.status).toBe("ran");
+      expect(use.output).toContain("hi-structured"); // {{ $json.text }} resolved → structured
+    } finally {
+      close();
+    }
+  });
+
+  it("schema: a persistent mismatch fails the step after one retry (offline)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "chain-web-schema2-"));
+    const { base, close } = await listen(dir);
+    const flow = join(dir, "s.yaml");
+    writeFileSync(
+      flow,
+      [`profiles:`, `  default: { cmd: 'echo not-json' }`, `steps:`,
+       `  gen:`, `    type: ai`, `    prompt: 'x'`, `    schema: { text: string }`, ``].join("\n"),
+    );
+    try {
+      const gen = (await (await post(base, "/api/run", { path: flow })).text())
+        .trim().split("\n").map((l) => JSON.parse(l) as any).find((r) => r.id === "gen");
+      expect(gen.status).toBe("failed");
+      expect(String(gen.error).toLowerCase()).toMatch(/json|schema/);
+    } finally {
+      close();
+    }
+  });
 });

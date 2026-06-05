@@ -50,6 +50,9 @@ export function parseFlow(yamlText: string): Flow {
     if (spec.params && typeof spec.params === "object") {
       node.params = spec.params as FlowNode["params"];
     }
+    if (spec.schema && typeof spec.schema === "object") {
+      node.schema = spec.schema as FlowNode["schema"];
+    }
     steps[id] = node;
   }
 
