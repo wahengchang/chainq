@@ -15,6 +15,9 @@ test-results/
 playwright-report/
 playwright/.cache/
 
+# CI test reports (JUnit XML)
+reports/
+
 # local dev workspace for chain ui
 playground/
 
