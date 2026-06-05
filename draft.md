@@ -1,148 +1,141 @@
-# chain — 編輯器與 CLI 盤點（draft · 討論用）
+# chain — 能力與缺口圖（Capability & Gap Map）
 
-> 目的：把「目前有哪些頁面、UI 有哪些模組、CLI 有哪些指令」攤平給人看清楚。
-> 架構可調整。本檔只描述**現況**＋標出缺口，不是最終設計。
+> 基於統一圖例的兩部分狀態文檔:**第一部=模組盤點(表格)**、**第二部=狀態架構樹**。對代碼核實,改完即更新。
+> 統一圖例:✅ 已完成 · 🟡 進行中(契約「X 齊／Y 待接」)· ❌ 未完成 · ⛔ 不做(寫理由)· ⚠️ 風險。
+> **一句話差距**:引擎 / CLI 100% 完成;**缺口全集中在「網頁畫布 UI 接線」**——後端端點多半已建+測,只差前端接上去(其中 `input` 節點在 web 完全用不了,是最緊的洞)。
+> 三層分工:現況層=本檔 · 決策層=`docs/design/` + design doc · 交接=`HANDOFF.md`。
 
 ---
 
-## 1. 頁面清單（repo 裡所有 HTML 頁）
+# 第一部 — 模組盤點
 
-目標是**唯一編輯器**：只有 `src/web/app.html` 該留，其餘都是臨時/文件頁。
-
-| 頁面 | 路徑 | 用途 / 功能 | 是產品? | 狀態 |
+| 區 | 模組 | 功能 | 錨點(實作/測試) | 完成度 |
 |---|---|---|---|---|
-| **編輯器（唯一）** | `src/web/app.html` | 視覺化編輯 + 跑流程；`chain ui` 開啟 | ✅ 是 | **保留** |
-| E2E 視覺化器 | `e2e-viz.html` | 唯讀展示 6 步快取行為；自帶一套畫圖程式（與編輯器重複） | ❌ 測試/展示 | 建議刪* |
-| fan-in 展示 | `fan-in-viz.html` | 唯讀展示 fan-in 拓樸（上輪臨時做的） | ❌ 否 | 建議刪 |
-| 設計線稿 | `docs/iteration-pane-wireframe.html` | 早期手刻 UI 線稿，`design.md` 引用 | ❌ 文件 | 文件用，可留 |
+| 引擎 | types · dag | 資料模型(Item·7型別)· 拓樸/環 | `types.ts`·`dag.ts` / dag.test×6 | ✅ |
+| 引擎 | run | items 逐項 · 集合運算子 · loop | `run.ts` / run×10·partial×4 | ✅ |
+| 引擎 | render | `$json`/`$('id')` 取值 · rewriteRefs · paired-item(多跳 lineage) | `render.ts` / render×17 | ✅ |
+| 引擎 | validate | 接線/環檢查 · 壞不落地安全網 | `validate.ts` / validate×7 | ✅ |
+| 引擎 | cache | Merkle 快取 · rename 保 cache | `cache.ts` / cache×10 | ✅ |
+| 引擎 | rename · node | 改 key+下游連動 · nodeStarter · id 白名單 | `rename.ts`·`node.ts` / rename×13·node×6 | ✅ |
+| 引擎 | plan · lock | 預跑 · FlowLock(跨 process) | `plan.ts`·`lock.ts` / plan×6·lock×2 | 🟡 lock 已建/未接線 ⚠️ |
+| CLI | init·new·ls·validate·ui·run | 鷹架·檢視·靜態檢查·開編輯器·跑鏈(+6 旗標·`--input`/`--input-file`) | `src/cli/index.ts` / e2eCli 15檔·~40測 | ✅ |
+| 網頁 | server.ts | 17 API 端點 + /ui 靜態 · per-flow mutex · editFlow 只擋新引入錯 | `server.ts` / server.test×2 | 🟡 端點齊／**input 未傳**(↓) |
+| 網頁 | 編輯器 A 流程選擇 | 選資料夾·列·新建 | `app.js` / `/api/list`(非遞迴)·`/api/create` | ✅ |
+| 網頁 | 編輯器 B 頂列 | raw 切換·Run all·fresh | `app.js` / `/api/run` | ✅ |
+| 網頁 | 編輯器 C 畫布 | DAG 渲染·加節點(型別)·形狀·×N | `app.js` renderGraph/typeChip / `/api/parse`·`/api/add-node` | 🟡 渲染/加✅(↓) |
+| 網頁 | 編輯器 D 面板 | INPUT/PROMPT/OUTPUT · rename | `app.js` selectNode / `/api/render`·`/api/rename` | 🟡 基本✅(↓) |
+| 網頁 | 編輯器 E 原始 YAML | 編輯整份·validate 後存 | `app.js` / `/api/read`·`/api/save` | ✅ |
+| 網頁 | 前端架構 | 原生 ES module · 零 build | `src/web/ui/app.js` + server /ui 路由 | 🟡 已模組化／`@ts-check`+拆檔待補 |
 
-\* `e2e-viz.html` 被 `e2e/browser/viz.spec.ts` + `playwright globalSetup` 綁住（目前**唯一**的瀏覽器測試）。
-  要刪它，得先把 UI 測試改成驅動真編輯器 `chain ui`，否則 UI 端就沒有自動化測試。
+> 凡 🟡/❌ 開子表拆細項 ↓
 
----
+### 子表:`input` 節點在 web 不可用（⚠️ 最緊,P1）
 
-## 2. 唯一編輯器（app.html）的 UI 模組
-
-`app.html` 是單頁、三個狀態（state）。每個模組對應到 `server.ts` 的一個 API，後端重用同一個 engine。
-
-| # | 模組 | 位置 | 功能 | 後端 API | 完成度 |
-|---|---|---|---|---|---|
-| A | 流程選擇 | `#create` | 選資料夾、列出 .yaml、新建流程 | `/api/list` `/api/create` | ✅ |
-| B | 頂列工具 | `.bar` | ← 返回、路徑、`{ } raw` 切換、profile pill、`▷ Run all`、`↻ fresh` | `/api/run` | ✅ |
-| C | 畫布 canvas | `#graph` | 真實 DAG 渲染（依深度分欄 + 連線顯示 fan-out/fan-in）、點節點開面板、每節點 `▷/↻` 跑、`+ add ai step` | `/api/parse` `/api/run-node` | 🟡 渲染✅ / 編輯弱 |
-| D | 節點面板 | `#modal`（3 欄） | **INPUT**：from 連線 + 各上游輸出　**PROMPT**：模板 + 代入後即時預覽　**OUTPUT**：狀態/結果。按鈕：Run to here / re-run / Save / delete / close | `/api/render` `/api/set` `/api/set-from` `/api/delete-node` `/api/run-node` | ✅ |
-| E | 原始 YAML | `#rawView` | 直接編輯整份 YAML、Save（validate 後才寫） | `/api/read` `/api/save` | ✅ |
-
-### 模組 C（畫布）細項功能 — 缺口在這
-
-| 功能 | 說明 | 完成度 |
-|---|---|---|
-| 渲染真實 DAG + 連線 | 分欄 + 曲線連線，看得到 fan-in | ✅ 上輪剛補 |
-| 點節點 → 開面板 | 進模組 D 編輯 | ✅ |
-| 每節點 run-to-here / re-run | 卡片上的 `▷` `↻` | ✅ |
-| 新增節點 | `+add` 型別選單 → `/api/add-node`（engine `nodeStarter` 單一來源），可加 6 型別 | ✅ 改好 |
-| 刪節點 | 在面板 delete（會引入懸空 ref 才擋） | ✅ |
-| **認得 splitOut/aggregate/merge** | 畫布專屬形狀（accent chip + 左邊框）；render 預覽仍只給 ai | ✅ 形狀做好 / 🟡 預覽待補 |
-| **items 數 badge（×N）** | 節點跑出 N 個 item 時角標 `×N`（從 run 串流的 count） | ✅ |
-| **節點改名**（inline rename） | 面板標題 id 可編輯 → `/api/rename`，key + 下游 from + prompt `$('id')` 連動、cache 保留 | ✅ |
-| **拖拉連線**（drag-to-connect） | 後端 `/api/connect`（JSON 陣列、保序）✅ 已建+測；**畫布拖拉手勢 UI 未接** | 🟡 後端齊 / ❌ UI |
-| **記住節點位置**（layout sidecar） | 後端 `/api/layout`（`.chain/layout/<flow>.json` per-flow）✅ 已建+測；**畫布絕對定位+拖曳 UI 未接** | 🟡 後端齊 / ❌ UI |
-| **面板逐項顯示** | 後端 `/api/items`（每節點 input/output 的 `Item[]`）✅ 已建+測；**面板 UI 未接** | 🟡 後端齊 / ❌ UI |
-| **型別專屬面板編輯器** | splitOut(field)/aggregate(field)/merge(mode,key) 各自欄位;`saveNode` 仍對非 cmd 寫 prompt | ❌ 缺 |
-| 前端架構 | inline `<script>` → **served ES module** `src/web/ui/app.js`（脫離 HTML blob,server 靜態路由）| ✅ 搬好 / 🟡 `// @ts-check`+拆 canvas/panel 多檔待補 |
-| 離線開關（fake/real profile） | 設計已鎖「一律真實 `claude -p`」 | ⛔ 作廢（不做） |
-
----
-
-## 3. CLI 指令清單 + 目前狀態
-
-> 更新（2026-06-04，對代碼核實）：items 模型 + Split Out/Aggregate/Merge + cmd `perItem` **引擎全做完**（`run.ts`/`validate.ts` 實作齊、`e2eCli/scenarios/` 各情境有測、CLI 顯示 `(N items)`、typecheck 綠）。**指令層與引擎已無缺口；缺口整個搬到 UI**——見 §2 模組 C：`app.html` 只認得 ai/cmd，不畫 items 數、不認 splitOut/aggregate/merge。
-> ⚠️ 此批引擎工作**未 commit**（`src/engine/run.ts`、`types.ts` 已改；`e2eCli/`、`examples/fan-in-merge.yaml` 未追蹤）。
-
-### 3a. 指令（都已完成 ✅）
-
-| 指令 | 功能 | 旗標 | 完成度 |
+| 細項 | 說明 | 錨點 | 完成度 |
 |---|---|---|---|
-| `chain init [dir]` | 鷹架新專案（`claude -p` profile）+ .gitignore + input.txt | `--force` | ✅ |
-| `chain new <name>` | 在現有專案再加一條流程（2 節點起手 yaml） | — | ✅ |
-| `chain ui [flow.yaml]` | 開編輯器；給檔名就直接進該流程 | — | ✅ |
-| `chain ls [dir]` | 列出目錄下所有流程 yaml | — | ✅ |
-| `chain validate <flow>` | 跑前靜態檢查（DAG/環/profile/prompt 引用必接線），不呼叫模型 | — | ✅ |
-| `chain run <flow>` | 跑整條鏈，重用快取 | — | ✅ |
-| `  ` ↳ `--fresh` | 忽略快取，全部重跑 | | ✅ |
-| `  ` ↳ `--from <node>` | 強制重跑該節點 + 所有下游 | | ✅ |
-| `  ` ↳ `--to <node>` | 只跑到該節點（上游用快取）= n8n run-to-here | | ✅ |
-| `  ` ↳ `--steps <n>` | 只跑前 N 個節點 | | ✅ |
-| `  ` ↳ `--pin <node>=<file>` | 把樣本釘成該節點輸出，trial 跑進 scratch（不動真輸出） | | ✅ |
-| `  ` ↳ `--profile <name>` | 覆蓋所有 ai 節點的 profile（換用 flow 裡定義的另一個本機模型） | | ✅ |
+| 引擎支援 input | trigger 發種子 item(params+runtime) | `run.ts:207` · cache 折 `{params,input}` `cache.ts:72` | ✅ |
+| CLI 餵 input | `--input` / `--input-file` | `src/cli/index.ts` | ✅ |
+| **web 傳 input** | `/api/run(-node)` 把 runtime input 傳給 Runner | `server.ts:364` 建 Runner **沒帶 input** | ❌ |
+| **面板填參數** | input 節點的 params 表單 | 無 | ❌ |
+| ⚠️ 靜默空輸入風險 | web 跑 input 節點 → `[{}]` 只有預設值,還快取成「✓ ran」 | `run.ts:213` | ⚠️ 違反「可信來自可觀察」 |
 
-### 3b. 節點型別 — 目前狀態
+### 子表:畫布 C / 面板 D 缺口（後端齊,只差 UI 接線）
 
-| 型別 | 作用 | 完成度 |
-|---|---|---|
-| `ai` | 對每個輸入 item 各跑一次模型（items 模型逐項） | ✅ |
-| `cmd` | 跑 shell 指令；`mode: once`(預設) / `perItem`(逐項跑、stdin 餵 item) | ✅ |
-| `assemble` | 純模板組裝資料、不呼叫模型 | ✅（保留，不被 Aggregate 取代） |
-| `splitOut` | 一個含陣列的 item → 多個 item（fan-out）；可選 `field` | ✅ |
-| `aggregate` | 多個 item → 一個含陣列的 item（fan-in）；空輸入吐 `[]` | ✅ |
-| `merge` | 兩條輸入流合併：`append` / `byPosition` / `byKey`(需 `key`) | ✅ |
+| 細項 | 後端錨點(已建+測) | UI | 完成度 |
+|---|---|---|---|
+| 逐項面板 item[0..N] | `/api/items`(每節點 in/out 的 `Item[]`) | 面板未列出 | 🟡 後端齊／UI 待接 |
+| 拖拉連線 drag-to-connect | `/api/connect`(JSON 陣列、保序) | 只能打逗號 | 🟡 後端齊／UI 待接 |
+| 記住節點位置 | `/api/layout`(`.chain/layout/<flow>.json` per-flow) | 畫布仍 flex 自動排版 | 🟡 後端齊／UI(絕對定位)待接 |
+| 型別專屬編輯器 | (validate 已認 field/mode/key) | `saveNode` 對非 cmd 一律寫 prompt | ❌ |
+| render 預覽非 ai 型別 | `/api/render` | 只給 ai | 🟡 |
 
-### 3c. 編排情境 — 目前狀態
+### 子表:paired-item 跨多跳 lineage（✅ 已完成,P-LINEAGE · `feat/lineage`）
 
-| 情境 | 支援? | 備註 |
-|---|---|---|
-| 線性接力 a→b→c | ✅ | |
-| 分岔 fan-out（一個上游餵多個下游） | ✅ | |
-| 多輸入 fan-in（`from:[a,b]` + `$('id')`） | ✅ | 之後會遷成 **Merge 節點**（T7），現有 fan-in.yaml 屆時改寫 |
-| compose 合併（`assemble`） | ✅ | |
-| **items 資料模型**（線=items 串、節點逐項跑） | ✅ | 輸出 `Item[]`、逐項執行、向後相容、CLI 顯示 `(N items)` |
-| **loop / 對清單每項各跑** | ✅ **通了** | `array → splitOut → cmd perItem → aggregate`，端到端離線 E2E 過 |
-| 分批 / 限流（Loop Over Items） | ❌ | 延後（T9） |
-
-**一句話**：指令齊、items 模型齊、**loop 通了**（splitOut/aggregate/merge/cmd perItem 都做完，14 個離線 CLI E2E 全綠）。剩 Loop Over Items（分批）延後。詳見 `docs/design/2026-06-04-loop-and-scenarios.md`。
+| 細項 | 說明 | 錨點 | 完成度 |
+|---|---|---|---|
+| single-hop 配對 | `$('id').item` 對「primary 的直接輸入 / 1:1 祖先鏈」正確 | `render.ts` · `pairing.e2e.ts` | ✅ |
+| 多跳 lineage walk | 跨**兩層 fan-out** 正確;跨 `aggregate` 收斂到第一來源列(折疊後唯一有定義的答案) | `run.ts` `lineageOf()` · `render.ts` `lineage` · `render.test.ts`+3 · `pairing.e2e.ts`+2 | ✅ |
+| 已知邊界 | 「非 primary 脊椎」的引用(如 `from:[A,B]` 的次要輸入 B)仍走單跳 fallback | `render.ts` `resolveExpr` 註解 | ⚠️ 超出 P-LINEAGE 目標範圍 |
 
 ---
 
-## 4. 架構草圖（可調整）
+# 優先級（下一步順序）
+
+| P | 工作 | 為什麼 | 依賴 |
+|---|---|---|---|
+| **P1-a** | **input 在 web 可用** + 修靜默空輸入風險 | 閉合剛建的 input 節點(現在 web 用不了)、修「✓ ran 卻跑空」的可信風險 | 後端要改:`/api/run(-node)` 傳 input + 面板表單 |
+| **P1-b** | **逐項面板**(`/api/items`) | 「編輯器看得見 items 模型」的另一半(現只見 ×N、不見內容);**P1-a 後才有真 input 餵進來、逐項才有料可看** | 後端齊 |
+| **P2-a** | **型別專屬編輯器**(field/mode/key;修 saveNode) | splitOut/merge 加得出來但設定不了 | 後端齊 |
+| **P2-b** | **拖拉連線**(`/api/connect`) | 編輯手感大躍進(像 n8n) | 後端齊 |
+| **P3** | 位置持久化(`/api/layout`)· 前端 `@ts-check`+拆檔 · render 預覽非 ai | 體驗/維護性,非核心 | — |
+| ~~P-LINEAGE~~ ✅ | paired-item 多跳 lineage walk(已升級 single-hop) | **已完成(`feat/lineage`)**:跨兩層 fan-out 正確、跨 aggregate 收斂第一來源列 | 引擎 |
+| **延後/風險** | FlowLock 接線(跨 process)· Loop Over Items · `/api/list` 遞迴 | ⚠️/低頻 | — |
+
+> **決策現況**:畫布架構已走「**原生 vanilla ES module**」(UI 已抽成 `ui/app.js`),**React Flow 未採用**。HANDOFF_2 把它列為「未決」,但實作已落地;P2 拖拉/位置若做起來太痛再議。
+
+---
+
+# 第二部 — 狀態架構樹
+
+依賴方向:**②CLI 與 ③網頁 都建在 ①引擎 之上,永不寫兩套**。
+
+### ① 共用核心引擎　src/engine　✅（14 模組 · 7 型別 · 78 單元測）
 
 ```
-   一份 YAML（唯一真相）
-          │
-     src/engine（唯一引擎：parse · Merkle 快取 · run · validate）
-          │
-   ┌──────┴───────┐
-  CLI            src/web（server.ts 薄 API + app.html 單頁）
- chain run/...    chain ui → 模組 A~E
+                    ① 核心引擎 src/engine  ✅   唯一真相
+                              │  （②CLI 與 ③網頁 都呼叫它）
+        ┌──────────────┬──────┴───────┬───────────────┐
+        ▼              ▼              ▼               ▼
+    資料模型        執行引擎        快取·驗證        結構編輯
+        │              │              │               │
+        ▼              ▼              ▼               ▼
+    types · dag     run · render   cache · validate  rename · node
+    7型別·拓樸      items·loop·    Merkle·壞不落地    改key連動·
+    ✅ dag×6        $json·rewrite  ✅ cache×10·       id白名單
+                    ✅ run×10·     validate×7        ✅ rename×13·
+                    render×17                         node×6
+                      （＋ plan×6 · lock×2 ⚠️ 未接線）
+   註1:input 節點型別 ✅,但只有 CLI 餵得了參數,web 餵不了(見 ③)
+   註2:render paired-item 多跳 lineage 已完成(P-LINEAGE · feat/lineage):跨兩層
+        fan-out 正確、跨 aggregate 收斂到第一來源列;僅「非 primary 脊椎」引用仍走單跳
 ```
 
-- **一個 engine、兩個呼叫端（CLI / UI）**，永不寫兩套邏輯。
-- 結構改動（連線/改名/刪）都走「保留註解寫回 YAML + validate + 壞不落地」。
-- 可調整點：模組 C 是否引入 React Flow（design T10 原規劃）還是延用目前 vanilla 畫布；
-  layout 是否落 sidecar。（無 fake/offline 模式：產品一律真實 `claude -p`）
+### ② CLI　src/cli　✅（6 指令 · 15 e2e 檔 · ~40 測）
 
----
+```
+                      ② CLI src/cli  ✅
+                  （全部下沉呼叫 → ① 核心引擎）
+                              │
+          ┌───────────────────┼───────────────────┐
+          ▼                   ▼                   ▼
+      鷹架·檢視            開編輯器               跑鏈
+          ▼                   ▼                   ▼
+    init·new·ls·          chain ui            chain run
+    validate              → 開 ③ 網頁          重用 Merkle 快取
+    ✅                    ✅                   ＋--input ✅·其他旗標✅
+              測試:e2eCli/scenarios 15檔·~40測（含 input/pairing;真 claude gated）✅
+```
 
-## 5. 待補一覽（缺口已全在 UI / 編輯器畫布）
+### ③ 網頁　src/web　🟡（17 API · 5 模組 · 3 瀏覽器 e2e）
 
-**A. items 模型呈現（引擎已就緒，UI 空白）**
-1. items 數 badge（×N）：節點/連線顯示 item 數
-2. 認得 splitOut/aggregate/merge：專用形狀 + `+add` 能選型別 + 連線/寫回 YAML
-3. 面板逐項顯示 `item[0..N]` 的輸入/輸出
-
-**B. 畫布編輯手感**
-4. 拖拉連線 drag-to-connect → 寫 `from:`
-5. 節點 inline rename（key + 下游連動）
-6. layout.json sidecar（記位置，不污染 flow YAML）
-
-**C. 測試與清理**
-7. UI 自動測試改去驅動真編輯器 `chain ui`（前提：先處理 e2e-viz 那套）
-8. 臨時頁刪除（e2e-viz / fan-in-viz + 對應 scripts/指令）
-
----
-
-## 待你決定 / 討論
-
-- [x] ~~CLI/引擎缺口~~ → 已核實：引擎全做完，缺口整個在 UI（已更新本檔）
-- [ ] 架構：vanilla 畫布繼續疊，還是換 React Flow？（會決定 A/B 的實作量；本次 office-hours Phase 4 處理）
-- [ ] 頁面：臨時頁（e2e-viz / fan-in-viz）刪不刪？`e2e-viz` 那套測試改驅動真編輯器還是先凍結？
-- [ ] 未 commit 的引擎工作要先 commit 再開 UI 分支，還是一起帶？
+```
+                      ③ 網頁 src/web  🟡
+                （server 薄 API → ① 核心引擎,永不寫兩套）
+                              │
+              ┌───────────────┴────────────────┐
+              ▼                                ▼
+          server.ts  🟡                    編輯器 app.html / ui/app.js
+        17 API + /ui 靜態                 （原生 ES module · 零 build）
+        ✅ rename/add/connect/                 │
+           items/layout/parse…       ┌─────────┼──────────┬──────────┐
+        ❌ /api/run 不傳 input        ▼         ▼          ▼          ▼
+                                  A/B/E     C 畫布      D 面板    input 參數
+                                  ✅        ✅渲染·加節點 ✅ rename  ❌ 表單
+                                            ·形狀·×N      🟡逐項      （P1-a）
+                                            🟡拖拉/位置   (→items)
+                                            (→connect/    ❌型別編輯器
+                                             layout)
+              前端 🟡 @ts-check+拆檔（現 window bridge）
+              測試:editor.spec ✅ + run/run-real（真 claude, gated）✅
+              🟡 = 後端端點已建+測,只差畫布 UI 接線；❌ input 連後端 run 都還沒傳
+```

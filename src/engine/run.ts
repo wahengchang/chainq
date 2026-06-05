@@ -269,9 +269,12 @@ export class Runner {
         for (const u of ups) itemsByUp[u] = itemsOf(u);
         const primaryItems = primary ? itemsByUp[primary]! : [];
         for (let i = 0; i < runCount; i++) {
-          // cross-refs to other upstreams pair via this item's lineage, not loop index
+          // cross-refs to other upstreams pair via this item's lineage, not loop index.
+          // pairedIndex = single-hop (back-compat / off-spine fallback); lineage =
+          // multi-hop walk so $('ancestor') is correct through chained fan-outs.
           const pairedIndex = primaryItems[i]?.pairedItem ?? i;
-          const rendered = renderPrompt(node.prompt ?? "", { items: itemsByUp, primary, index: i, pairedIndex });
+          const lineage = this.lineageOf(primary, i, ctx);
+          const rendered = renderPrompt(node.prompt ?? "", { items: itemsByUp, primary, index: i, pairedIndex, lineage });
           if (node.type === "assemble") {
             output.push(textItem(rendered, i)); // pure data assembly, no external call
           } else {
@@ -297,6 +300,40 @@ export class Runner {
       // e.g. ENOENT (command not found) — surfaced verbatim.
       return this.fail(id, err instanceof Error ? err.message : String(err));
     }
+  }
+
+  /**
+   * Multi-hop paired-item lineage for the current primary item at loop index `i`.
+   * Walks the primary-input spine — each node's first existing upstream (`from[0]`)
+   * — from `primaryId` up to the trigger, composing `pairedItem` at every hop, and
+   * records the source item index in each ancestor it passes through.
+   *
+   * This generalizes the single-hop `pairedItem`: a reference like $('seed') two or
+   * more fan-outs downstream resolves to the right originating row, instead of
+   * indexing the wrong node with a one-hop index. Across an aggregate (many items →
+   * one) the lineage collapses to the FIRST source row — the only defined answer
+   * once the 1:1 pairing is gone. render() reads this map to resolve $('ancestor').
+   *
+   * The DAG is acyclic (topoOrder would have thrown otherwise) so the spine
+   * terminates at a trigger; a hop guard is belt-and-suspenders only.
+   */
+  private lineageOf(primaryId: string | undefined, i: number, ctx: RunCtx): Record<string, number> {
+    const itemsOf = (u: string): Item[] => ctx.memo.get(u) ?? this.store.load(u);
+    const lineage: Record<string, number> = {};
+    let nodeId: string | undefined = primaryId;
+    let idx = i;
+    const guard = Object.keys(this.flow.steps).length + 1;
+    for (let hop = 0; nodeId && hop < guard; hop++) {
+      lineage[nodeId] = idx;
+      const items = itemsOf(nodeId);
+      if (items.length === 0) break;
+      const cur = items[Math.min(idx, items.length - 1)]!;
+      const parent = upstreamsOf(this.flow.steps[nodeId]!).filter((u) => this.flow.steps[u])[0];
+      if (!parent) break; // reached a trigger / root — spine ends
+      idx = cur.pairedItem ?? idx; // hop up: this item's source index in the parent
+      nodeId = parent;
+    }
+    return lineage;
   }
 
   private fail(id: string, error: string, authExpired = false): NodeResult {
