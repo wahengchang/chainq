@@ -20,6 +20,7 @@ import {
   Runner,
   FlowLock,
   parseVal,
+  validateRunInput,
   type NodeResult,
 } from "../engine/index.js";
 import { runInit } from "./init.js";
@@ -173,6 +174,14 @@ async function main(argv: string[]): Promise<number> {
   if (cmd === "validate") {
     console.error("\n✓ valid");
     return 0;
+  }
+
+  // runtime input contract (required / declared type) — same gate the web uses.
+  const inputErrors = validateRunInput(flow, flags.input);
+  if (inputErrors.length > 0) {
+    console.error(`\n${inputErrors.length} input error(s) — nothing ran:`);
+    for (const e of inputErrors) console.error(`  ✗ ${e.node}: ${e.message}`);
+    return 1;
   }
 
   const chainDir = join(baseDir, ".chain");

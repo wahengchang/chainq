@@ -32,6 +32,7 @@ import {
   nodeIdError,
   CacheStore,
   coerceInput,
+  validateRunInput,
   type Item,
   type NodeType,
 } from "../engine/index.js";
@@ -61,7 +62,12 @@ export function startWebServer(opts: WebOptions): void {
     const port = typeof addr === "object" && addr ? addr.port : 0;
     const url = `http://127.0.0.1:${port}/`;
     console.error(`chain ui → ${url}`);
-    if (process.platform === "darwin") spawn("open", [url], { stdio: "ignore" }).unref();
+    // Auto-open in the default browser, but NOT under automation: the e2e suite
+    // spawns `chain ui` once per test, and a real tab per run pollutes the user's
+    // browser with dead pages. CHAIN_NO_OPEN=1 suppresses it.
+    if (process.platform === "darwin" && !process.env.CHAIN_NO_OPEN) {
+      spawn("open", [url], { stdio: "ignore" }).unref();
+    }
   });
 }
 
@@ -375,6 +381,10 @@ async function streamRun(
   }
   const errors = validate(flow);
   if (errors.length) return json(res, 400, { errors });
+  // runtime input contract (required / declared type) — same gate the CLI uses,
+  // so the web and `chain run` reject the same input with the same message.
+  const inputErrors = validateRunInput(flow, input);
+  if (inputErrors.length) return json(res, 400, { errors: inputErrors });
 
   const baseDir = dirname(fp);
   res.writeHead(200, { "content-type": "application/x-ndjson" });

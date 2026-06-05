@@ -14,9 +14,19 @@
 // from declared params + run-time values (one set → 1 item; many sets → batch).
 export type NodeType = "ai" | "cmd" | "assemble" | "splitOut" | "aggregate" | "merge" | "input";
 
-/** A declared input parameter (n8n form field). */
+/** A declared input parameter (n8n form field). All fields optional, so existing
+ * flows (default-only) are unchanged. */
 export interface ParamSpec {
   default?: unknown;
+  /** Declared value type. When set, the web form draws the matching widget and
+   * the value is coerced to this type (bypassing the lenient JSON-or-string
+   * parseVal — so type:"string" keeps "42" a string). Absent → lenient. */
+  type?: "string" | "number" | "boolean";
+  /** When true, a run must supply this param (unless it has a default), else
+   * validateRunInput errors — identically on the CLI and the web. Absent →
+   * optional (the existing behavior). required + a default is a no-op (the
+   * default always satisfies it). */
+  required?: boolean;
 }
 
 /** Merge combine strategy (n8n Merge node). */

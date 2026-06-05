@@ -37,20 +37,32 @@ function renderParamsForm(n){
   if(!names.length)return '<span class="dim">no params — this input emits one empty item. Add params in { } raw.</span>';
   return '<div class="dim" style="margin-bottom:6px">runtime input — sent with each run, like CLI <code>--input</code> (not saved to the flow)</div>'
     +names.map(nm=>{
-      const def=params[nm]&&params[nm].default;
-      const cur=inputVals[nm]!=null?inputVals[nm]:(def!=null?def:"");
-      return '<div class="infield" style="cursor:default">'
-        +'<span class="intag">'+esc(nm)+'</span>'
-        +'<input class="paramin" data-param="'+esc(nm)+'" value="'+esc(cur)+'" '
-        +'oninput="setInputVal(this.dataset.param,this.value)" '
-        +'placeholder="'+(def!=null?esc(String(def)):'value')+'" '
-        +'style="width:100%;margin-top:4px;box-sizing:border-box"></div>';
+      const spec=params[nm]||{};const def=spec.default;const t=spec.type;
+      const req=spec.required?'<span class="g-failed" title="required"> *</span>':'';
+      const tcip=t?'<span class="dim" style="margin-left:6px;font-size:11px">'+esc(t)+'</span>':'';
+      const tag='<span class="intag">'+esc(nm)+'</span>'+req+tcip;
+      let field;
+      if(t==="boolean"){
+        const on=inputVals[nm]!=null?(inputVals[nm]===true||inputVals[nm]==="true"):(def===true);
+        field='<input type="checkbox" class="paramin" data-param="'+esc(nm)+'"'+(on?" checked":"")
+          +' onchange="setInputVal(this.dataset.param,this.checked)" style="margin-top:6px">';
+      }else{
+        const cur=inputVals[nm]!=null?inputVals[nm]:(def!=null?def:"");
+        field='<input class="paramin" type="'+(t==="number"?"number":"text")+'" data-param="'+esc(nm)+'" '
+          +'value="'+esc(cur)+'" oninput="setInputVal(this.dataset.param,this.value)" '
+          +'placeholder="'+(def!=null?esc(String(def)):(t||"value"))+'" '
+          +'style="width:100%;margin-top:4px;box-sizing:border-box">';
+      }
+      return '<div class="infield" style="cursor:default">'+tag+field+'</div>';
     }).join("");
 }
 // transitive upstream of a node (its input cone)
 function ancestors(id){const set=new Set();let stack=[...(nodes.find(n=>n.id===id)?.from||[])];
   while(stack.length){const c=stack.pop();if(set.has(c))continue;set.add(c);const n=nodes.find(x=>x.id===c);if(n)stack=stack.concat(n.from||[]);}return [...set];}
 function setRunningUI(ids){ids.forEach(id=>results[id]={status:"running"});renderGraph();}
+// a run rejected before it streams (e.g. a 400 from the input contract) must not
+// leave nodes stuck spinning — drop the "running" placeholders we optimistically set.
+function clearRunning(ids){ids.forEach(id=>{if(results[id]&&results[id].status==="running")delete results[id];});}
 
 async function boot(){const{data}=await api("/api/context");$("dir").value=data.cwd;if(data.initialFlow)return open(data.initialFlow);listFlows();}
 async function listFlows(){
@@ -233,17 +245,19 @@ function onNode(rec){
 async function runNode(force){
   if(!selected)return;
   $("pnOut").className="mbody dim";$("pnOut").textContent="running…";$("pnOutStatus").innerHTML='<span class="g-running">◌ running…</span>';
-  setRunningUI([selected,...ancestors(selected)]);
+  const ids=[selected,...ancestors(selected)];
+  setRunningUI(ids);
   const r=await streamRun("/api/run-node",{path:current,node:selected,profile:$("profile").value,fresh:!!force,input:collectInput()});
-  if(!r.ok){renderGraph();return setMsg("pnMsg","err",errs(r.data)||"run failed");}
+  if(!r.ok){clearRunning(ids);renderGraph();return setMsg("pnMsg","err",errs(r.data)||"run failed");}
 }
 // run-to-here straight from a node's ▷ button — runs inline, NO modal.
 // The result shows on the card itself (see renderGraph). Click the card body
 // (not ▷) if you want to open the editor panel.
 async function runTo(id,fresh){
-  setRunningUI([id,...ancestors(id)]);
+  const ids=[id,...ancestors(id)];
+  setRunningUI(ids);
   const r=await streamRun("/api/run-node",{path:current,node:id,profile:$("profile").value,fresh:!!fresh,input:collectInput()});
-  if(!r.ok){renderGraph();return setMsg("canvasMsg","err",errs(r.data)||"run failed");}
+  if(!r.ok){clearRunning(ids);renderGraph();return setMsg("canvasMsg","err",errs(r.data)||"run failed");}
 }
 // click a variable in INPUT → insert it into the prompt at the cursor (no typos)
 function insertVar(id,primary){

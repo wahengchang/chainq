@@ -34,4 +34,4 @@ export { FlowLock } from "./lock.js";
 export { renderPrompt, promptRefs, rewriteRefs, type PromptRefs } from "./render.js";
 export { renameNode } from "./rename.js";
 export { isValidNodeId, nodeIdError, nodeStarter } from "./node.js";
-export { parseVal, coerceParam, coerceInput } from "./input.js";
+export { parseVal, coerceParam, coerceInput, validateRunInput, staticParamErrors } from "./input.js";
