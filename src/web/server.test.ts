@@ -2,7 +2,7 @@
 // save — over real HTTP against a real temp project.
 
 import { describe, it, expect } from "vitest";
-import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AddressInfo } from "node:net";
@@ -218,6 +218,48 @@ describe("web server", () => {
       expect((await okOut(await run([{ name: "ada" }]))).output).toContain("ada-2");
       // valid: typed count coerces ("9" → 9)
       expect((await okOut(await run([{ name: "bob", count: "9" }]))).output).toContain("bob-9");
+    } finally {
+      close();
+    }
+  });
+
+  // Epic D: a `write` node writes the upstream's text to a real file when the
+  // chain runs. Offline: input → assemble → write needs no model.
+  it("write node writes the upstream content to a file (offline)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "chain-web-write-"));
+    const { base, close } = await listen(dir);
+    const flow = join(dir, "w.yaml");
+    writeFileSync(
+      flow,
+      [
+        "profiles:",
+        "  default: { cmd: 'claude -p' }",
+        "steps:",
+        "  seed:",
+        "    type: input",
+        "    params:",
+        "      msg: { default: hello-world }",
+        "  body:",
+        "    type: assemble",
+        "    from: seed",
+        "    prompt: '{{ $json.msg }}'",
+        "  out:",
+        "    type: write",
+        "    from: body",
+        "    path: result/{{date}}.txt",
+        "",
+      ].join("\n"),
+    );
+    try {
+      const res = await post(base, "/api/run", { path: flow });
+      expect(res.status).toBe(200);
+      await res.text(); // drain the NDJSON stream (write happens during the run)
+
+      // {{date}} expanded → find the written file under result/
+      const today = new Date().toISOString().slice(0, 10);
+      const written = join(dir, "result", `${today}.txt`);
+      expect(existsSync(written)).toBe(true);
+      expect(readFileSync(written, "utf8")).toContain("hello-world");
     } finally {
       close();
     }

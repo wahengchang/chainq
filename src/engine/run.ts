@@ -7,6 +7,8 @@
 //   rerunNode(N)        force-run N on materialized upstream   (n8n "re-run node")
 //   runChain()          run every node in topo order           (publish / chain run)
 
+import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { dirname, isAbsolute, resolve } from "node:path";
 import { ancestorsOf, descendantsOf, topoOrder, upstreamsOf } from "./dag.js";
 import { CacheStore, computeKeys, volatileSet } from "./cache.js";
 import { cmdToArgv, resolveProfile } from "./profiles.js";
@@ -14,7 +16,15 @@ import { renderPrompt } from "./render.js";
 import { runSubprocess } from "./proc.js";
 import { nodeDisposition, planRun, type PlanDeps, type RunPlan } from "./plan.js";
 import type { Flow, NodeResult, Item, MergeMode } from "./types.js";
-import { textItem } from "./types.js";
+import { textItem, itemsText } from "./types.js";
+
+/** Expand {{date}} (YYYY-MM-DD) and {{datetime}} (YYYY-MM-DD-HH-MM-SS) in a path. */
+function expandVars(s: string): string {
+  const d = new Date();
+  const date = d.toISOString().slice(0, 10);
+  const datetime = d.toISOString().slice(0, 19).replace(/[:T]/g, "-");
+  return s.replace(/\{\{\s*date\s*\}\}/g, date).replace(/\{\{\s*datetime\s*\}\}/g, datetime);
+}
 
 export interface RunOptions {
   /** .chain directory (next to the flow file). */
@@ -261,6 +271,17 @@ export class Runner {
           if (res.code !== 0) return this.fail(id, res.stderr || `exit ${res.code}`);
           output = [textItem(res.stdout)];
         }
+      } else if (node.type === "write") {
+        // 成品 node: write the primary upstream's items (as text) to a file.
+        // path supports {{date}}/{{datetime}}; mode overwrite (default) | append.
+        // Output is the written content (so it's visible + cacheable).
+        const content = itemsText(primary ? itemsOf(primary) : []);
+        const p = expandVars(node.path ?? "");
+        const target = isAbsolute(p) ? p : resolve(this.baseDir, p);
+        mkdirSync(dirname(target), { recursive: true });
+        if (node.mode === "append") appendFileSync(target, content + "\n");
+        else writeFileSync(target, content);
+        output = [textItem(content)];
       } else {
         const runCount = primary ? itemsOf(primary).length : 1; // root runs once
         output = [];

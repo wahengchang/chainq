@@ -133,6 +133,7 @@ async function handle(req: IncomingMessage, res: ServerResponse, opts: WebOption
       key: n.key ?? null, // merge byKey
       inputs: n.inputs ?? null, // cmd declared input files
       params: n.params ?? null, // input: declared params (the form fields the editor draws)
+      path: n.path ?? null, // write: output file path
     }));
     return json(res, 200, { nodes });
   }

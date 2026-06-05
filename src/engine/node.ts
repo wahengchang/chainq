@@ -46,5 +46,7 @@ export function nodeStarter(type: NodeType): Record<string, unknown> {
       return { type, mode: "append" };
     case "input":
       return { type, params: {} };
+    case "write":
+      return { type, path: "out/{{date}}.md", mode: "overwrite" };
   }
 }

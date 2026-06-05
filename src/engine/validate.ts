@@ -79,6 +79,10 @@ export function validate(flow: Flow): ValidationError[] {
     if ((node.type === "splitOut" || node.type === "aggregate") && ups.length !== 1) {
       errors.push({ node: id, message: `${node.type} needs exactly 1 input, got ${ups.length}` });
     }
+    if (node.type === "write") {
+      if (!node.path) errors.push({ node: id, message: `write step has no path` });
+      if (ups.length < 1) errors.push({ node: id, message: `write needs an input to write (set from:)` });
+    }
     if (node.type === "input") {
       if (ups.length > 0) {
         errors.push({ node: id, message: `input is a trigger — it must not have a 'from' (got ${ups.length})` });
