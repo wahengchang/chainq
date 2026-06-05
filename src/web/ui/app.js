@@ -340,6 +340,12 @@ function renderTypeFields(n){
       +'<select id="tfMode">'+opt(m,"overwrite")+opt(m,"append")+'</select>'
       +'<div class="dim" style="font-size:11px;margin-top:4px">writes the upstream\'s text to the file when this node runs</div>';
   }
+  if(n.type==="ai"){
+    return '<label>schema — structured output (optional, JSON field→type)</label>'
+      +'<textarea id="tfSchema" spellcheck="false" placeholder=\'{ "text": "string", "n": "number" }\' '
+      +'style="width:100%;height:54px;margin-top:4px;box-sizing:border-box;font:inherit">'+esc(n.schema?JSON.stringify(n.schema):"")+'</textarea>'
+      +'<div class="dim" style="font-size:11px;margin-top:4px">if set: output is parsed + validated as JSON; a mismatch retries once, then fails</div>';
+  }
   return "";
 }
 function onMergeMode(){const w=$("tfKeyWrap");if(w)w.classList.toggle("hidden",$("tfMode").value!=="byKey");}
@@ -407,7 +413,13 @@ async function saveNode(){
   // NEW validate error and get rejected, leaving mode unsaved.)
   const sets=[];
   if(n.type==="cmd"){sets.push(["run",$("pnPrompt").value]);if($("tfMode"))sets.push(["mode",$("tfMode").value]);}
-  else if(n.type==="ai"||n.type==="assemble"){sets.push(["prompt",$("pnPrompt").value]);}
+  else if(n.type==="assemble"){sets.push(["prompt",$("pnPrompt").value]);}
+  else if(n.type==="ai"){
+    sets.push(["prompt",$("pnPrompt").value]);
+    const sv=$("tfSchema")?$("tfSchema").value.trim():"";
+    if(sv){let obj;try{obj=JSON.parse(sv);}catch(e){return setMsg("pnMsg","err","schema is not valid JSON");}sets.push(["schema",obj]);}
+    else if(n.schema)sets.push(["schema",null]); // had a schema, now cleared → remove (parse drops null)
+  }
   else if(n.type==="splitOut"||n.type==="aggregate"){if($("tfField"))sets.push(["field",$("tfField").value]);}
   else if(n.type==="merge"){if($("tfKey"))sets.push(["key",$("tfKey").value]);if($("tfMode"))sets.push(["mode",$("tfMode").value]);}
   else if(n.type==="write"){if($("tfPath"))sets.push(["path",$("tfPath").value]);if($("tfMode"))sets.push(["mode",$("tfMode").value]);}

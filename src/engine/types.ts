@@ -12,6 +12,12 @@
 // (they see the whole input items array, not one item at a time) — the n8n model.
 // `input` is the trigger: it has no upstream and emits the flow's seed item(s)
 // from declared params + run-time values (one set → 1 item; many sets → batch).
+// Note: there is deliberately NO "loop" container type. idea.md envisioned a
+// container that runs a multi-step sub-flow per item, but the items model already
+// expresses that — splitOut (fan-out) → a chain of per-item ai/cmd/assemble steps
+// (each runs once per input item, paired by paired-item lineage) → aggregate
+// (fan-in). A separate Loop container would be a second way to do the same thing,
+// which violates "永不寫兩套". Loop is ⛔ by design (see idea-gap.md).
 export type NodeType = "ai" | "cmd" | "assemble" | "splitOut" | "aggregate" | "merge" | "input" | "write";
 
 /** A declared input parameter (n8n form field). All fields optional, so existing

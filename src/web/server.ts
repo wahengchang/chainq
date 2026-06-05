@@ -31,6 +31,7 @@ import {
   nodeStarter,
   nodeIdError,
   CacheStore,
+  FlowLock,
   coerceInput,
   validateRunInput,
   type Item,
@@ -134,6 +135,7 @@ async function handle(req: IncomingMessage, res: ServerResponse, opts: WebOption
       inputs: n.inputs ?? null, // cmd declared input files
       params: n.params ?? null, // input: declared params (the form fields the editor draws)
       path: n.path ?? null, // write: output file path
+      schema: n.schema ?? null, // ai: structured-output schema (C4)
     }));
     return json(res, 200, { nodes });
   }
@@ -388,6 +390,15 @@ async function streamRun(
   if (inputErrors.length) return json(res, 400, { errors: inputErrors });
 
   const baseDir = dirname(fp);
+  // cross-process single-writer: don't run if a `chain run` (or another `chain ui`)
+  // is already running this flow — they'd race on .chain/state.json. 409 before
+  // the stream starts; released in the finally below.
+  const lock = new FlowLock(join(baseDir, ".chain"));
+  try {
+    lock.acquire();
+  } catch (e) {
+    return json(res, 409, { errors: [{ node: "(lock)", message: msg(e) }] });
+  }
   res.writeHead(200, { "content-type": "application/x-ndjson" });
   const runner = new Runner(flow, {
     chainDir: join(baseDir, ".chain"),
@@ -414,6 +425,8 @@ async function streamRun(
     await run(runner);
   } catch (e) {
     res.write(JSON.stringify({ error: msg(e) }) + "\n");
+  } finally {
+    lock.release();
   }
   res.end();
 }

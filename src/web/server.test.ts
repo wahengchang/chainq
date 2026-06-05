@@ -2,7 +2,7 @@
 // save — over real HTTP against a real temp project.
 
 import { describe, it, expect } from "vitest";
-import { existsSync, mkdtempSync, writeFileSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, writeFileSync, readFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AddressInfo } from "node:net";
@@ -314,6 +314,25 @@ describe("web server", () => {
         .trim().split("\n").map((l) => JSON.parse(l) as any).find((r) => r.id === "gen");
       expect(gen.status).toBe("failed");
       expect(String(gen.error).toLowerCase()).toMatch(/json|schema/);
+    } finally {
+      close();
+    }
+  });
+
+  // FlowLock wired into the web: if another live process holds the flow lock,
+  // /api/run is refused (409) instead of racing on .chain/state.json.
+  it("refuses to run a flow that is locked by another process (409)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "chain-web-lock-"));
+    const { base, close } = await listen(dir);
+    const flow = join(dir, "l.yaml");
+    writeFileSync(flow, ["steps:", "  seed:", "    type: input", ""].join("\n"));
+    // simulate another live owner: a lock file with THIS test's (alive) pid
+    mkdirSync(join(dir, ".chain"), { recursive: true });
+    writeFileSync(join(dir, ".chain", "lock"), JSON.stringify({ pid: process.pid, startedAt: Date.now() }));
+    try {
+      const res = await post(base, "/api/run", { path: flow });
+      expect(res.status).toBe(409);
+      expect(((await res.json()) as any).errors[0].message).toContain("another chain process");
     } finally {
       close();
     }
