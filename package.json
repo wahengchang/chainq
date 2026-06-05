@@ -10,6 +10,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "dev": "tsx src/cli/index.ts",
+    "ui": "tsx src/cli/index.ts ui",
     "typecheck": "tsc --noEmit",
     "e2e": "vitest run --config vitest.e2e.config.ts",
     "e2e:cli": "vitest run --config vitest.e2e.config.ts",
