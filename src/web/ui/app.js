@@ -191,6 +191,38 @@ function selectNode(id){
   const lab={ran:'<span class="g-ran">✓ ran · called the model</span>',cached:'<span class="g-cached">⊘ cached · reused, no call</span>',failed:'<span class="g-failed">✗ failed</span>',skipped:'<span class="g-skipped">– skipped</span>',running:'<span class="g-running">◌ running…</span>'};
   $("pnOutStatus").innerHTML=ro?(lab[ro.status]||""):"";
   setMsg("pnMsg","","");renderPreview();
+  if(n.type!=="input")loadItems(id);   // P1-b: show the per-item content (items model)
+}
+// render an Item[] (the n8n items model) item by item — value per item, with the
+// paired-item lineage tag when present. null = not run yet; [] = ran, 0 items.
+function renderItems(items){
+  if(items==null)return '<span class="dim">(run to see)</span>';
+  if(!items.length)return '<span class="dim">(0 items)</span>';
+  return '<div class="itemcount">×'+items.length+' item'+(items.length===1?'':'s')+'</div>'
+    +items.map((it,i)=>{
+      const v=it.json;const txt=typeof v==="string"?v:JSON.stringify(v,null,2);
+      const paired=it.pairedItem!=null?' <span class="dim" title="derived from input item '+it.pairedItem+'">↤'+it.pairedItem+'</span>':'';
+      return '<div class="itemrow"><span class="itemidx">item '+i+'</span>'+paired
+        +'<div class="itemval">'+esc(txt)+'</div></div>';
+    }).join("");
+}
+// P1-b: pull /api/items (each upstream's items + this node's output items) and
+// render them per-item in the panel — so the editor SHOWS the items model, not
+// just a flattened blob. Guards on `selected` so a slow fetch can't clobber a
+// panel the user already moved off.
+async function loadItems(id){
+  if(selected!==id)return;
+  const{ok,data}=await api("/api/items?path="+encodeURIComponent(current)+"&node="+encodeURIComponent(id));
+  if(!ok||selected!==id)return;
+  if(data.output&&data.output.length){$("pnOut").className="mbody";$("pnOut").innerHTML=renderItems(data.output);}
+  const n=nodes.find(x=>x.id===id);if(!n)return;
+  const ups=n.from||[];
+  if(ups.length&&data.inputs){
+    $("pnInput").innerHTML=ups.map((u,i)=>{const tag=i===0?'$json':('$node["'+u+'"]');
+      return '<div class="infield" onclick="insertVar(\''+u+'\','+(i===0)+')" title="click to insert into the prompt">'
+        +'<span class="ins">↵ insert</span><span class="intag">'+tag+'</span> ← '+u
+        +'<div class="inval">'+renderItems(data.inputs[u]||null)+'</div></div>';}).join("");
+  }
 }
 function schedulePreview(){clearTimeout(previewTimer);previewTimer=setTimeout(renderPreview,350);}
 async function renderPreview(){
