@@ -2,7 +2,7 @@
 // save — over real HTTP against a real temp project.
 
 import { describe, it, expect } from "vitest";
-import { existsSync, mkdtempSync } from "node:fs";
+import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AddressInfo } from "node:net";
@@ -120,6 +120,55 @@ describe("web server", () => {
       const items = await getJson(base, `/api/items?path=${enc}&node=refine`);
       expect(items.output).toBeNull();
       expect(items.inputs).toHaveProperty("intro");
+    } finally {
+      close();
+    }
+  });
+
+  // The Lane A fix: /api/parse exposes an input node's params, and /api/run-node
+  // threads the form's runtime values through to the Runner — so the output
+  // reflects what was supplied (no more "✓ ran 卻跑空"). Offline: input→assemble
+  // is pure data assembly, no `claude` needed.
+  it("exposes input params and runs an input node with supplied values (offline)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "chain-web-input-"));
+    const { base, close } = await listen(dir);
+    const flow = join(dir, "seed.yaml");
+    writeFileSync(
+      flow,
+      [
+        "profiles:",
+        "  default: { cmd: 'claude -p' }",
+        "steps:",
+        "  seed:",
+        "    type: input",
+        "    params:",
+        "      topic: { default: fallback }",
+        "  out:",
+        "    type: assemble",
+        "    from: seed",
+        "    prompt: '{{ $json.topic }}'",
+        "",
+      ].join("\n"),
+    );
+    const enc = encodeURIComponent(flow);
+    const runNode = async (input?: unknown) =>
+      (await (await post(base, "/api/run-node", { path: flow, node: "out", input })).text())
+        .trim()
+        .split("\n")
+        .map((l) => JSON.parse(l) as any)
+        .find((r) => r.id === "out");
+    try {
+      // parse exposes params so the editor can draw the form
+      const parsed = await getJson(base, `/api/parse?path=${enc}`);
+      expect(parsed.nodes.find((n: any) => n.id === "seed").params).toEqual({
+        topic: { default: "fallback" },
+      });
+
+      // supplied value flows through → output reflects it (the bug fix)
+      expect((await runNode([{ topic: "hello-from-input" }])).output).toContain("hello-from-input");
+
+      // no input supplied → falls back to the declared default (optional params)
+      expect((await runNode(undefined)).output).toContain("fallback");
     } finally {
       close();
     }

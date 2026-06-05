@@ -14,6 +14,39 @@ const TYPE_GLYPH={ai:"✦ ai",cmd:"$ cmd",assemble:"⊕ assemble",splitOut:"⤙ 
 const COLLECTION=new Set(["splitOut","aggregate","merge"]);
 const typeChip=t=>'<span class="ntype'+(COLLECTION.has(t)?" col":"")+'">'+esc(TYPE_GLYPH[t]||t)+'</span>';
 let current=null,nodes=[],selected=null,results={},previewTimer=null;
+// runtime input values for `input` nodes — like CLI --input: sent with each run,
+// NOT saved to the flow. Keyed by param name (union across input nodes). Raw
+// strings; the server coerces them (parseVal) so "5"→5, "true"→true, exactly
+// like the command line.
+let inputVals={};
+function setInputVal(name,val){inputVals[name]=val;}
+// build the input set for a run from the input nodes' params + inputVals. Only
+// non-empty values are sent (empty → param falls back to its YAML default). All
+// empty → undefined, so the run shares the no-input cache key (never [{}]).
+function collectInput(){
+  const names=new Set();
+  nodes.forEach(n=>{if(n.type==="input")Object.keys(n.params||{}).forEach(k=>names.add(k));});
+  const set={};
+  names.forEach(k=>{const v=inputVals[k];if(v!=null&&v!=="")set[k]=v;});
+  return Object.keys(set).length?[set]:undefined;
+}
+// the params form drawn in an input node's panel — one field per declared param,
+// prefilled with its default. Editing a field updates inputVals (sent on run).
+function renderParamsForm(n){
+  const params=n.params||{};const names=Object.keys(params);
+  if(!names.length)return '<span class="dim">no params — this input emits one empty item. Add params in { } raw.</span>';
+  return '<div class="dim" style="margin-bottom:6px">runtime input — sent with each run, like CLI <code>--input</code> (not saved to the flow)</div>'
+    +names.map(nm=>{
+      const def=params[nm]&&params[nm].default;
+      const cur=inputVals[nm]!=null?inputVals[nm]:(def!=null?def:"");
+      return '<div class="infield" style="cursor:default">'
+        +'<span class="intag">'+esc(nm)+'</span>'
+        +'<input class="paramin" data-param="'+esc(nm)+'" value="'+esc(cur)+'" '
+        +'oninput="setInputVal(this.dataset.param,this.value)" '
+        +'placeholder="'+(def!=null?esc(String(def)):'value')+'" '
+        +'style="width:100%;margin-top:4px;box-sizing:border-box"></div>';
+    }).join("");
+}
 // transitive upstream of a node (its input cone)
 function ancestors(id){const set=new Set();let stack=[...(nodes.find(n=>n.id===id)?.from||[])];
   while(stack.length){const c=stack.pop();if(set.has(c))continue;set.add(c);const n=nodes.find(x=>x.id===c);if(n)stack=stack.concat(n.from||[]);}return [...set];}
@@ -32,7 +65,7 @@ async function createFlow(){
   const{ok,data}=await api("/api/create",{method:"POST",body:JSON.stringify({dir:$("dir").value,name})});
   if(!ok)return setMsg("createMsg","err",data.error||"create failed");open(data.path);
 }
-async function open(path){current=path;selected=null;results={};$("path").textContent=path;
+async function open(path){current=path;selected=null;results={};inputVals={};$("path").textContent=path;
   $("create").classList.add("hidden");$("editor").classList.remove("hidden");showNodes();await loadNodes();}
 function back(){$("editor").classList.add("hidden");$("create").classList.remove("hidden");listFlows();}
 
@@ -127,9 +160,12 @@ function selectNode(id){
   const isCmd=n.type==="cmd";
   $("pnPrompt").value=isCmd?(n.run||""):(n.prompt||"");
   $("pnFrom").value=(n.from||[]).join(", ");
-  // INPUT: each upstream's last output
+  // INPUT: an `input` trigger shows its params form (runtime values); any other
+  // node shows each upstream's last output (click to insert into the prompt).
   const ups=n.from||[];
-  $("pnInput").innerHTML = !ups.length
+  $("pnInput").innerHTML = n.type==="input"
+    ? renderParamsForm(n)
+    : !ups.length
     ? '<span class="dim">no upstream — this is a start node</span>'
     : ups.map((u,i)=>{const r=results[u];const tag=i===0?'$json':('$node["'+u+'"]');
         const val=r?esc(r.output||r.error||"(empty)"):'<span class="dim">(run to see)</span>';
@@ -198,7 +234,7 @@ async function runNode(force){
   if(!selected)return;
   $("pnOut").className="mbody dim";$("pnOut").textContent="running…";$("pnOutStatus").innerHTML='<span class="g-running">◌ running…</span>';
   setRunningUI([selected,...ancestors(selected)]);
-  const r=await streamRun("/api/run-node",{path:current,node:selected,profile:$("profile").value,fresh:!!force});
+  const r=await streamRun("/api/run-node",{path:current,node:selected,profile:$("profile").value,fresh:!!force,input:collectInput()});
   if(!r.ok){renderGraph();return setMsg("pnMsg","err",errs(r.data)||"run failed");}
 }
 // run-to-here straight from a node's ▷ button — runs inline, NO modal.
@@ -206,7 +242,7 @@ async function runNode(force){
 // (not ▷) if you want to open the editor panel.
 async function runTo(id,fresh){
   setRunningUI([id,...ancestors(id)]);
-  const r=await streamRun("/api/run-node",{path:current,node:id,profile:$("profile").value,fresh:!!fresh});
+  const r=await streamRun("/api/run-node",{path:current,node:id,profile:$("profile").value,fresh:!!fresh,input:collectInput()});
   if(!r.ok){renderGraph();return setMsg("canvasMsg","err",errs(r.data)||"run failed");}
 }
 // click a variable in INPUT → insert it into the prompt at the cursor (no typos)
@@ -234,7 +270,7 @@ async function addNode(){
 }
 async function runAll(fresh){
   setRunningUI(nodes.map(n=>n.id));
-  const r=await streamRun("/api/run",{path:current,profile:$("profile").value,fresh:!!fresh});
+  const r=await streamRun("/api/run",{path:current,profile:$("profile").value,fresh:!!fresh,input:collectInput()});
   if(!r.ok){results={};renderGraph();return setMsg("canvasMsg","err",errs(r.data)||"run failed");}
 }
 let rawOn=false;
@@ -253,4 +289,4 @@ boot();
 // Migration bridge: these handlers are still referenced by inline onclick= in
 // app.html (and in runtime-generated card markup), so a module must expose them
 // on window. Converting to addEventListener is the follow-up.
-Object.assign(window,{listFlows,createFlow,back,toggleRaw,runAll,runNode,saveNode,deleteNode,closeNode,addNode,saveRaw,renameSelected,schedulePreview,insertVar,runTo});
+Object.assign(window,{listFlows,createFlow,back,toggleRaw,runAll,runNode,saveNode,deleteNode,closeNode,addNode,saveRaw,renameSelected,schedulePreview,insertVar,runTo,setInputVal});
