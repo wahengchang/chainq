@@ -1,9 +1,16 @@
 // chain editor — single-page app logic, served as a native ES module (no build,
 // no bundler). Extracted from app.html inline <script> so the UI is a real module
-// file, not a blob inside HTML. Next steps (eng review): // @ts-check strictness
-// and a canvas/panel/api split.
+// file, not a blob inside HTML. Now type-checked: `npm run typecheck:ui` runs tsc
+// with checkJs over this file (src/web/ui/tsconfig.json, DOM lib), wired into
+// `npm run typecheck` + CI. Remaining follow-up: split into canvas/panel/api
+// modules (a mechanical state-extraction refactor — now safe to do incrementally
+// since checkJs catches any missed reference).
 
-const $=(id)=>document.getElementById(id);
+// @ts-check
+// `$` is typed `any`: this is browser glue and the elements are known by the
+// author, not the type system. checkJs (src/web/ui/tsconfig.json) still catches
+// the bugs that matter — undefined vars, typos, wrong call signatures.
+const $=(id)=>/** @type {any} */(document.getElementById(id));
 const api=(u,o)=>fetch(u,o).then(async r=>({ok:r.ok,status:r.status,data:await r.json().catch(()=>({}))}));
 const esc=s=>(s==null?"":String(s)).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 const errs=d=>(d.errors||[]).map(e=>"✗ "+e.node+": "+e.message).join("\n");
@@ -197,7 +204,7 @@ let connecting=false;
 // P3 node positions: `layout` = id→{x,y} (persisted in .chain/layout via /api/layout);
 // `manual` = use free positions (set once any node is dragged or a saved layout loads).
 let manual=false,layout={},movingNode=false,layoutTimer=null;
-function nodeUnder(e){const el=document.elementFromPoint(e.clientX,e.clientY);return el?el.closest(".node"):null;}
+function nodeUnder(e){const el=document.elementFromPoint(e.clientX,e.clientY);return el?/** @type {HTMLElement|null} */(el.closest(".node")):null;}
 function startConnect(source,ev){
   ev.preventDefault();ev.stopPropagation();
   const g=$("graph");const svg=g.querySelector("svg.wires");if(!svg)return;
@@ -235,12 +242,12 @@ async function connectTo(source,target){
 }
 // one delegated listener — the cards are rebuilt every render, the port isn't.
 document.addEventListener("pointerdown",e=>{
-  if(!e.target.closest)return;
-  const port=e.target.closest(".port");
-  if(port){const c=port.closest(".node");if(c)startConnect(c.dataset.id,e);return;}
+  const tgt=/** @type {Element|null} */(e.target);if(!tgt||!tgt.closest)return;
+  const port=tgt.closest(".port");
+  if(port){const c=/** @type {HTMLElement} */(port.closest(".node"));if(c)startConnect(c.dataset.id,e);return;}
   // body drag → reposition (not on a run button; only inside the canvas)
-  const card=e.target.closest(".node");
-  if(card&&!e.target.closest(".noderun")&&$("graph").contains(card))startMove(card.dataset.id,e);
+  const card=/** @type {HTMLElement} */(tgt.closest(".node"));
+  if(card&&!tgt.closest(".noderun")&&$("graph").contains(card))startMove(card.dataset.id,e);
 });
 
 // ---- P3 drag-to-reposition + persist ----
