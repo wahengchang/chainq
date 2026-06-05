@@ -37,6 +37,13 @@
   .node:hover .noderun-wrap{opacity:1}
   .noderun{padding:0 7px;font-size:12px;line-height:18px;border:1px solid var(--line);border-radius:3px;background:var(--panel2);color:var(--accent);cursor:pointer}
   .noderun:hover{border-color:var(--accent)}
+  /* P2-b drag-to-connect: an output port on the right edge; drag it onto another
+     node to wire it (→ /api/connect). Hidden until you hover the node. */
+  .port{position:absolute;right:-7px;top:50%;transform:translateY(-50%);width:13px;height:13px;border-radius:50%;
+    background:var(--accent);border:2px solid var(--bg);cursor:crosshair;opacity:0;transition:opacity .1s;z-index:2}
+  .node:hover .port{opacity:1}
+  .gwrap.connecting{cursor:crosshair} .gwrap.connecting .port{opacity:1}
+  .node.drop{box-shadow:0 0 0 2px var(--ran)}
   .node.ran{border-left:3px solid var(--ran)} .node.cached{border-left:3px solid var(--cached)}
   .node.failed{border-left:3px solid var(--bad)} .node.skipped{opacity:.6}
   .node.running{border-left:3px solid var(--accent);animation:pulse 1.1s ease-in-out infinite}
