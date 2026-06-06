@@ -80,12 +80,13 @@ plan: 1 ai call(s) · 0 reused · 0 skipped
 ✓ summarize   ← ran
 ```
 
-## 4. The whole point: edit a prompt, re-run cheaply
+## 4. The whole point: edit a prompt, re-run only what changed
 
-Run it again without changing anything:
+By default `chainq run` re-runs every node (a fresh run). To reuse unchanged
+outputs — the cheap iteration loop — add `--cache`. Run it again with no edits:
 
 ```bash
-chainq run flow.yaml
+chainq run flow.yaml --cache
 ```
 ```
 plan: 0 ai call(s) · 2 reused · 0 skipped
@@ -95,7 +96,7 @@ plan: 0 ai call(s) · 2 reused · 0 skipped
 Nothing changed, so **nothing re-runs** — `⊘` means served from cache.
 
 Now open `flow.yaml`, change the `summarize` prompt (e.g. add "in a funny tone"), save,
-and run again:
+and run again with `--cache`:
 ```
 ⊘ load        ← still cached (you didn't touch it)
 ✓ summarize   ← re-ran (you edited it)
@@ -120,9 +121,9 @@ chainq ls                      # list every flow in this project
 |---|---|
 | `chainq init [dir]` | Create a new **project** (folder + starter `flow.yaml` + input + .gitignore) |
 | `chainq new <name>` | Create another **workflow** YAML in the current project |
-| `chainq run <flow.yaml>` | Run the chain (reuses cache) |
-| `chainq run <flow.yaml> --fresh` | Ignore the cache, re-run everything |
-| `chainq run <flow.yaml> --profile fake` | Run offline with the `cat` stand-in |
+| `chainq run <flow.yaml>` | Run the chain — **re-runs every node** by default |
+| `chainq run <flow.yaml> --cache` | Reuse cached outputs; only stale nodes re-run (the cheap iteration loop) |
+| `chainq run <flow.yaml> --fresh` | Ignore the cache, re-run everything (same as the default) |
 | `chainq run <flow.yaml> --from <step>` | Force re-run a step and everything after it |
 | `chainq run <flow.yaml> --to <step>` | Run only up to a step |
 | `chainq run <flow.yaml> --pin <step>=<file>` | Try a change with a fixed input, into a scratch area (real outputs untouched) |
@@ -138,10 +139,10 @@ chainq ls                      # list every flow in this project
 - **`from:`** wires a step to the one(s) it reads. `{{ $json }}` is that input; `{{ $json.field }}`
   picks a field out of JSON. **Multi-input** (n8n-style): `from: [a, b]` — `{{ $json }}` is the first
   (`a`); reach any named upstream with `{{ $node["b"] }}` or the n8n alias `{{ $('b') }}`.
-- **Profiles** map a name to a model command. `default` is real; swap in `fake` (or `--profile fake`)
-  to run offline.
-- **Cache:** edit a step → it and everything downstream re-run; everything else is reused.
-  Editing an *upstream* step also re-runs its downstream (never serves a stale result).
+- **Profiles** map a name to a model command (e.g. `default: claude -p`). Every `ai` step calls
+  the real local model — there is no offline/fake profile.
+- **Cache:** with `--cache`, editing a step re-runs it and everything downstream; everything else
+  is reused. Editing an *upstream* step also re-runs its downstream (never serves a stale result).
 - **`--pin`:** freeze a step's output to a sample so you can iterate on a *later* step without
   paying to re-run the expensive earlier ones. Trial runs go to `.chain/scratch/`, never your real outputs.
 

@@ -61,12 +61,14 @@ plan: 1 ai call(s) · 0 reused · 0 skipped
 `✓` means the node ran. The `plan:` line above is a preflight — it tells you how
 many model calls a run will make before spending any.
 
-## 4. The whole point: edit a prompt, re-run cheaply
+## 4. The whole point: edit a prompt, re-run only what changed
 
-Run it again without changing anything:
+By default `chainq run` does a **fresh run** — every node re-runs. To reuse
+unchanged outputs (the cheap iteration loop), add `--cache`. Run it again with
+no edits:
 
 ```bash
-chainq run flow.yaml
+chainq run flow.yaml --cache
 ```
 
 ```
@@ -77,7 +79,7 @@ plan: 0 ai call(s) · 2 reused · 0 skipped
 
 `⊘` means served from cache — nothing changed, so nothing re-runs and no model
 is called. Now open `flow.yaml`, change the `summarize` prompt (add "in a funny
-tone"), save, and run again:
+tone"), save, and run again with `--cache`:
 
 ```
 ⊘ load        ← still cached (you didn't touch it)
