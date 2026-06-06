@@ -5,8 +5,9 @@ no API key, no HTTP. A flow is one YAML file. The point is the **iteration loop*
 upstream node's sample, edit one prompt, re-run only that node, see the result in seconds
 without re-running the expensive steps above it.
 
-> Status: **engine core** (alpha). Offline, tested, runnable via the CLI. The visual
-> canvas + node-editing UI (the product surface) is next. See `docs/design.md`.
+> Status: **alpha**. Engine + CLI are tested and runnable. The visual editor
+> (`chainq ui`) is live too — a canvas with drag-to-connect, insert-a-step-on-a-wire,
+> per-node type switching, and invalid-wiring warnings. See `docs/design.md`.
 
 ## Why
 
@@ -70,7 +71,7 @@ CLI E2E gates model-running scenarios on `claude` being on PATH; structural test
 ## How it works
 
 ```
-ONE engine (src/engine), two callers (CLI now, UI next):
+ONE engine (src/engine), two callers (the CLI and the chainq ui editor):
 
   runNode(N)          resolve inputs → run → persist
   materializeUpstream walk N's transitive deps; reuse cache, run the stale
