@@ -195,6 +195,9 @@
         <div class="mhead">
           <span class="mtitle">node · <input id="pnId" class="renamein" spellcheck="false" title="rename — Enter to commit" onkeydown="if(event.key==='Enter')renameSelected()" onblur="renameSelected()"></span>
           <span class="nt" id="pnType"></span>
+          <select id="pnTypeSel" title="change this node's type (resets type-specific fields, keeps wiring)" onchange="changeType(this.value)" style="font-size:11px;padding:2px 4px">
+            <option value="ai">ai</option><option value="cmd">cmd</option><option value="assemble">assemble</option><option value="splitOut">splitOut</option><option value="aggregate">aggregate</option><option value="merge">merge</option><option value="input">input</option><option value="write">write</option>
+          </select>
           <button class="primary" onclick="runNode()">▷ Run to here</button>
           <button onclick="runNode(true)" title="ignore cache, call the model again">↻ re-run</button>
           <button onclick="saveNode()">Save</button>

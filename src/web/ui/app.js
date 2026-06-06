@@ -330,11 +330,19 @@ async function connectTo(source,target){
 // Wiring lives on the canvas; this panel just shows + lets you drop a wire.
 function renderWire(n){
   const ups=n.from||[];
-  if(!ups.length){$("pnWire").innerHTML='<span class="dim">no upstream — drag a node\'s right-edge ● onto this one, or click the + on a wire</span>';return;}
+  if(!ups.length){$("pnWire").innerHTML='<span class="dim">no upstream — this is a start node. Drag a node\'s right-edge ● here (or the + on a wire) to give it an input.</span>';return;}
   $("pnWire").innerHTML=ups.map((u,i)=>
     '<span class="chip'+(i===0?" p":"")+'" title="'+(i===0?"$json (primary input)":'$node[&quot;'+esc(u)+'&quot;]')+'">'
     +(i===0?'<span class="intag">$json</span> ':"")+esc(u)
     +'<b class="x" data-rm="'+esc(u)+'" title="disconnect">×</b></span>').join("");
+}
+// Change this node's type (resets its type-specific fields to the new type's
+// starter, keeps wiring). The panel re-renders to show the new type's editor.
+async function changeType(type){
+  if(!selected)return;
+  const{ok,data}=await api("/api/set-type",{method:"POST",body:JSON.stringify({path:current,node:selected,type})});
+  if(!ok){setMsg("pnMsg","err",errs(data)||"type change failed");selectNode(selected);return;}
+  await loadNodes();selectNode(selected);setMsg("pnMsg","ok","type → "+type);
 }
 async function disconnect(id){
   const n=nodes.find(x=>x.id===selected);if(!n)return;
@@ -415,6 +423,7 @@ function selectNode(id){
   selected=id;const n=nodes.find(x=>x.id===id);if(!n)return;
   $("modal").classList.remove("hidden");
   $("pnId").value=n.id;$("pnType").innerHTML=typeBadge(n.type)+'<span style="margin-left:6px">'+esc(TYPE_GLYPH[n.type]||n.type)+'</span>';
+  $("pnTypeSel").value=n.type;
   const isCmd=n.type==="cmd";
   $("pnPrompt").value=isCmd?(n.run||""):(n.prompt||"");
   renderWire(n);   // current input as chips (× to disconnect) — wiring is on the canvas, not typed
@@ -431,7 +440,7 @@ function selectNode(id){
       +'<div class="inval">'+val+'</div></div>';};
   if(n.type==="input"){$("pnInput").innerHTML=renderParamsForm(n);$("pnEarlier").innerHTML="";}
   else{
-    $("pnInput").innerHTML=ups.length?ups.map(inField).join(""):'<span class="dim">no upstream — this is a start node</span>';
+    $("pnInput").innerHTML=ups.length?ups.map(inField).join(""):"";  // no-upstream note already shown by the chips area above
     // earlier steps = transitive upstreams not directly wired — their outputs, so
     // you can SEE every prior step's data. Lives in its own box so loadItems (which
     // owns #pnInput after a run) never clobbers it. read-only (wire one in to use).
@@ -659,4 +668,4 @@ boot();
 // Migration bridge: these handlers are still referenced by inline onclick= in
 // app.html (and in runtime-generated card markup), so a module must expose them
 // on window. Converting to addEventListener is the follow-up.
-Object.assign(window,{listFlows,createFlow,back,toggleRaw,runAll,runNode,saveNode,deleteNode,closeNode,addNode,saveRaw,renameSelected,schedulePreview,insertVar,runTo,setInputVal,onMergeMode,addParamRow});
+Object.assign(window,{listFlows,createFlow,back,toggleRaw,runAll,runNode,saveNode,deleteNode,closeNode,addNode,saveRaw,renameSelected,schedulePreview,insertVar,runTo,setInputVal,onMergeMode,addParamRow,changeType});

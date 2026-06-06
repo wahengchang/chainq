@@ -225,6 +225,33 @@ async function handle(req: IncomingMessage, res: ServerResponse, opts: WebOption
     });
   }
 
+  // Change a node's TYPE: reset its fields to the new type's starter (single
+  // source of truth: nodeStarter), preserving its wiring — except `input`, which
+  // is a trigger and must not have a `from`. 壞不落地: validate before writing.
+  if (method === "POST" && path === "/api/set-type") {
+    const { path: file = "", node = "", type = "ai" } = await body(req);
+    const fp = resolve(file);
+    return withFlow(fp, () => {
+      const original = readFileSync(fp, "utf8");
+      const flow = parseFlow(original);
+      const n = flow.steps[node];
+      if (!n) return json(res, 404, { error: "no such node" });
+      const starter = nodeStarter(type as NodeType) as Record<string, unknown>;
+      if (type !== "input" && n.from && n.from.length) {
+        starter.from = n.from.length === 1 ? n.from[0] : n.from;
+      }
+      const doc = parseDocument(original);
+      doc.setIn(["steps", node], starter);
+      const introduced = introducedErrors(original, String(doc));
+      if (introduced === "parse") {
+        return json(res, 400, { errors: [{ node, message: "type change would break the YAML" }] });
+      }
+      if (introduced.length) return json(res, 400, { errors: introduced });
+      atomicWrite(fp, String(doc));
+      return json(res, 200, { ok: true, type });
+    });
+  }
+
   // Rename a node id: its own key + every downstream from: + every prompt $('id')
   // reference (engine renameNode), then move its cached output so the rename keeps
   // the cache (the Merkle key has no id in it). 壞不落地: validate before writing.

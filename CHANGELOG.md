@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.4
+
+- **Editor: change a node's type.** The panel header has a type dropdown — switch
+  a node between ai / cmd / input / merge / etc. It resets that node's
+  type-specific fields to the new type's defaults and keeps its wiring (an
+  `input` trigger drops its `from`). E.g. turn a step into an `input` node and
+  add a default-valued parameter.
+- **Editor: fix the doubled "no upstream" note.** A start node now shows one
+  clear line instead of two.
+
 ## 0.1.3
 
 - **Editor: no more typing node ids.** The `from` text box is gone. A node's
