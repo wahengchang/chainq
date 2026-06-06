@@ -2,8 +2,9 @@
 // CLI surface (T9). The UI and CLI share the SAME engine (src/engine) — this is
 // a thin wrapper, no engine logic lives here.
 //
-//   chainq run <flow.yaml>            run the whole chain (reuse cache)
-//           --fresh                  ignore cache, re-run everything
+//   chainq run <flow.yaml>            run the whole chain — RE-RUNS EVERYTHING by default
+//           --cache                  reuse cached node outputs (skip unchanged)
+//           --fresh                  ignore cache, re-run everything (now the default)
 //           --from <node>            force re-run <node> + everything downstream
 //           --to <node>             run up to <node> (reuse upstream cache)
 //           --steps <n>             run the first N nodes
@@ -36,6 +37,7 @@ const PREFIX: Record<NodeResult["status"], string> = {
 
 interface Flags {
   fresh: boolean;
+  cache: boolean; // opt BACK INTO cache reuse for a full run (default re-runs all)
   from?: string;
   to?: string;
   steps?: number;
@@ -76,12 +78,13 @@ function parseInputFile(path: string): Record<string, unknown>[] {
 }
 
 function parseFlags(rest: string[], baseDir: string): Flags {
-  const flags: Flags = { fresh: false, pins: {} };
+  const flags: Flags = { fresh: false, cache: false, pins: {} };
   const inputKv: Record<string, unknown> = {};
   let inputSets: Record<string, unknown>[] | undefined;
   for (let i = 0; i < rest.length; i++) {
     const a = rest[i]!;
     if (a === "--fresh") flags.fresh = true;
+    else if (a === "--cache" || a === "--reuse") flags.cache = true;
     else if (a === "--from") flags.from = rest[++i];
     else if (a === "--to") flags.to = rest[++i];
     else if (a === "--steps") flags.steps = Number(rest[++i]);
@@ -161,6 +164,17 @@ async function main(argv: string[]): Promise<number> {
   const baseDir = dirname(flowPath);
   const flow = parseFlow(readFileSync(flowPath, "utf8"));
   const flags = parseFlags(args.slice(1), baseDir);
+
+  // A plain `chainq run` RE-RUNS EVERYTHING by default — the user asked for
+  // "run it every time". The cache still backs the partial-run modes (--from /
+  // --to / --steps / --pin reuse upstream), and `--cache` opts a full run back
+  // into reuse for cheap re-runs. --fresh stays as an explicit no-op alias here.
+  const partialMode =
+    flags.from !== undefined ||
+    flags.to !== undefined ||
+    flags.steps !== undefined ||
+    Object.keys(flags.pins).length > 0;
+  if (cmd === "run" && !partialMode && !flags.cache) flags.fresh = true;
 
   console.error(`flow: ${flowPath}`);
   console.error(`cwd:  ${baseDir}`);

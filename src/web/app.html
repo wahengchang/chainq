@@ -78,6 +78,10 @@
   .glyph{width:14px;text-align:center}
   .g-ran{color:var(--ran)} .g-cached{color:var(--cached)} .g-failed{color:var(--bad)} .g-skipped{color:var(--dim)} .g-pending{color:var(--dim)}
   .npreview{color:var(--dim);font-size:11px;margin-top:6px;max-height:32px;overflow:hidden}
+  /* a node whose prompt references an unwired upstream (or any validate error) */
+  .node.invalid{border-color:var(--bad);background:color-mix(in srgb,var(--bad) 8%,var(--panel))}
+  .node.invalid .nn{color:var(--bad)}
+  .nwarn{color:var(--bad);font-size:11px;margin-top:6px;line-height:1.35}
   .nodeout{margin-top:8px;padding:7px 8px;background:var(--panel2);border-radius:3px;font-size:11px;line-height:1.45;white-space:pre-wrap;max-height:120px;overflow:auto;border-left:2px solid var(--ran)}
   .nodeout.bad{border-left-color:var(--bad);color:var(--bad)}
   .nodeout.dim{color:var(--dim);border-left-color:var(--accent)}
@@ -89,6 +93,11 @@
   .gcols{position:relative;display:flex;gap:64px;align-items:flex-start;z-index:1}
   .gcol{display:flex;flex-direction:column;gap:26px;justify-content:center}
   svg.wires{position:absolute;left:0;top:0;pointer-events:none;z-index:0;overflow:visible}
+  /* "+" on an edge midpoint → insert a step between two nodes (appears on canvas hover) */
+  .wins{position:absolute;transform:translate(-50%,-50%);z-index:2;width:20px;height:20px;padding:0;
+    line-height:1;border-radius:50%;border:1px solid var(--line);background:var(--panel);color:var(--accent);
+    font-size:14px;opacity:0;pointer-events:none;transition:opacity .12s}
+  .gwrap:hover .wins{opacity:.5;pointer-events:auto} .wins:hover{opacity:1;border-color:var(--accent)}
   .node.multi{box-shadow:0 0 0 1px rgba(224,166,77,.35)}
   .addnode{padding:0 30px 30px}
   /* n8n-style floating node panel */

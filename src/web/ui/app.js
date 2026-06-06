@@ -38,6 +38,9 @@ const typeMeta=t=>TYPE_META[t]||{c:"#7f868d",i:"●"};
 const typeBadge=t=>{const m=typeMeta(t);return '<span class="tbadge" style="--tc:'+m.c+'" title="'+esc(t)+'">'+esc(m.i)+'</span>';};
 const typeChip=t=>'<span class="ntype" style="--tc:'+typeMeta(t).c+'">'+esc(TYPE_GLYPH[t]||t)+'</span>';
 let current=null,nodes=[],selected=null,results={},previewTimer=null;
+// node id → validation error message (from /api/validate). Drives the ⚠/red
+// flag on the canvas so "input not wired" is visible BEFORE you run.
+let invalid={};
 // runtime input values for `input` nodes — like CLI --input: sent with each run,
 // NOT saved to the flow. Keyed by param name (union across input nodes). Raw
 // strings; the server coerces them (parseVal) so "5"→5, "true"→true, exactly
@@ -152,7 +155,18 @@ function back(){$("editor").classList.add("hidden");$("create").classList.remove
 async function loadNodes(){
   const{ok,data}=await api("/api/parse?path="+encodeURIComponent(current));
   if(!ok){setMsg("canvasMsg","err","could not parse — use { } raw to fix it");$("graph").innerHTML="";return;}
-  setMsg("canvasMsg","","");nodes=data.nodes;renderGraph();
+  setMsg("canvasMsg","","");nodes=data.nodes;
+  await loadValidity();   // flag bad nodes (⚠) before the first paint
+  renderGraph();
+}
+// Fetch per-node validation errors → `invalid` map. Best-effort: a failure just
+// means no flags (never blocks editing).
+async function loadValidity(){
+  invalid={};
+  const{ok,data}=await api("/api/validate?path="+encodeURIComponent(current));
+  if(ok&&data&&data.errors)for(const e of data.errors){
+    invalid[e.node]=invalid[e.node]?invalid[e.node]+"; "+e.message:e.message;
+  }
 }
 // depth of each node = longest path from a start node (fixpoint, robust to any
 // declaration order). Drives the column layout so fan-out / fan-in reads L→R.
@@ -173,7 +187,8 @@ function nodeCard(n){
   const r=results[n.id];
   const multi=(n.from||[]).length>1;
   const col=COLLECTION.has(n.type);
-  const d=document.createElement("div");d.className="node "+(r?r.status:"")+(multi?" multi":"")+(col?" col":"");
+  const bad=invalid[n.id];
+  const d=document.createElement("div");d.className="node "+(r?r.status:"")+(multi?" multi":"")+(col?" col":"")+(bad?" invalid":"");
   d.dataset.id=n.id;
   // ×N item-count badge: how many items this node emitted (items model). Shown
   // after a run streams the count back; hidden for the 1-in-1-out base case.
@@ -188,13 +203,14 @@ function nodeCard(n){
   }
   const fromLine=(n.from||[]).length
     ? '<div class="npreview" style="color:var(--accent)">from ['+esc(n.from.join(", "))+']'+(multi?" ← 多輸入":"")+'</div>' : '';
+  const warnLine=bad?'<div class="nwarn" title="'+esc(bad)+'">⚠ '+esc(bad)+'</div>':'';
   d.innerHTML='<div class="noderun-wrap">'
       +'<button class="noderun" title="run to here (reuse cache)" onclick="event.stopPropagation();runTo(\''+n.id+'\')">▷</button>'
       +'<button class="noderun" title="re-run fresh — really call the model" onclick="event.stopPropagation();runTo(\''+n.id+'\',true)">↻</button>'
     +'</div>'
     +'<div class="nh">'+typeBadge(n.type)+'<span class="nn">'+esc(n.id)+'</span>'+xn+glyph+typeChip(n.type)+'</div>'
     +fromLine
-    +'<div class="npreview">'+esc((n.prompt||n.run||"").slice(0,70))+'</div>'+out
+    +'<div class="npreview">'+esc((n.prompt||n.run||"").slice(0,70))+'</div>'+out+warnLine
     +'<div class="port" title="drag onto another node to connect →"></div>';
   d.onclick=()=>{if(connecting||movingNode)return;selectNode(n.id);}; // a drag (connect or reposition) must not also open the panel
   return d;
@@ -234,8 +250,10 @@ function autoPositions(){
 }
 // draw a curved connector for every `from` edge (real wiring, incl. fan-in).
 function drawWires(svg,wrap){
+  wrap.querySelectorAll(".wins").forEach(e=>e.remove()); // clear stale insert buttons
   const base=wrap.getBoundingClientRect();
   const card=id=>wrap.querySelector('.node[data-id="'+CSS.escape(id)+'"]');
+  const rects=nodes.map(n=>card(n.id)).filter(Boolean).map(c=>c.getBoundingClientRect());
   svg.setAttribute("width",wrap.scrollWidth);svg.setAttribute("height",wrap.scrollHeight);
   let paths="";
   nodes.forEach(n=>{
@@ -246,8 +264,18 @@ function drawWires(svg,wrap){
       const fr=fe.getBoundingClientRect();
       const x1=fr.right-base.left,y1=fr.top+fr.height/2-base.top;
       const x2=tr.left-base.left, y2=tr.top+tr.height/2-base.top;
-      const mx=(x1+x2)/2;
+      const mx=(x1+x2)/2,my=(y1+y2)/2;
       paths+='<path d="M'+x1+','+y1+' C'+mx+','+y1+' '+mx+','+y2+' '+x2+','+y2+'" fill="none" stroke="var(--accent)" stroke-width="2" opacity="0.7"/>';
+      // a "+" on each edge → insert a new step between source and target (#4).
+      // Skip it if the midpoint would sit over a node (multi-column edges) — an
+      // invisible button there would steal that node's clicks.
+      const cx=base.left+mx,cy=base.top+my;
+      if(rects.some(r=>cx>=r.left-2&&cx<=r.right+2&&cy>=r.top-2&&cy<=r.bottom+2))return;
+      const b=document.createElement("button");
+      b.className="wins";b.textContent="+";b.title="insert a step between "+f+" and "+n.id;
+      b.style.left=mx+"px";b.style.top=my+"px";
+      b.onclick=ev=>{ev.stopPropagation();insertBetween(f,n.id);};
+      wrap.appendChild(b);
     });
   });
   svg.innerHTML=paths;
@@ -297,6 +325,21 @@ async function connectTo(source,target){
   const{ok,data}=await api("/api/connect",{method:"POST",body:JSON.stringify({path:current,node:target,from})});
   if(!ok)return setMsg("canvasMsg","err",errs(data)||"connect failed");
   await loadNodes();setMsg("canvasMsg","ok","connected "+source+" → "+target); // after re-render (loadNodes clears canvasMsg)
+}
+// Insert a brand-new step ON an edge source→target: create it, wire source→new,
+// then repoint target from `source` to `new`. Composes the same endpoints the
+// editor already uses, so each step is validated壞不落地.
+async function insertBetween(source,target){
+  let base="step",i=1,id=base;while(nodes.find(n=>n.id===id))id=base+(++i);
+  let r=await api("/api/add-node",{method:"POST",body:JSON.stringify({path:current,id,type:"ai"})});
+  if(!r.ok)return setMsg("canvasMsg","err",errs(r.data)||"insert failed");
+  r=await api("/api/connect",{method:"POST",body:JSON.stringify({path:current,node:id,from:[source]})});
+  if(!r.ok)return setMsg("canvasMsg","err",errs(r.data)||"insert failed");
+  const t=nodes.find(n=>n.id===target);
+  const tf=(t&&t.from||[]).map(x=>x===source?id:x);
+  r=await api("/api/connect",{method:"POST",body:JSON.stringify({path:current,node:target,from:tf})});
+  if(!r.ok)return setMsg("canvasMsg","err",errs(r.data)||"insert failed");
+  await loadNodes();selectNode(id);setMsg("pnMsg","ok","inserted "+id+" — edit its prompt, then Save");
 }
 // one delegated listener — the cards are rebuilt every render, the port isn't.
 document.addEventListener("pointerdown",e=>{
@@ -366,7 +409,8 @@ function selectNode(id){
   const lab={ran:'<span class="g-ran">✓ ran · called the model</span>',cached:'<span class="g-cached">⊘ cached · reused, no call</span>',failed:'<span class="g-failed">✗ failed</span>',skipped:'<span class="g-skipped">– skipped</span>',running:'<span class="g-running">◌ running…</span>'};
   $("pnOutStatus").innerHTML=ro?(lab[ro.status]||""):"";
   $("pnTypeFields").innerHTML=renderTypeFields(n);   // P2-a: type-specific editor
-  setMsg("pnMsg","","");renderPreview();
+  if(invalid[id])setMsg("pnMsg","err","⚠ "+invalid[id]);else setMsg("pnMsg","","");
+  renderPreview();
   if(n.type!=="input")loadItems(id);   // P1-b: show the per-item content (items model)
 }
 // P2-a: type-specific config the panel can set without dropping to raw YAML —

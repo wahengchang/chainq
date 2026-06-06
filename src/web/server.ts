@@ -140,6 +140,18 @@ async function handle(req: IncomingMessage, res: ServerResponse, opts: WebOption
     return json(res, 200, { nodes });
   }
 
+  // Per-node validation errors for the canvas to surface (dim/⚠ the bad nodes).
+  // Same `validate` the CLI and save/run gate on — so the editor flags exactly
+  // what a run would reject (e.g. a prompt $('x') whose `x` isn't in from:).
+  if (method === "GET" && path === "/api/validate") {
+    const file = resolve(url.searchParams.get("path") || "");
+    try {
+      return json(res, 200, { errors: validate(parseFlow(readFileSync(file, "utf8"))) });
+    } catch (e) {
+      return json(res, 200, { errors: [{ node: "(parse)", message: msg(e) }] });
+    }
+  }
+
   // Render a node's prompt with its inputs substituted (the 代入後 preview).
   // Uses the upstream nodes' last cached outputs. `template` overrides the saved
   // prompt so the preview updates live as you type.

@@ -12,7 +12,7 @@ For *why* it works this way, see [explanation.md](./explanation.md).
 | `chainq ui [flow.yaml]` | Open the local web editor (binds `127.0.0.1`). With a path, opens straight into that flow. |
 | `chainq ls [dir]` | List every `.yaml` flow under `dir` (default: current dir). |
 | `chainq validate <flow.yaml>` | Static pre-run checks only (DAG, cycles, profiles, `{{ }}` wiring). No model call. Exits non-zero on error. |
-| `chainq run <flow.yaml> [flags]` | Run the chain, reusing cache. See flags below. |
+| `chainq run <flow.yaml> [flags]` | Run the chain. **Re-runs every node by default**; pass `--cache` to reuse unchanged outputs. See flags below. |
 
 ### `init` / `new` flags
 
@@ -24,8 +24,10 @@ For *why* it works this way, see [explanation.md](./explanation.md).
 
 | Flag | Effect |
 |---|---|
-| `--fresh` | Ignore the cache; re-run every node. |
-| `--from <node>` | Force-rerun `<node>` and everything downstream of it (upstream reused). |
+| *(default)* | A plain `run` **re-runs every node** — no need to pass anything. |
+| `--cache` (`--reuse`) | Reuse cached outputs; only stale nodes re-run. The cheap-iteration mode. |
+| `--fresh` | Ignore the cache; re-run every node. (Same as the default now — kept for clarity/scripts.) |
+| `--from <node>` | Force-rerun `<node>` and everything downstream of it (upstream reused from cache). |
 | `--to <node>` | Run up to `<node>` only; its upstream cone (n8n "run to here"). |
 | `--steps <n>` | Run only the first `n` nodes in topological order. |
 | `--pin <node>=<file>` | Treat `<file>` as `<node>`'s output (a fixed sample). The run goes to `.chain/scratch/` and never touches real outputs. |
