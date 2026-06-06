@@ -3,5 +3,13 @@
 profiles:
   default: { cmd: 'claude -p' }
 steps:
-  load: { type: cmd, run: 'cat in.txt', inputs: ['in.txt'] }
-  sum: { type: ai, from: load, prompt: '{{ $json }}' }
+  load: { type: cmd, run: 'cat in.txt', inputs: [ 'in.txt' ] }
+  sum: { type: ai, from: step, prompt: '{{ $json }}' }
+  step:
+    type: ai
+    prompt: new step
+    from: step2
+  step2:
+    type: ai
+    prompt: new step
+    from: load

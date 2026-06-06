@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.2
+
+- **Editor: the `from` field is clearer.** It now reads "wired upstream(s)",
+  shows `empty = start node`, and a hint explains it auto-fills when you connect
+  on the canvas — typing ids is optional, not required.
+
 ## 0.1.1
 
 - **`chainq run` now re-runs every node by default.** Pass `--cache` (alias

@@ -198,8 +198,11 @@
             <div class="chead">input</div>
             <div class="mbody">
               <div id="pnFromWrap">
-                <label style="margin-top:0">from (first = <span class="intag">$json</span>)</label>
-                <input id="pnFrom" spellcheck="false" placeholder="e.g. draft, other">
+                <label style="margin-top:0">from <span style="text-transform:none;letter-spacing:0;color:var(--dim)">— wired upstream(s) · first = <span class="intag">$json</span></span></label>
+                <input id="pnFrom" spellcheck="false" placeholder="empty = start node">
+                <div class="dim" style="font-size:11px;margin-top:4px;text-transform:none;letter-spacing:0">
+                  Fills in by itself when you connect on the canvas — drag a node's right-edge ● onto this one, or click the <b>+</b> on a wire. Typing here is optional (comma-separated ids).
+                </div>
               </div>
               <div id="pnTypeFields" style="margin-top:10px"></div>
               <div style="margin-top:10px" id="pnInput" class="dim">Run to see what feeds this node.</div>
