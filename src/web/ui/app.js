@@ -336,6 +336,17 @@ function renderWire(n){
     +(i===0?'<span class="intag">$json</span> ':"")+esc(u)
     +'<b class="x" data-rm="'+esc(u)+'" title="disconnect">×</b></span>').join("");
 }
+// Populate the type dropdown with only the types that make sense for THIS node's
+// position: a start node (no upstream) can be input/ai/cmd; a node WITH upstream
+// can be any consumer type but not an `input` trigger (which must have no from).
+// The node's current type is always kept selectable so nothing vanishes.
+function setTypeOptions(n){
+  const hasUp=(n.from||[]).length>0;
+  const allowed=hasUp?["ai","cmd","assemble","splitOut","aggregate","merge"]:["input","ai","cmd"];
+  if(!allowed.includes(n.type))allowed.unshift(n.type);
+  $("pnTypeSel").innerHTML=allowed.map(t=>'<option value="'+t+'">'+t+'</option>').join("");
+  $("pnTypeSel").value=n.type;
+}
 // Change this node's type (resets its type-specific fields to the new type's
 // starter, keeps wiring). The panel re-renders to show the new type's editor.
 async function changeType(type){
@@ -423,7 +434,7 @@ function selectNode(id){
   selected=id;const n=nodes.find(x=>x.id===id);if(!n)return;
   $("modal").classList.remove("hidden");
   $("pnId").value=n.id;$("pnType").innerHTML=typeBadge(n.type)+'<span style="margin-left:6px">'+esc(TYPE_GLYPH[n.type]||n.type)+'</span>';
-  $("pnTypeSel").value=n.type;
+  setTypeOptions(n);
   const isCmd=n.type==="cmd";
   $("pnPrompt").value=isCmd?(n.run||""):(n.prompt||"");
   renderWire(n);   // current input as chips (× to disconnect) — wiring is on the canvas, not typed
