@@ -10,8 +10,8 @@ import { haveClaude } from "../harness/cli.js";
 describe.skipIf(!haveClaude)("cache", () => {
   it("re-running an unchanged flow serves everything from cache", () => {
     const p = newProject().write("flow.yaml", linear());
-    p.chain("run", "flow.yaml"); // cold
-    expect(p.run(["run", "flow.yaml"]).status).toMatchObject({
+    p.chain("run", "flow.yaml", "--cache"); // cold
+    expect(p.run(["run", "flow.yaml", "--cache"]).status).toMatchObject({
       a: "cached",
       b: "cached",
       c: "cached",
@@ -20,9 +20,9 @@ describe.skipIf(!haveClaude)("cache", () => {
 
   it("editing a downstream node re-runs only it; upstream stays cached", () => {
     const p = newProject().write("flow.yaml", linear("a", "c1"));
-    p.chain("run", "flow.yaml");
+    p.chain("run", "flow.yaml", "--cache");
     p.write("flow.yaml", linear("a", "c2")); // edit leaf
-    expect(p.run(["run", "flow.yaml"]).status).toMatchObject({
+    expect(p.run(["run", "flow.yaml", "--cache"]).status).toMatchObject({
       a: "cached",
       b: "cached",
       c: "ran",
@@ -31,9 +31,9 @@ describe.skipIf(!haveClaude)("cache", () => {
 
   it("editing an upstream node cascades to all downstream (no stale serve)", () => {
     const p = newProject().write("flow.yaml", linear("a1", "c"));
-    p.chain("run", "flow.yaml");
+    p.chain("run", "flow.yaml", "--cache");
     p.write("flow.yaml", linear("a2", "c")); // edit root
-    expect(p.run(["run", "flow.yaml"]).status).toMatchObject({
+    expect(p.run(["run", "flow.yaml", "--cache"]).status).toMatchObject({
       a: "ran",
       b: "ran",
       c: "ran",

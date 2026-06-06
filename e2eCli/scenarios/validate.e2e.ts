@@ -20,7 +20,7 @@ describe("validate & cmd", () => {
     expect(v.code).toBe(1);
     expect(v.out).toMatch(/references \$node\["B"\] but it is not in from/);
 
-    const r = p.chain("run", "flow.yaml");
+    const r = p.chain("run", "flow.yaml", "--cache");
     expect(r.code).toBe(1);
     expect(r.out).toMatch(/nothing ran/); // caught before any CLI call
     expect(p.exists(".chain/outputs/M.out")).toBe(false);
@@ -29,8 +29,8 @@ describe("validate & cmd", () => {
   // runs an ai node (sum) → real model, gated.
   it.skipIf(!haveClaude)("a cmd reads its input file (cwd) and is cacheable on a re-run", () => {
     const p = newProject().write("in.txt", "hello").write("flow.yaml", mock("cmd-inputs"));
-    p.chain("run", "flow.yaml"); // cold
-    expect(p.run(["run", "flow.yaml"]).status).toMatchObject({
+    p.chain("run", "flow.yaml", "--cache"); // cold
+    expect(p.run(["run", "flow.yaml", "--cache"]).status).toMatchObject({
       load: "cached",
       sum: "cached",
     });

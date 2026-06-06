@@ -17,11 +17,11 @@ describe("items cache invalidation", () => {
       .write("arr.json", '{"a":["x"],"b":["y","z"]}')
       .write("flow.yaml", flow("a"));
 
-    expect(p.run(["run", "flow.yaml"]).status).toMatchObject({ src: "ran", split: "ran" }); // cold
-    expect(p.run(["run", "flow.yaml"]).status).toMatchObject({ src: "cached", split: "cached" }); // warm
+    expect(p.run(["run", "flow.yaml", "--cache"]).status).toMatchObject({ src: "ran", split: "ran" }); // cold
+    expect(p.run(["run", "flow.yaml", "--cache"]).status).toMatchObject({ src: "cached", split: "cached" }); // warm
 
     p.write("flow.yaml", flow("b")); // edit only the field
-    expect(p.run(["run", "flow.yaml"]).status).toMatchObject({ src: "cached", split: "ran" }); // ★ re-runs
+    expect(p.run(["run", "flow.yaml", "--cache"]).status).toMatchObject({ src: "cached", split: "ran" }); // ★ re-runs
   });
 
   it("changing a merge `mode` re-runs it", () => {
@@ -35,9 +35,9 @@ describe("items cache invalidation", () => {
       .write("b.txt", "banana")
       .write("flow.yaml", flow("append"));
 
-    expect(p.run(["run", "flow.yaml"]).status).toMatchObject({ m: "ran" }); // cold
-    expect(p.run(["run", "flow.yaml"]).status).toMatchObject({ m: "cached" }); // warm
+    expect(p.run(["run", "flow.yaml", "--cache"]).status).toMatchObject({ m: "ran" }); // cold
+    expect(p.run(["run", "flow.yaml", "--cache"]).status).toMatchObject({ m: "cached" }); // warm
     p.write("flow.yaml", flow("byPosition")); // edit only the mode
-    expect(p.run(["run", "flow.yaml"]).status).toMatchObject({ m: "ran" }); // ★ re-runs
+    expect(p.run(["run", "flow.yaml", "--cache"]).status).toMatchObject({ m: "ran" }); // ★ re-runs
   });
 });

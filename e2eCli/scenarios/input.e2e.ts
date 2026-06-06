@@ -18,13 +18,13 @@ const FLOW =
 describe("input trigger node", () => {
   it("uses declared defaults when nothing is supplied", () => {
     const p = newProject().write("flow.yaml", FLOW);
-    expect(p.run(["run", "flow.yaml"]).status).toMatchObject({ in: "ran", show: "ran" });
+    expect(p.run(["run", "flow.yaml", "--cache"]).status).toMatchObject({ in: "ran", show: "ran" });
     expect(items(p, "show").map((i) => i.json)).toEqual(["city=Tokyo lang=zh-tw"]);
   });
 
   it("--input k=v overrides a param, keeping other defaults", () => {
     const p = newProject().write("flow.yaml", FLOW);
-    p.run(["run", "flow.yaml", "--input", "city=Osaka"]);
+    p.run(["run", "flow.yaml", "--cache", "--input", "city=Osaka"]);
     expect(items(p, "show").map((i) => i.json)).toEqual(["city=Osaka lang=zh-tw"]);
   });
 
@@ -32,7 +32,7 @@ describe("input trigger node", () => {
     const p = newProject()
       .write("flow.yaml", FLOW)
       .write("sets.jsonl", '{"city":"A"}\n{"city":"B"}\n');
-    expect(p.run(["run", "flow.yaml", "--input-file", "sets.jsonl"]).status).toMatchObject({
+    expect(p.run(["run", "flow.yaml", "--cache", "--input-file", "sets.jsonl"]).status).toMatchObject({
       in: "ran",
       show: "ran",
     });
@@ -44,14 +44,14 @@ describe("input trigger node", () => {
 
   it("changing --input re-runs the trigger and its downstream (key invalidation)", () => {
     const p = newProject().write("flow.yaml", FLOW);
-    expect(p.run(["run", "flow.yaml", "--input", "city=A"]).status).toMatchObject({ in: "ran", show: "ran" });
-    expect(p.run(["run", "flow.yaml", "--input", "city=A"]).status).toMatchObject({ in: "cached", show: "cached" });
-    expect(p.run(["run", "flow.yaml", "--input", "city=B"]).status).toMatchObject({ in: "ran", show: "ran" }); // ★ changed input
+    expect(p.run(["run", "flow.yaml", "--cache", "--input", "city=A"]).status).toMatchObject({ in: "ran", show: "ran" });
+    expect(p.run(["run", "flow.yaml", "--cache", "--input", "city=A"]).status).toMatchObject({ in: "cached", show: "cached" });
+    expect(p.run(["run", "flow.yaml", "--cache", "--input", "city=B"]).status).toMatchObject({ in: "ran", show: "ran" }); // ★ changed input
   });
 
   it("rejects an --input-file whose entries are not JSON objects", () => {
     const p = newProject().write("flow.yaml", FLOW).write("bad.jsonl", '"abc"\n123\n');
-    const r = p.chain("run", "flow.yaml", "--input-file", "bad.jsonl");
+    const r = p.chain("run", "flow.yaml", "--cache", "--input-file", "bad.jsonl");
     expect(r.code).not.toBe(0);
     expect(r.out).toMatch(/must be a JSON object/);
   });
