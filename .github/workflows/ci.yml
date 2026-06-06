@@ -1,0 +1,99 @@
+name: CI
+
+# Runs on every PR and on pushes to main. Everything here is OFFLINE and
+# deterministic: tests that shell out to the real `claude -p` model are gated on
+# `haveClaude` (which claude) and skip automatically because `claude` is not on
+# PATH in CI. No API key, no cost, no flakiness. The real-model path is verified
+# locally (claude login) — see e2eCli/README.md and the *-real specs.
+#
+# Each suite emits JUnit XML; mikepenz/action-junit-report turns it into per-test
+# PR annotations (failing lines flagged inline) plus a summary table on the run
+# page. JUnit XML is also uploaded as an artifact.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# action-junit-report needs to write a Check Run with annotations.
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+
+# A newer push to the same ref cancels the older in-flight run.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: typecheck · unit · cli-e2e (offline)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: mkdir -p reports
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Unit tests
+        run: npm test -- --reporter=default --reporter=junit --outputFile.junit=reports/junit-unit.xml
+      - name: CLI e2e (offline scenarios; real-model tests auto-skip)
+        run: npm run e2e:cli -- --reporter=default --reporter=junit --outputFile.junit=reports/junit-cli.xml
+      - name: Test report (PR annotations + run-page summary)
+        if: always()
+        uses: mikepenz/action-junit-report@v5
+        with:
+          report_paths: reports/junit-*.xml
+          check_name: Test report — unit + cli-e2e
+          detailed_summary: true
+          include_passed: true
+          # annotate_only:false (default) → publish a clickable "Test report"
+          # Check Run on the PR, not just inline annotations + run-page summary.
+          annotate_only: false
+      - name: Upload JUnit XML
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-test
+          path: reports/junit-*.xml
+          if-no-files-found: ignore
+
+  browser:
+    name: browser e2e (editor, offline)
+    runs-on: ubuntu-latest
+    env:
+      PLAYWRIGHT_JUNIT_OUTPUT_NAME: reports/junit-browser.xml
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: mkdir -p reports
+      - name: Install Playwright Chromium + OS deps
+        run: npx playwright install --with-deps chromium
+      - name: Browser e2e (editor.spec is offline; run/run-real auto-skip)
+        run: npm run e2e:ui:headless -- --reporter=list,junit
+      - name: Test report (PR annotations + run-page summary)
+        if: always()
+        uses: mikepenz/action-junit-report@v5
+        with:
+          report_paths: reports/junit-browser.xml
+          check_name: Test report — browser e2e
+          detailed_summary: true
+          include_passed: true
+          # annotate_only:false (default) → publish a clickable "Test report"
+          # Check Run on the PR, not just inline annotations + run-page summary.
+          annotate_only: false
+      - name: Upload JUnit XML
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-browser
+          path: reports/junit-browser.xml
+          if-no-files-found: ignore

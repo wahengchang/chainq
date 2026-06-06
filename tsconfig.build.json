@@ -1,0 +1,14 @@
+{
+  // Production build: emit plain JS to dist/ so the published package runs on
+  // bare `node` — no tsx/esbuild at runtime. Dev still runs the .ts via tsx.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": "dist",
+    "rootDir": "src",
+    "declaration": false,
+    "sourceMap": false
+  },
+  "include": ["src"],
+  "exclude": ["**/*.test.ts", "src/web/ui"]
+}

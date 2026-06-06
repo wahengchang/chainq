@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<title>chain — canvas + node panel</title>
+<style>
+  :root{
+    --bg:#0e0f11; --grid:#17191c; --panel:#15171a; --panel2:#101214; --line:#2a2d31;
+    --ink:#d7dadd; --dim:#7f868d;
+    --accent:#e0a64d; --ok:#5db07e; --bad:#e0635b; --cache:#6b7177; --pin:#7aa2d6; --render:#5db07e;
+    --mono:"Berkeley Mono","JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--mono);font-size:13px;line-height:1.5;height:100vh;overflow:hidden}
+  .app{display:grid;grid-template-rows:auto 1fr;height:100vh}
+  /* top bar */
+  .top{display:flex;align-items:center;gap:14px;border-bottom:1px solid var(--line);padding:8px 14px;background:var(--panel);z-index:5}
+  .flow{color:var(--ink)} .path{color:var(--dim);font-size:11px}
+  .tag{font-size:10px;border:1px solid var(--line);color:var(--dim);padding:0 6px;border-radius:2px}
+  .btns{display:flex;gap:6px;margin-left:auto}
+  .btn{border:1px solid var(--line);background:transparent;color:var(--ink);font:inherit;font-size:12px;padding:3px 10px;cursor:pointer}
+  .btn:hover{border-color:var(--accent)}
+  .btn.run{border-color:var(--accent);color:var(--accent)}
+  /* canvas */
+  .stage{position:relative;overflow:hidden;background:
+     radial-gradient(circle, var(--grid) 1px, transparent 1px);
+     background-size:22px 22px;background-color:var(--bg)}
+  svg.wires{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+  .node{position:absolute;width:150px;background:var(--panel);border:1px solid var(--line);
+     padding:9px 11px;cursor:pointer}
+  .node:hover{border-color:var(--accent)}
+  .node .nh{display:flex;align-items:center;gap:8px}
+  .node .nn{flex:1} .node .nt{color:var(--dim);font-size:10px}
+  .node .ns{font-size:11px;color:var(--dim);margin-top:3px}
+  .g-run{color:var(--accent)} .g-ok{color:var(--ok)} .g-cache{color:var(--cache)} .g-bad{color:var(--bad)} .g-pend{color:var(--dim)}
+  .node.sel{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+  .pin{color:var(--pin);font-size:10px}
+  .loopwrap{position:absolute;border:1px dashed var(--line);border-radius:4px;padding:20px 10px 10px;background:rgba(122,162,214,.04)}
+  .looplbl{position:absolute;top:3px;left:8px;color:var(--pin);font-size:10px}
+  .zoom{position:absolute;left:14px;bottom:14px;display:flex;gap:4px}
+  .zoom .btn{background:var(--panel)}
+  .hint{position:absolute;right:14px;bottom:14px;color:var(--dim);font-size:11px}
+  /* dim backdrop + floating node panel */
+  .backdrop{position:absolute;inset:0;background:rgba(0,0,0,.45)}
+  .panel{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+     width:min(1080px,94vw);height:min(560px,82vh);background:var(--panel);
+     border:1px solid var(--line);display:grid;grid-template-rows:auto 1fr;box-shadow:0 20px 60px rgba(0,0,0,.6)}
+  .phead{display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid var(--line)}
+  .ptitle{color:var(--ink)} .pmeta{color:var(--dim);font-size:11px}
+  .back{color:var(--dim);font-size:12px;cursor:pointer}
+  .back:hover{color:var(--accent)}
+  .cols{display:grid;grid-template-columns:1fr 1.25fr 1.1fr;min-height:0}
+  .col{display:flex;flex-direction:column;border-right:1px solid var(--line);min-height:0}
+  .col:last-child{border-right:0}
+  .chead{display:flex;align-items:center;gap:8px;padding:7px 12px;border-bottom:1px solid var(--line);color:var(--dim);font-size:11px;letter-spacing:.06em;text-transform:uppercase}
+  .tabs{display:flex;gap:2px;margin-left:auto}
+  .tab{font-size:11px;padding:0 7px;border:1px solid var(--line);color:var(--dim);cursor:pointer;text-transform:none;letter-spacing:0}
+  .tab.on{color:var(--ink);border-color:var(--accent)}
+  .badge{font-size:10px;border:1px solid var(--line);padding:0 5px;border-radius:2px;text-transform:none;letter-spacing:0}
+  .b-fresh{color:var(--ok);border-color:var(--ok)} .b-pin{color:var(--pin);border-color:var(--pin)}
+  .cbody{padding:10px 12px;overflow:auto;flex:1;white-space:pre-wrap;word-break:break-word}
+  .field{display:flex;gap:8px;padding:3px 4px;cursor:pointer;border-radius:2px}
+  .field:hover{background:#1b1e22}
+  .fkey{color:var(--pin)} .fval{color:var(--dim);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .tok{color:var(--accent);background:rgba(224,166,77,.14);border-radius:2px}
+  .cursor{display:inline-block;width:7px;height:15px;background:var(--accent);vertical-align:-2px;animation:blink 1s steps(1) infinite}
+  @keyframes blink{50%{opacity:0}}
+  .subhead{padding:5px 12px;color:var(--dim);font-size:10px;letter-spacing:.06em;text-transform:uppercase;background:var(--panel2);border-top:1px solid var(--line);display:flex;gap:8px;align-items:center}
+  .rendered{padding:8px 12px;color:var(--render);background:rgba(93,176,126,.06);white-space:pre-wrap;font-size:12px}
+  .prun{margin-left:auto}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- TOP BAR -->
+  <div class="top">
+    <span class="flow">my-flow.yaml</span>
+    <span class="path">~/projects/blog/.chain · cwd ✓</span>
+    <span class="tag">linear · 5 nodes</span>
+    <div class="btns">
+      <button class="btn run">▷ Run flow</button>
+      <button class="btn">validate</button>
+      <button class="btn">⤓ logs</button>
+    </div>
+  </div>
+
+  <!-- CANVAS (home) -->
+  <div class="stage">
+    <!-- wires -->
+    <svg class="wires">
+      <path d="M 175 120 H 235" stroke="#3a3d42" fill="none"/>
+      <path d="M 385 120 H 445" stroke="#3a3d42" fill="none"/>
+      <path d="M 595 120 H 690" stroke="#e0a64d" fill="none" stroke-dasharray="3 3"/>
+      <path d="M 930 120 H 990" stroke="#3a3d42" fill="none"/>
+    </svg>
+
+    <!-- nodes -->
+    <div class="node" style="left:25px;top:92px">
+      <div class="nh"><span class="g-cache">⊘</span><span class="nn">fetch</span><span class="nt">cmd</span></div>
+      <div class="ns">cached · 1 item</div>
+    </div>
+    <div class="node" style="left:235px;top:92px">
+      <div class="nh"><span class="g-ok">✓</span><span class="nn">summarize</span><span class="nt">ai</span></div>
+      <div class="ns">done 12s · 1 item</div>
+    </div>
+    <div class="node sel" style="left:445px;top:92px">
+      <div class="nh"><span class="g-run">▶</span><span class="nn">tweets</span><span class="pin">📌</span></div>
+      <div class="ns">running… · ai</div>
+    </div>
+
+    <!-- loop container -->
+    <div class="loopwrap" style="left:690px;top:60px;width:240px;height:118px">
+      <span class="looplbl">loop  title_each   over {{tweets.items}} · ×10 · as item</span>
+      <div class="node" style="position:static;width:auto;margin-top:4px">
+        <div class="nh"><span class="g-pend">○</span><span class="nn">title</span><span class="nt">ai</span></div>
+        <div class="ns" style="display:inline">→ shorten</div>
+      </div>
+    </div>
+
+    <div class="node" style="left:990px;top:92px">
+      <div class="nh"><span class="g-pend">○</span><span class="nn">report</span><span class="nt">write</span></div>
+      <div class="ns">pending · append</div>
+    </div>
+
+    <div class="zoom">
+      <button class="btn">＋</button><button class="btn">－</button><button class="btn">⤢ fit</button>
+    </div>
+    <div class="hint">點任一節點 → 開編輯視窗 · 拖拉/連線 = 之後(F4)</div>
+
+    <!-- BACKDROP + FLOATING NODE PANEL (shown because "tweets" is clicked) -->
+    <div class="backdrop"></div>
+    <div class="panel">
+      <div class="phead">
+        <span class="g-run">▶</span>
+        <span class="ptitle">tweets</span>
+        <span class="pmeta">ai · profile: default · 📌 pinned upstream</span>
+        <button class="btn run" style="margin-left:auto">▷ Run node ⌘↵</button>
+        <span class="back" title="close">✕ Back to canvas  Esc</span>
+      </div>
+      <div class="cols">
+
+        <!-- INPUT -->
+        <div class="col">
+          <div class="chead">input
+            <div class="tabs"><span class="tab on">Schema</span><span class="tab">Table</span><span class="tab">JSON</span></div>
+          </div>
+          <div class="cbody">
+<div style="color:var(--dim);font-size:11px;margin-bottom:4px">▾ from summarize <span class="badge b-pin">📌 pinned</span></div>
+<div class="field"><span class="fkey">output.summary</span><span class="fval">"本文介紹 AI…"</span></div>
+<div class="field"><span class="fkey">output.points[0]</span><span class="fval">"模型變便宜"</span></div>
+<div class="field"><span class="fkey">output.points[1]</span><span class="fval">"CLI 不用金鑰"</span></div>
+<div class="field"><span class="fkey">output.tags</span><span class="fval">["AI","CLI"]</span></div>
+          </div>
+        </div>
+
+        <!-- PROMPT + render -->
+        <div class="col">
+          <div class="chead">prompt</div>
+          <div class="cbody" style="flex:0 0 auto">產 10 則繁中推文，回 JSON 陣列：
+摘要：<span class="tok">{{ $json.output.summary }}</span>
+逐點：<span class="tok">{{ $json.output.points[*] }}</span>
+語氣：直接、不要 emoji。</div>
+          <div class="subhead">fx 代入後 (rendered) <span class="badge b-fresh prun">live</span></div>
+          <div class="rendered">產 10 則繁中推文，回 JSON 陣列：
+摘要：本文介紹 AI 在開發工具的應用…
+逐點：模型變便宜 · CLI 不用金鑰
+語氣：直接、不要 emoji。</div>
+        </div>
+
+        <!-- OUTPUT -->
+        <div class="col">
+          <div class="chead">output <span class="badge b-fresh">● fresh · streaming</span></div>
+          <div class="cbody">[
+  { "text": "AI 推論成本一年掉 10 倍，" },
+  { "text": "chain 跑在你已登入的 claude CLI，" },
+  { "text": "改一個 prompt 只重跑那一<span class="cursor"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+</body>
+</html>

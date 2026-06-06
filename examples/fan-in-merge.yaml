@@ -1,0 +1,45 @@
+# 多輸入（fan-in）— n8n「Merge 節點」版：
+#   trigger ──┬─→ node1 ─┐
+#             └─→ node2 ─┤
+#                        └─→ merge（type: assemble，純資料合併，不呼叫模型）─→ result
+#
+# 對照 examples/fan-in.yaml：那版 node3 是 ai，邊讀兩上游邊合成；
+# 這版照 n8n 習慣，先用一個專門的 Merge 節點把兩條流併好，再交給 result。
+#
+# 跑：chain run examples/fan-in-merge.yaml   （每個 ai 節點呼叫真實模型，需先 claude login）
+profiles:
+  default: { cmd: 'claude -p' }
+
+steps:
+  trigger:
+    type: ai
+    prompt: 'output one city name in Japan (no other information)'
+
+  node1:
+    type: ai
+    from: trigger
+    prompt: '3 must-eat foods in {{ $json }}, very short, in zh-tw'
+
+  node2:
+    type: ai
+    from: trigger
+    prompt: '3 must-see attractions in {{ $json }}, very short, in zh-tw'
+
+  # === n8n Merge 節點 ===
+  # type: assemble = 純資料組裝，不呼叫模型（對應 n8n 的 Merge）。
+  # 這裡用 Append 風格：把兩條上游各自貼上標籤併成一份文件。
+  merge:
+    type: assemble
+    from: [node1, node2]
+    prompt: |
+      【美食】
+      {{ $node["node1"] }}
+
+      【景點】
+      {{ $node["node2"] }}
+
+  # 下游只需吃 merge 一條輸入，不必知道上面分了幾岔
+  result:
+    type: ai
+    from: merge
+    prompt: 'rewrite into one tweet for Taiwan travelers, in zh-tw: {{ $json }}'
