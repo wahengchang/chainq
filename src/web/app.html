@@ -115,7 +115,10 @@
   .mcol{display:flex;flex-direction:column;border-right:1px solid var(--line);min-height:0}
   .mcol:last-child{border-right:0}
   .chead{padding:7px 12px;color:var(--dim);font-size:11px;letter-spacing:.06em;text-transform:uppercase;border-bottom:1px solid var(--line)}
-  .mbody{padding:10px 12px;overflow:auto;flex:1;white-space:pre-wrap;word-break:break-word}
+  .mbody{padding:10px 12px;overflow:auto;flex:1;word-break:break-word}
+  /* only the text panels keep pre-wrap; the structured input column must NOT, or
+     the source-code newlines between its divs render as big phantom gaps. */
+  #pnOut,#pnRendered{white-space:pre-wrap}
   .mcol textarea{height:100%;border:0;border-radius:0;min-height:0;background:var(--bg)}
   .mcol .pad{padding:10px 12px}
   /* current-input chips (wiring shown, not typed) */

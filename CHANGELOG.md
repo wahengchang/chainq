@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.5
+
+- **Editor: tighter node panel.** The input column had large phantom gaps (the
+  `.mbody` `white-space:pre-wrap` was rendering the source-code newlines between
+  its blocks). Removed it there — so the input chips, schema, direct inputs and
+  earlier outputs all fit without scrolling.
+
 ## 0.1.4
 
 - **Editor: change a node's type.** The panel header has a type dropdown — switch
