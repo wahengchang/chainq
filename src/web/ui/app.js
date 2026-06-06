@@ -440,6 +440,7 @@ function selectNode(id){
   renderWire(n);   // current input as chips (× to disconnect) — wiring is on the canvas, not typed
   $("pnFromWrap").classList.toggle("hidden",n.type==="input"); // input is a trigger — no `from`
   $("pnPromptCol").classList.toggle("hidden",n.type==="input"); // a trigger has no prompt — hide the whole prompt column
+  $("pnCols").classList.toggle("trigger",n.type==="input");     // …and collapse the grid to 2 columns so there's no empty gap
   // INPUT: an `input` trigger shows its params form (runtime values); any other
   // node shows its direct inputs' outputs (click to insert) + the outputs of
   // EARLIER upstream steps (read-only — wire one in to reference it).

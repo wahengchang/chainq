@@ -10,6 +10,10 @@
   offers `input` / `ai` / `cmd`; a node with upstream offers the consumer types
   (`ai` / `cmd` / `assemble` / `splitOut` / `aggregate` / `merge`) but not the
   `input` trigger. No more nonsensical options like `merge` on a start node.
+- **Editor: an `input` trigger no longer shows a prompt column.** The hide had
+  no effect because `.mcol{display:flex}` overrode `.hidden{display:none}` —
+  made `.hidden` win (`!important`) and collapse the panel to INPUT + OUTPUT (two
+  columns) for triggers, since a trigger has no prompt.
 
 ## 0.1.4
 
