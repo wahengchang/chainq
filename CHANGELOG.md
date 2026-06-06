@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.3
+
+- **Editor: no more typing node ids.** The `from` text box is gone. A node's
+  wiring now shows as **chips** (first = `$json`), each with a `×` to disconnect
+  — so you wire on the canvas (drag a node's ● / the `+` on a wire) and just
+  *see* the result here.
+- **Editor: the panel shows earlier steps' outputs.** Below the direct
+  input(s), every earlier upstream step's output is listed (read-only) so you
+  can see all the data flowing toward this node.
+
 ## 0.1.2
 
 - **Editor: the `from` field is clearer.** It now reads "wired upstream(s)",

@@ -118,6 +118,14 @@
   .mbody{padding:10px 12px;overflow:auto;flex:1;white-space:pre-wrap;word-break:break-word}
   .mcol textarea{height:100%;border:0;border-radius:0;min-height:0;background:var(--bg)}
   .mcol .pad{padding:10px 12px}
+  /* current-input chips (wiring shown, not typed) */
+  .wire{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+  .chip{display:inline-flex;align-items:center;gap:6px;background:var(--panel2);border:1px solid var(--line);
+    border-radius:14px;padding:3px 6px 3px 10px;font-size:12px;color:var(--ink)}
+  .chip.p{border-color:color-mix(in srgb,var(--pin) 50%,var(--line))}
+  .chip .x{cursor:pointer;color:var(--dim);border:0;background:none;font-size:13px;line-height:1;padding:0 2px;border-radius:50%}
+  .chip .x:hover{color:var(--bad)}
+  .infield.ro{cursor:default;opacity:.85} .infield.ro:hover{background:none;border-color:transparent}
   .infield{margin-bottom:8px;cursor:pointer;border-radius:4px;padding:5px;border:1px solid transparent}
   .infield:hover{background:#1b1e22;border-color:var(--line)}
   .infield .ins{float:right;color:var(--dim);font-size:10px;opacity:0}
@@ -198,14 +206,12 @@
             <div class="chead">input</div>
             <div class="mbody">
               <div id="pnFromWrap">
-                <label style="margin-top:0">from <span style="text-transform:none;letter-spacing:0;color:var(--dim)">— wired upstream(s) · first = <span class="intag">$json</span></span></label>
-                <input id="pnFrom" spellcheck="false" placeholder="empty = start node">
-                <div class="dim" style="font-size:11px;margin-top:4px;text-transform:none;letter-spacing:0">
-                  Fills in by itself when you connect on the canvas — drag a node's right-edge ● onto this one, or click the <b>+</b> on a wire. Typing here is optional (comma-separated ids).
-                </div>
+                <label style="margin-top:0">input <span style="text-transform:none;letter-spacing:0;color:var(--dim)">— wired upstream(s) · first = <span class="intag">$json</span></span></label>
+                <div id="pnWire" class="wire"></div>
               </div>
               <div id="pnTypeFields" style="margin-top:10px"></div>
               <div style="margin-top:10px" id="pnInput" class="dim">Run to see what feeds this node.</div>
+              <div style="margin-top:10px" id="pnEarlier"></div>
             </div>
           </div>
           <div class="mcol" id="pnPromptCol">

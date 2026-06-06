@@ -326,6 +326,36 @@ async function connectTo(source,target){
   if(!ok)return setMsg("canvasMsg","err",errs(data)||"connect failed");
   await loadNodes();setMsg("canvasMsg","ok","connected "+source+" → "+target); // after re-render (loadNodes clears canvasMsg)
 }
+// Current input as chips (first = $json primary), each with × to disconnect.
+// Wiring lives on the canvas; this panel just shows + lets you drop a wire.
+function renderWire(n){
+  const ups=n.from||[];
+  if(!ups.length){$("pnWire").innerHTML='<span class="dim">no upstream — drag a node\'s right-edge ● onto this one, or click the + on a wire</span>';return;}
+  $("pnWire").innerHTML=ups.map((u,i)=>
+    '<span class="chip'+(i===0?" p":"")+'" title="'+(i===0?"$json (primary input)":'$node[&quot;'+esc(u)+'&quot;]')+'">'
+    +(i===0?'<span class="intag">$json</span> ':"")+esc(u)
+    +'<b class="x" data-rm="'+esc(u)+'" title="disconnect">×</b></span>').join("");
+}
+async function disconnect(id){
+  const n=nodes.find(x=>x.id===selected);if(!n)return;
+  const from=(n.from||[]).filter(x=>x!==id);
+  const{ok,data}=await api("/api/connect",{method:"POST",body:JSON.stringify({path:current,node:selected,from})});
+  if(!ok)return setMsg("pnMsg","err",errs(data)||"disconnect failed");
+  await loadNodes();selectNode(selected);
+}
+// transitive upstream ids of `id` (for the "earlier outputs" view).
+function ancestorIds(id){
+  const by={};nodes.forEach(n=>by[n.id]=n);
+  const seen=new Set(),stack=[...((by[id]||{}).from||[])];
+  while(stack.length){const x=stack.pop();if(seen.has(x)||!by[x])continue;seen.add(x);(by[x].from||[]).forEach(u=>stack.push(u));}
+  return seen;
+}
+// chip × → disconnect that upstream
+document.addEventListener("click",e=>{
+  const tgt=/** @type {Element|null} */(e.target);if(!tgt||!tgt.closest)return;
+  const x=/** @type {HTMLElement|null} */(tgt.closest(".chip .x[data-rm]"));
+  if(x&&x.dataset.rm){e.stopPropagation();disconnect(x.dataset.rm);}
+});
 // Insert a brand-new step ON an edge source→target: create it, wire source→new,
 // then repoint target from `source` to `new`. Composes the same endpoints the
 // editor already uses, so each step is validated壞不落地.
@@ -387,21 +417,30 @@ function selectNode(id){
   $("pnId").value=n.id;$("pnType").innerHTML=typeBadge(n.type)+'<span style="margin-left:6px">'+esc(TYPE_GLYPH[n.type]||n.type)+'</span>';
   const isCmd=n.type==="cmd";
   $("pnPrompt").value=isCmd?(n.run||""):(n.prompt||"");
-  $("pnFrom").value=(n.from||[]).join(", ");
+  renderWire(n);   // current input as chips (× to disconnect) — wiring is on the canvas, not typed
   $("pnFromWrap").classList.toggle("hidden",n.type==="input"); // input is a trigger — no `from`
   $("pnPromptCol").classList.toggle("hidden",n.type==="input"); // a trigger has no prompt — hide the whole prompt column
   // INPUT: an `input` trigger shows its params form (runtime values); any other
-  // node shows each upstream's last output (click to insert into the prompt).
+  // node shows its direct inputs' outputs (click to insert) + the outputs of
+  // EARLIER upstream steps (read-only — wire one in to reference it).
   const ups=n.from||[];
-  $("pnInput").innerHTML = n.type==="input"
-    ? renderParamsForm(n)
-    : !ups.length
-    ? '<span class="dim">no upstream — this is a start node</span>'
-    : ups.map((u,i)=>{const r=results[u];const tag=i===0?'$json':('$node["'+u+'"]');
-        const val=r?esc(r.output||r.error||"(empty)"):'<span class="dim">(run to see)</span>';
-        return '<div class="infield" onclick="insertVar(\''+u+'\','+(i===0)+')" title="click to insert into the prompt">'
-          +'<span class="ins">↵ insert</span><span class="intag">'+tag+'</span> ← '+u
-          +'<div class="inval">'+val+'</div></div>';}).join("");
+  const inField=(u,i)=>{const r=results[u];const tag=i===0?'$json':('$node["'+u+'"]');
+    const val=r?esc(r.output||r.error||"(empty)"):'<span class="dim">(run to see)</span>';
+    return '<div class="infield" onclick="insertVar(\''+u+'\','+(i===0)+')" title="click to insert into the prompt">'
+      +'<span class="ins">↵ insert</span><span class="intag">'+tag+'</span> ← '+u
+      +'<div class="inval">'+val+'</div></div>';};
+  if(n.type==="input"){$("pnInput").innerHTML=renderParamsForm(n);$("pnEarlier").innerHTML="";}
+  else{
+    $("pnInput").innerHTML=ups.length?ups.map(inField).join(""):'<span class="dim">no upstream — this is a start node</span>';
+    // earlier steps = transitive upstreams not directly wired — their outputs, so
+    // you can SEE every prior step's data. Lives in its own box so loadItems (which
+    // owns #pnInput after a run) never clobbers it. read-only (wire one in to use).
+    const earlier=[...ancestorIds(n.id)].filter(u=>!ups.includes(u));
+    $("pnEarlier").innerHTML=earlier.length?'<div class="dim" style="margin-top:4px">earlier outputs (wire one in to use)</div>'
+      +earlier.map(u=>{const r=results[u];const val=r?esc(r.output||r.error||"(empty)"):'<span class="dim">(run to see)</span>';
+        return '<div class="infield ro" title="'+esc(u)+' — connect it on the canvas to reference $(\''+esc(u)+'\')">'
+          +'<span class="intag">'+esc(u)+'</span><div class="inval">'+val+'</div></div>';}).join(""):"";
+  }
   // OUTPUT
   const ro=results[n.id];
   $("pnOut").className="mbody"+(ro&&ro.status==="failed"?" out err":(ro&&ro.status==="running"?" dim":(ro?"":" dim")));
@@ -538,10 +577,8 @@ async function saveNode(){
     const r=await api("/api/set",{method:"POST",body:JSON.stringify({path:current,node:selected,field:f,value:v})});
     if(!r.ok)return setMsg("pnMsg","err",errs(r.data)||"save failed");
   }
-  if(n.type!=="input"){   // input is a trigger — it must not have a `from`
-    const r=await api("/api/set-from",{method:"POST",body:JSON.stringify({path:current,node:selected,from:$("pnFrom").value})});
-    if(!r.ok)return setMsg("pnMsg","err",errs(r.data)||"save failed");
-  }
+  // wiring is no longer typed here — it's managed live on the canvas + the input
+  // chips (× to disconnect), so Save only writes this node's own fields.
   await loadNodes();selectNode(selected);
   setMsg("pnMsg","ok","saved ✓");   // after the re-render (selectNode clears pnMsg) so it actually shows
 }
