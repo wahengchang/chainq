@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.6
+
+Docs release (no code changes).
+
+- **README is now a scannable landing page** — one-line pitch, a hero screenshot
+  of the visual editor, a CLI + UI quickstart, and a "you want to… → go to" table
+  linking the deeper docs. The engine internals moved behind those links.
+- **Docs synced to current behavior** — the cache walkthroughs use `--cache`
+  (since `run` re-runs by default), dead `fake`/offline-profile references are
+  gone, and the dated design/planning snapshots carry a "current behavior differs"
+  pointer.
+
 ## 0.1.5
 
 - **Editor: tighter node panel.** The input column had large phantom gaps (the
