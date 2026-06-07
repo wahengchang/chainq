@@ -6,6 +6,13 @@ Repo: chain-cli (not a git repo yet)
 Status: APPROVED
 Mode: Startup (intrapreneurship 變體)
 
+> **Historical design snapshot (2026-06-02).** This records the approved plan, not
+> current behavior. A few things shipped differently: the command is **`chainq`**
+> (not `chain`); there is **no `fake`/offline profile** (every `ai` step calls the
+> real model); and **`chainq run` re-runs everything by default** — pass `--cache`
+> to reuse unchanged steps. For current truth see the [README](../README.md) and
+> [docs/cli/](cli/).
+
 ## Problem Statement
 
 團隊裡好幾個人，現在用**本機 CLI 大模型**（`claude -p`、`codex -m`）手動串多個 prompt：複製上一步輸出、貼進下一個 prompt、再跑。一條工作流程常有 3 個節點，有時 10 個。
