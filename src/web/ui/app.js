@@ -38,6 +38,12 @@ const typeMeta=t=>TYPE_META[t]||{c:"#7f868d",i:"●"};
 const typeBadge=t=>{const m=typeMeta(t);return '<span class="tbadge" style="--tc:'+m.c+'" title="'+esc(t)+'">'+esc(m.i)+'</span>';};
 const typeChip=t=>'<span class="ntype" style="--tc:'+typeMeta(t).c+'">'+esc(TYPE_GLYPH[t]||t)+'</span>';
 let current=null,nodes=[],selected=null,results={},previewTimer=null;
+// the open panel has UNSAVED edits. Drives three things: the draft sent on a run
+// (draftOverride), the "● 未儲存" indicator, and the save-or-discard guard on any
+// exit (close / Esc / switch node / back / raw). Only ONE node can be dirty at a
+// time — the open one — because that's the only editable panel. Set by markDirty on
+// any edit; cleared by a fresh render from saved (selectNode) or a successful save.
+let panelDirty=false;
 // node id → validation error message (from /api/validate). Drives the ⚠/red
 // flag on the canvas so "input not wired" is visible BEFORE you run.
 let invalid={};
@@ -95,7 +101,7 @@ function paramRow(name,spec){
     +'<select class="pf-type" title="value type">'+topt("","any")+topt("string","string")+topt("number","number")+topt("boolean","boolean")+'</select>'
     +'<input class="pf-def" spellcheck="false" placeholder="default (optional)" value="'+esc(def!=null?String(def):"")+'">'
     +'<label class="pf-req" title="a run must supply this (unless it has a default)"><input type="checkbox" class="pf-reqbox"'+(req?" checked":"")+'>req</label>'
-    +'<button type="button" class="pf-del" title="remove field" onclick="this.closest(\'.paramrow\').remove()">×</button>'
+    +'<button type="button" class="pf-del" title="remove field" onclick="this.closest(\'.paramrow\').remove();markDirty()">×</button>'
     +'</div>';
 }
 function renderParamsEditor(n){
@@ -106,7 +112,7 @@ function renderParamsEditor(n){
     +'<button type="button" class="addparam" onclick="addParamRow()">+ add field</button>'
     +'<div class="dim" style="font-size:11px;margin-top:6px">each field flows downstream as <code>{{ $json.name }}</code>. Leave empty to just kick off the chain. <b>Save</b> to apply.</div>';
 }
-function addParamRow(){const c=$("pnParams");if(c){c.insertAdjacentHTML("beforeend",paramRow());/** @type {any} */(c.lastElementChild).querySelector(".pf-name").focus();}}
+function addParamRow(){const c=$("pnParams");if(c){c.insertAdjacentHTML("beforeend",paramRow());/** @type {any} */(c.lastElementChild).querySelector(".pf-name").focus();markDirty();}}
 // read the field-definition rows back into a `params` object for saveNode.
 function collectParams(){
   const out=/** @type {any} */({});const rows=document.querySelectorAll("#pnParams .paramrow");
@@ -154,7 +160,7 @@ async function open(path){current=path;selected=null;results={};inputVals={};lay
 // load saved node positions; any saved layout switches the canvas to free positioning.
 async function loadLayout(){const{data}=await api("/api/layout?path="+encodeURIComponent(current));
   layout=(data&&data.layout)||{};manual=Object.keys(layout).length>0;}
-function back(){$("editor").classList.add("hidden");$("create").classList.remove("hidden");listFlows();}
+async function back(){if(!await guardLeave())return;closeNodeNow();$("editor").classList.add("hidden");$("create").classList.remove("hidden");listFlows();}
 
 async function loadNodes(){
   const{ok,data}=await api("/api/parse?path="+encodeURIComponent(current));
@@ -217,7 +223,7 @@ function nodeCard(n){
     +fromLine
     +'<div class="npreview">'+esc((n.prompt||n.run||"").slice(0,70))+'</div>'+out+warnLine
     +'<div class="port" title="drag onto another node to connect →"></div>';
-  d.onclick=()=>{if(connecting||movingNode)return;selectNode(n.id);}; // a drag (connect or reposition) must not also open the panel
+  d.onclick=()=>{if(connecting||movingNode)return;trySelect(n.id);}; // a drag (connect or reposition) must not also open the panel; trySelect guards unsaved edits
   return d;
 }
 function renderGraph(){
@@ -467,23 +473,34 @@ function selectNode(id){
         return '<div class="infield" onclick="insertEarlier(\''+u+'\')" title="wire '+esc(u)+' into from: and insert {{ $node[&quot;'+esc(u)+'&quot;] }} at the cursor">'
           +'<span class="ins">↵ wire + insert</span><span class="intag">'+esc(u)+'</span><div class="inval">'+val+'</div></div>';}).join(""):"";
   }
-  // OUTPUT — for ai nodes the output schema (the contract) sits above the actual
-  // output; every other type has none, so the box clears.
+  // OUTPUT column — for ai nodes the output-schema editor sits above the actual
+  // output; every other type has none, so the box clears. (It's an EDITOR, built
+  // here on a full render — never on a run; refreshSelectedOutput leaves it alone,
+  // which keeps an unsaved schema edit from being wiped mid-run.)
   $("pnSchema").innerHTML=n.type==="ai"?renderSchemaEditor(n):"";
   if(n.type==="ai")schemaPreview();
-  const ro=results[n.id];
-  // while a node is queued or running its OLD output is stale — never show it as
-  // if it were this run's result. Dim + a status line; the real output replaces it
-  // when onResult streams back (and loadItems is guarded the same way).
-  const busy=ro&&(ro.status==="running"||ro.status==="pending");
-  $("pnOut").className="mbody"+(ro&&ro.status==="failed"?" out err":(busy?" dim":(ro?"":" dim")));
-  $("pnOut").textContent=ro?(ro.status==="running"?"running…":(ro.status==="pending"?"queued — waiting its turn…":(ro.error||ro.output||"(empty)"))):"Run to see this node's output.";
-  const lab={ran:'<span class="g-ran">✓ ran · called the model</span>',cached:'<span class="g-cached">⊘ cached · reused, no call</span>',failed:'<span class="g-failed">✗ failed</span>',skipped:'<span class="g-skipped">– skipped</span>',running:'<span class="g-running"><span class="spin">◌</span> running…</span>',pending:'<span class="g-pending">○ queued…</span>'};
-  $("pnOutStatus").innerHTML=ro?(lab[ro.status]||""):"";
   $("pnTypeFields").innerHTML=renderTypeFields(n);   // P2-a: type-specific editor
   if(invalid[id])setMsg("pnMsg","err","⚠ "+invalid[id]);else setMsg("pnMsg","","");
   renderPreview();
-  if(n.type!=="input")loadItems(id);   // P1-b: show the per-item content (items model)
+  refreshSelectedOutput();   // the actual output/status/items — the ONLY part a run redraws
+  panelDirty=false;updateDirty();   // a fresh render from saved is, by definition, clean
+}
+// status labels for the output column — shared by selectNode + refreshSelectedOutput.
+const STATUS_LAB={ran:'<span class="g-ran">✓ ran · called the model</span>',cached:'<span class="g-cached">⊘ cached · reused, no call</span>',failed:'<span class="g-failed">✗ failed</span>',skipped:'<span class="g-skipped">– skipped</span>',running:'<span class="g-running"><span class="spin">◌</span> running…</span>',pending:'<span class="g-pending">○ queued…</span>'};
+// Redraw ONLY the output region (status glyph, output text, per-item) of the open
+// node — never the editors. A run stream (onNode) calls this, so a re-run shows the
+// new result WITHOUT rebuilding the prompt/schema/type fields. That rebuild is what
+// used to wipe an unsaved edit the instant you hit re-run. While queued/running the
+// OLD output is stale → dim + a status line; the real output replaces it when
+// onResult streams back (loadItems is guarded on status the same way).
+function refreshSelectedOutput(){
+  if(!selected)return;const n=nodes.find(x=>x.id===selected);if(!n)return;
+  const ro=results[selected];
+  const busy=ro&&(ro.status==="running"||ro.status==="pending");
+  $("pnOut").className="mbody"+(ro&&ro.status==="failed"?" out err":(busy?" dim":(ro?"":" dim")));
+  $("pnOut").textContent=ro?(ro.status==="running"?"running…":(ro.status==="pending"?"queued — waiting its turn…":(ro.error||ro.output||"(empty)"))):"Run to see this node's output.";
+  $("pnOutStatus").innerHTML=ro?(STATUS_LAB[ro.status]||""):"";
+  if(n.type!=="input")loadItems(selected);   // P1-b: per-item content (items model)
 }
 // P2-a: type-specific config the panel can set without dropping to raw YAML —
 // splitOut/aggregate `field`, merge `mode`/`key`, cmd `mode`, input `params`.
@@ -582,16 +599,16 @@ function schemaRow(name,type){
   return '<div class="paramrow">'
     +'<input class="pf-name" spellcheck="false" placeholder="field name" value="'+esc(name||"")+'" oninput="schemaPreview()">'
     +'<select class="pf-type" title="value type" onchange="schemaPreview()">'+topt("string")+topt("number")+topt("boolean")+topt("array")+topt("object")+'</select>'
-    +'<button type="button" class="pf-del" title="remove field" onclick="this.closest(\'.paramrow\').remove();schemaPreview()">×</button>'
+    +'<button type="button" class="pf-del" title="remove field" onclick="this.closest(\'.paramrow\').remove();schemaPreview();markDirty()">×</button>'
     +'</div>';
 }
-function addSchemaRow(){const c=$("pnSchemaRows");if(c){c.insertAdjacentHTML("beforeend",schemaRow());/** @type {any} */(c.lastElementChild).querySelector(".pf-name").focus();schemaPreview();}}
+function addSchemaRow(){const c=$("pnSchemaRows");if(c){c.insertAdjacentHTML("beforeend",schemaRow());/** @type {any} */(c.lastElementChild).querySelector(".pf-name").focus();schemaPreview();markDirty();}}
 // switch format: toggle visibility only — NEVER touch #pnSchemaRows (non-destructive).
 function onSchemaFormat(btn){
   const fmt=btn.dataset.fmt;const wrap=$("pnSchemaWrap");if(!wrap)return;
   wrap.className="schemawrap fmt-"+fmt;wrap.dataset.fmt=fmt;
   wrap.querySelectorAll(".fmtbtn").forEach(b=>b.classList.toggle("on",b===btn));
-  schemaPreview();
+  schemaPreview();markDirty();   // changing the output format is an unsaved edit
 }
 // live "model returns:" example built from the active format + current fields.
 function schemaPreview(){
@@ -687,12 +704,14 @@ async function renameSelected(){
   if(!ok){setMsg("pnMsg","err",errs(data)||"rename failed");$("pnId").value=selected;return;}
   selected=to;setMsg("pnMsg","ok","renamed ✓");await loadNodes();selectNode(to);
 }
-function closeNode(){selected=null;$("modal").classList.add("hidden");}
-async function saveNode(){
-  const n=nodes.find(x=>x.id===selected);if(!n)return;
-  // each node type owns different fields — write exactly those, not always prompt.
-  // (key before mode for merge: setting mode=byKey while key is unset would be a
-  // NEW validate error and get rejected, leaving mode unsaved.)
+function closeNodeNow(){selected=null;panelDirty=false;updateDirty();$("modal").classList.add("hidden");}
+// The node's OWN editable fields, read live from the panel → [[field,value],…].
+// SINGLE SOURCE for both saveNode (POSTs each to /api/set) and the draft sent on a
+// run (draftOverride). Each node type owns different fields — write exactly those,
+// not always prompt. (key before mode for merge: setting mode=byKey while key is
+// unset would be a NEW validate error, rejected, leaving mode unsaved.) A null
+// value = "remove this field" (e.g. a schema switched back to Text).
+function panelFieldSets(n){
   const sets=[];
   if(n.type==="cmd"){sets.push(["run",$("pnPrompt").value]);if($("tfMode"))sets.push(["mode",$("tfMode").value]);}
   else if(n.type==="assemble"){sets.push(["prompt",$("pnPrompt").value]);}
@@ -706,14 +725,30 @@ async function saveNode(){
   else if(n.type==="merge"){if($("tfKey"))sets.push(["key",$("tfKey").value]);if($("tfMode"))sets.push(["mode",$("tfMode").value]);}
   else if(n.type==="write"){if($("tfPath"))sets.push(["path",$("tfPath").value]);if($("tfMode"))sets.push(["mode",$("tfMode").value]);}
   else if(n.type==="input"){if($("pnParams"))sets.push(["params",collectParams()]);}
-  for(const [f,v] of sets){
+  return sets;
+}
+// the open panel's unsaved draft as the run API's `overrides` — or undefined when
+// nothing is dirty (so the run uses the saved flow). Only the open node can be
+// dirty, so it's always THIS node's fields. The server applies it IN MEMORY (file
+// untouched), so you see the result of your edit without having to save first.
+function draftOverride(){
+  if(!selected||!panelDirty)return undefined;
+  const n=nodes.find(x=>x.id===selected);if(!n)return undefined;
+  return {node:selected,fields:Object.fromEntries(panelFieldSets(n))};
+}
+// Save the open node's fields to the flow file. Returns true on success (the guard
+// uses this: a failed save must NOT let you leave + lose the edit). Wiring is no
+// longer typed here — it's managed live on the canvas + input chips — so Save only
+// writes this node's own fields.
+async function saveNode(){
+  const n=nodes.find(x=>x.id===selected);if(!n)return false;
+  for(const [f,v] of panelFieldSets(n)){
     const r=await api("/api/set",{method:"POST",body:JSON.stringify({path:current,node:selected,field:f,value:v})});
-    if(!r.ok)return setMsg("pnMsg","err",errs(r.data)||"save failed");
+    if(!r.ok){setMsg("pnMsg","err",errs(r.data)||"save failed");return false;}
   }
-  // wiring is no longer typed here — it's managed live on the canvas + the input
-  // chips (× to disconnect), so Save only writes this node's own fields.
-  await loadNodes();selectNode(selected);
+  await loadNodes();selectNode(selected);   // re-render from saved → panelDirty cleared
   setMsg("pnMsg","ok","saved ✓");   // after the re-render (selectNode clears pnMsg) so it actually shows
+  return true;
 }
 // read an NDJSON stream, calling onNode for each node result as it arrives
 async function streamRun(url,bodyObj){
@@ -729,14 +764,17 @@ function onNode(rec){
   if(rec.error&&!rec.id){setMsg("canvasMsg","err",rec.error);return;}
   results[rec.id]={status:rec.status,output:rec.output,error:rec.error,items:rec.items};
   renderGraph();                       // each node flips the instant it finishes
-  if(selected===rec.id)selectNode(selected);
+  // ONLY the output region — never a full selectNode, which would rebuild the prompt
+  // /schema editors and wipe whatever you typed but haven't saved (the re-run bug).
+  if(selected===rec.id)refreshSelectedOutput();
 }
 async function runNode(force){
   if(!selected)return;
   $("pnOut").className="mbody dim";$("pnOut").textContent="running…";$("pnOutStatus").innerHTML='<span class="g-running">◌ running…</span>';
   const ids=[selected,...ancestors(selected)];
   setPendingUI(ids);
-  const r=await streamRun("/api/run-node",{path:current,node:selected,profile:$("profile").value,fresh:!!force,input:collectInput()});
+  // overrides = the panel's unsaved draft → run what's on screen, no save needed.
+  const r=await streamRun("/api/run-node",{path:current,node:selected,profile:$("profile").value,fresh:!!force,input:collectInput(),overrides:draftOverride()});
   if(!r.ok){clearRunning(ids);renderGraph();return setMsg("pnMsg","err",errs(r.data)||"run failed");}
 }
 // run-to-here straight from a node's ▷ button — runs inline, NO modal.
@@ -745,7 +783,10 @@ async function runNode(force){
 async function runTo(id,fresh){
   const ids=[id,...ancestors(id)];
   setPendingUI(ids);
-  const r=await streamRun("/api/run-node",{path:current,node:id,profile:$("profile").value,fresh:!!fresh,input:collectInput()});
+  // a card ▷/↻ runs the SAVED flow — unless it's the open node, where the panel's
+  // unsaved draft (if any) is what you mean to run. (draftOverride targets `selected`.)
+  const overrides=id===selected?draftOverride():undefined;
+  const r=await streamRun("/api/run-node",{path:current,node:id,profile:$("profile").value,fresh:!!fresh,input:collectInput(),overrides});
   if(!r.ok){clearRunning(ids);renderGraph();return setMsg("canvasMsg","err",errs(r.data)||"run failed");}
 }
 // click a variable in INPUT → insert it into the prompt at the cursor (no typos)
@@ -754,6 +795,7 @@ function insertVar(id,primary){
   const ta=$("pnPrompt");const s=ta.selectionStart??ta.value.length,e=ta.selectionEnd??s;
   ta.value=ta.value.slice(0,s)+expr+ta.value.slice(e);
   ta.focus();ta.selectionStart=ta.selectionEnd=s+expr.length;
+  markDirty();   // a programmatic .value change fires no input event — mark it ourselves
   schedulePreview();
 }
 // click an EARLIER (transitive, not-yet-wired) output → wire it into `from:` AND
@@ -775,6 +817,7 @@ async function insertEarlier(u){
   if(!ok)return setMsg("pnMsg","err",errs(data)||"wire failed");
   await loadNodes();selectNode(selected);
   const t2=$("pnPrompt");t2.value=next;t2.focus();t2.selectionStart=t2.selectionEnd=caret;
+  markDirty();   // the spliced-in reference is an unsaved prompt edit (loadNodes cleared dirty)
   schedulePreview();
   setMsg("pnMsg","ok","wired "+u+" in · inserted reference — Save to keep");
 }
@@ -782,7 +825,7 @@ async function deleteNode(){
   if(!selected)return;
   const{ok,data}=await api("/api/delete-node",{method:"POST",body:JSON.stringify({path:current,node:selected})});
   if(!ok)return setMsg("pnMsg","err",errs(data)||"delete failed");
-  closeNode();await loadNodes();
+  closeNodeNow();await loadNodes();   // node's gone — nothing to save, skip the guard
 }
 // Add a step via the engine's nodeStarter (server-side, single source of truth
 // for each type's minimal fields). The node is unwired — drag/edit `from` next.
@@ -795,11 +838,16 @@ async function addNode(){
 }
 async function runAll(fresh){
   setPendingUI(nodes.map(n=>n.id));
-  const r=await streamRun("/api/run",{path:current,profile:$("profile").value,fresh:!!fresh,input:collectInput()});
+  // if a node panel is open with unsaved edits, Run all runs THAT draft too (in-memory).
+  const r=await streamRun("/api/run",{path:current,profile:$("profile").value,fresh:!!fresh,input:collectInput(),overrides:draftOverride()});
   if(!r.ok){results={};renderGraph();return setMsg("canvasMsg","err",errs(r.data)||"run failed");}
 }
 let rawOn=false;
-async function toggleRaw(){rawOn=!rawOn;
+async function toggleRaw(){
+  // leaving node view for raw YAML re-reads the file — an unsaved panel draft would
+  // vanish, so guard it (only when switching INTO raw; coming back loses nothing).
+  if(!rawOn){if(!await guardLeave())return;closeNodeNow();}
+  rawOn=!rawOn;
   if(rawOn){const{data}=await api("/api/read?path="+encodeURIComponent(current));$("yaml").value=data.yaml||"";
     $("nodeView").classList.add("hidden");$("rawView").classList.remove("hidden");$("rawBtn").textContent="◧ nodes";}
   else{showNodes();loadNodes();}
@@ -808,10 +856,53 @@ function showNodes(){rawOn=false;$("rawView").classList.add("hidden");$("nodeVie
 async function saveRaw(){const{ok,data}=await api("/api/save",{method:"POST",body:JSON.stringify({path:current,yaml:$("yaml").value})});
   setMsg("rawMsg",ok?"ok":"err",ok?"saved ✓":errs(data));}
 function setMsg(id,cls,t){const e=$(id);if(!e)return;e.className="msg "+cls;e.textContent=t;}
+
+// ---- unsaved-edit tracking + leave guard ----
+// Any FLOW edit in the open panel marks it dirty. <input>/<select>/<textarea> raise
+// input/change; button-driven edits (schema format/add/remove rows, programmatic
+// prompt inserts) call markDirty() directly. Two controls are NOT flow edits and so
+// must NOT mark dirty: the rename field (#pnId, commits on its own via renameSelected)
+// and the input node's runtime test-value form (.paramin → inputVals, sent with each
+// run like CLI --input, never saved to the flow). Both are excluded below.
+function markDirty(){if(!selected)return;panelDirty=true;updateDirty();}
+function isFlowEdit(t){return t&&t.id!=="pnId"&&!(t.classList&&t.classList.contains("paramin"));}
+$("modal").addEventListener("input",e=>{if(isFlowEdit(/** @type {any} */(e.target)))markDirty();});
+$("modal").addEventListener("change",e=>{if(isFlowEdit(/** @type {any} */(e.target)))markDirty();});
+// reflect dirty state: the footer "● 未儲存" chip + a Save-button highlight. Both are
+// optional ($ guards null), so it's safe to call before the elements exist.
+function updateDirty(){
+  const chip=$("pnDirty");if(chip)chip.classList.toggle("hidden",!panelDirty);
+  const btn=$("pnSaveBtn");if(btn)btn.classList.toggle("dirty",panelDirty);
+}
+// The save-or-discard gate every exit passes through. Resolves true = "go ahead"
+// (saved or discarded), false = "stay" (cancelled, or a save that failed). A clean
+// panel resolves true at once. We use an IN-PANEL bar — never native confirm() or a
+// beforeunload prompt mid-session — since a blocking dialog freezes the extension.
+let guardResolve=null;
+function guardLeave(){
+  if(!panelDirty)return Promise.resolve(true);
+  $("pnGuard").classList.remove("hidden");
+  return new Promise(res=>{guardResolve=res;});
+}
+async function guardPick(choice){   // 'save' | 'discard' | 'cancel'
+  $("pnGuard").classList.add("hidden");
+  const done=guardResolve;guardResolve=null;
+  if(choice==="cancel"){if(done)done(false);return;}
+  if(choice==="save"){const ok=await saveNode();if(!ok){if(done)done(false);return;}} // failed save → stay so the error shows
+  if(choice==="discard"){panelDirty=false;updateDirty();}
+  if(done)done(true);
+}
+// guarded close (× / backdrop / Esc) and guarded node-switch (card click). Internal
+// re-renders (after save/run/connect) still call selectNode directly — no guard.
+async function closeNode(){if(!await guardLeave())return;closeNodeNow();}
+async function trySelect(id){if(id===selected)return;if(!await guardLeave())return;selectNode(id);}
+// last-ditch native guard for a genuine tab close / refresh (normal interaction and
+// Playwright won't trip it). Standard returnValue prompt, not a JS confirm().
+window.addEventListener("beforeunload",e=>{if(panelDirty){e.preventDefault();e.returnValue="";}});
 window.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("modal").classList.contains("hidden"))closeNode();});
 boot();
 
 // Migration bridge: these handlers are still referenced by inline onclick= in
 // app.html (and in runtime-generated card markup), so a module must expose them
 // on window. Converting to addEventListener is the follow-up.
-Object.assign(window,{listFlows,createFlow,back,toggleRaw,runAll,runNode,saveNode,deleteNode,closeNode,addNode,saveRaw,renameSelected,schedulePreview,insertVar,insertEarlier,runTo,setInputVal,onMergeMode,addParamRow,addSchemaRow,onSchemaFormat,schemaPreview,changeType});
+Object.assign(window,{listFlows,createFlow,back,toggleRaw,runAll,runNode,saveNode,deleteNode,closeNode,addNode,saveRaw,renameSelected,schedulePreview,insertVar,insertEarlier,runTo,setInputVal,onMergeMode,addParamRow,addSchemaRow,onSchemaFormat,schemaPreview,changeType,markDirty,guardPick});

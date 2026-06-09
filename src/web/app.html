@@ -157,7 +157,14 @@
   .itemidx{color:var(--pin);font-size:10px;letter-spacing:.04em}
   .itemval{font-size:12px;white-space:pre-wrap;word-break:break-word;color:var(--dim);user-select:text;margin-top:2px}
   .out.err{color:var(--bad)}
-  .mfoot{padding:6px 14px;border-top:1px solid var(--line);min-height:0}
+  .mfoot{padding:6px 14px;border-top:1px solid var(--line);min-height:0;display:flex;align-items:center;gap:10px}
+  /* unsaved-edit indicator + the in-panel save-or-discard guard bar (never a native dialog) */
+  .dirtychip{color:var(--accent);font-size:11px;white-space:nowrap}
+  .dirtychip.hidden{display:none}
+  .guardbar{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink)}
+  .guardbar.hidden{display:none}
+  .guardbar button{font-size:11px;padding:3px 10px}
+  button.dirty{border-color:var(--accent);color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
   /* raw */
   .raw textarea{height:calc(100vh - 98px);width:100%;border:0;border-radius:0}
 </style></head>
@@ -218,7 +225,7 @@
           </select>
           <button class="primary" onclick="runNode()">▷ Run to here</button>
           <button onclick="runNode(true)" title="ignore cache, call the model again">↻ re-run</button>
-          <button onclick="saveNode()">Save</button>
+          <button id="pnSaveBtn" onclick="saveNode()">Save</button>
           <button onclick="deleteNode()">delete</button>
           <button onclick="closeNode()">✕ close</button>
         </div>
@@ -247,7 +254,15 @@
             <div id="pnOut" class="mbody dim">Run to see this node's output.</div>
           </div>
         </div>
-        <div class="mfoot"><span id="pnMsg" class="msg" style="margin:0"></span></div>
+        <div class="mfoot">
+          <span id="pnDirty" class="dirtychip hidden">● 未儲存</span>
+          <span id="pnMsg" class="msg" style="margin:0"></span>
+          <span id="pnGuard" class="guardbar hidden">有未儲存的編輯 —
+            <button type="button" class="primary" onclick="guardPick('save')">先儲存</button>
+            <button type="button" onclick="guardPick('discard')">不存，丟棄</button>
+            <button type="button" onclick="guardPick('cancel')">取消</button>
+          </span>
+        </div>
       </div>
     </div>
   </div>
