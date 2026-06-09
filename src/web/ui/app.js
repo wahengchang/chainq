@@ -584,26 +584,41 @@ function schemaMode(n){
   return "json";
 }
 const SCHEMA_SAMPLE={string:'"…"',number:"0",boolean:"true",array:'["…"]',object:"{…}"};
+const FMT_LABELS={text:"Text",json:"JSON",list:"List"};
 function fmtBtn(v,label,mode){return '<button type="button" class="fmtbtn'+(v===mode?" on":"")+'" data-fmt="'+v+'" onclick="onSchemaFormat(this)">'+label+'</button>';}
+// Collapsible: the header is always visible (shows the active format as a chip);
+// the body (selector + helper + fields + preview) only appears when expanded.
+// Starts collapsed so the common case (Text, nothing to set) stays compact. The
+// open/closed state is a sticky preference (module-level), so a save/re-run that
+// rebuilds the panel keeps it as you left it — no surprise collapse mid-edit.
+let schemaOpen=false;
 function renderSchemaEditor(n){
   const mode=schemaMode(n);
   // only JSON mode owns named fields; text/list start the json editor empty so a
   // later switch to JSON is a clean slate (list has no user fields, just `_list`).
   const fields=mode==="json"?(n.schema||{}):{};
   const rows=Object.entries(fields).map(([nm,t])=>schemaRow(nm,t)).join("");
-  return '<div id="pnSchemaWrap" class="schemawrap fmt-'+mode+'" data-fmt="'+mode+'">'
-    +'<label style="margin-top:0">output format</label>'
-    +'<div class="fmtsel">'+fmtBtn("text","Text",mode)+fmtBtn("json","JSON",mode)+fmtBtn("list","List",mode)+'</div>'
-    +'<div class="schema-text dim" style="font-size:11px;margin-top:8px">model returns plain text — no validation (most common)</div>'
-    +'<div class="schema-json">'
-      +'<div id="pnSchemaRows">'+rows+'</div>'
-      +'<button type="button" class="addparam" onclick="addSchemaRow()">+ add field</button>'
+  return '<div id="pnSchemaWrap" class="schemawrap '+(schemaOpen?"":"collapsed ")+'fmt-'+mode+'" data-fmt="'+mode+'">'
+    +'<div class="schemahdr" onclick="toggleSchema()" title="展開設定輸出格式">'
+      +'<span class="caret"></span>'
+      +'<label style="margin:0">output format</label>'
+      +'<span id="pnFmtNow" class="fmtnow">'+FMT_LABELS[mode]+'</span>'
     +'</div>'
-    +'<div class="schema-list dim" style="font-size:11px;margin-top:8px">system wraps your list in a reserved field <code>_list</code> — downstream reads <code>{{ $json._list }}</code></div>'
-    +'<div id="pnSchemaPrev"></div>'
-    +'<div class="dim" style="font-size:11px;margin-top:6px">if set: output is parsed + validated as JSON; a mismatch retries once, then fails</div>'
+    +'<div class="schemabody">'
+      +'<div class="fmtsel">'+fmtBtn("text","Text",mode)+fmtBtn("json","JSON",mode)+fmtBtn("list","List",mode)+'</div>'
+      +'<div class="schema-text dim" style="font-size:11px;margin-top:8px">model returns plain text — no validation (most common)</div>'
+      +'<div class="schema-json">'
+        +'<div id="pnSchemaRows">'+rows+'</div>'
+        +'<button type="button" class="addparam" onclick="addSchemaRow()">+ add field</button>'
+      +'</div>'
+      +'<div class="schema-list dim" style="font-size:11px;margin-top:8px">system wraps your list in a reserved field <code>_list</code> — downstream reads <code>{{ $json._list }}</code></div>'
+      +'<div id="pnSchemaPrev"></div>'
+      +'<div class="dim" style="font-size:11px;margin-top:6px">if set: output is parsed + validated as JSON; a mismatch retries once, then fails</div>'
+    +'</div>'
     +'</div>';
 }
+// collapse/expand only — does not touch the format or fields (no hidden effects).
+function toggleSchema(){schemaOpen=!schemaOpen;const w=$("pnSchemaWrap");if(w)w.classList.toggle("collapsed",!schemaOpen);}
 // one JSON field: [name][type ▾][×]. Reuses the input editor's .paramrow / .pf-*
 // styles; the dropdown carries array/object too (engine validates the container).
 function schemaRow(name,type){
@@ -619,8 +634,11 @@ function addSchemaRow(){const c=$("pnSchemaRows");if(c){c.insertAdjacentHTML("be
 // switch format: toggle visibility only — NEVER touch #pnSchemaRows (non-destructive).
 function onSchemaFormat(btn){
   const fmt=btn.dataset.fmt;const wrap=$("pnSchemaWrap");if(!wrap)return;
-  wrap.className="schemawrap fmt-"+fmt;wrap.dataset.fmt=fmt;
+  // keep expanded while picking; preserve collapsed only if it was already collapsed
+  const wasCollapsed=wrap.classList.contains("collapsed");
+  wrap.className="schemawrap"+(wasCollapsed?" collapsed":"")+" fmt-"+fmt;wrap.dataset.fmt=fmt;
   wrap.querySelectorAll(".fmtbtn").forEach(b=>b.classList.toggle("on",b===btn));
+  const now=$("pnFmtNow");if(now)now.textContent=FMT_LABELS[fmt]||fmt;   // sync the collapsed chip
   schemaPreview();markDirty();   // changing the output format is an unsaved edit
 }
 // live "model returns:" example built from the active format + current fields.
@@ -915,4 +933,4 @@ boot();
 // Migration bridge: these handlers are still referenced by inline onclick= in
 // app.html (and in runtime-generated card markup), so a module must expose them
 // on window. Converting to addEventListener is the follow-up.
-Object.assign(window,{listFlows,createFlow,back,toggleRaw,runAll,runNode,saveNode,deleteNode,closeNode,addNode,saveRaw,renameSelected,schedulePreview,insertVar,insertEarlier,runTo,setInputVal,onMergeMode,addParamRow,addSchemaRow,onSchemaFormat,schemaPreview,changeType,markDirty,resetNode});
+Object.assign(window,{listFlows,createFlow,back,toggleRaw,runAll,runNode,saveNode,deleteNode,closeNode,addNode,saveRaw,renameSelected,schedulePreview,insertVar,insertEarlier,runTo,setInputVal,onMergeMode,addParamRow,addSchemaRow,onSchemaFormat,toggleSchema,schemaPreview,changeType,markDirty,resetNode});
