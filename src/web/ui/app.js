@@ -467,7 +467,10 @@ function selectNode(id){
         return '<div class="infield" onclick="insertEarlier(\''+u+'\')" title="wire '+esc(u)+' into from: and insert {{ $node[&quot;'+esc(u)+'&quot;] }} at the cursor">'
           +'<span class="ins">↵ wire + insert</span><span class="intag">'+esc(u)+'</span><div class="inval">'+val+'</div></div>';}).join(""):"";
   }
-  // OUTPUT
+  // OUTPUT — for ai nodes the output schema (the contract) sits above the actual
+  // output; every other type has none, so the box clears.
+  $("pnSchema").innerHTML=n.type==="ai"?renderSchemaEditor(n):"";
+  if(n.type==="ai")schemaPreview();
   const ro=results[n.id];
   // while a node is queued or running its OLD output is stale — never show it as
   // if it were this run's result. Dim + a status line; the real output replaces it
@@ -513,21 +516,116 @@ function renderTypeFields(n){
       +'<select id="tfMode">'+opt(m,"overwrite")+opt(m,"append")+'</select>'
       +'<div class="dim" style="font-size:11px;margin-top:4px">writes the upstream\'s text to the file when this node runs</div>';
   }
-  if(n.type==="ai"){
-    // schema is an OPTIONAL advanced field — keep it folded so the common case
-    // (just a prompt) stays uncluttered. Default collapsed; auto-open when this
-    // node already has a schema so an existing contract is never hidden.
-    const hasSchema=!!n.schema;
-    return '<details id="tfSchemaFold" class="fold"'+(hasSchema?' open':'')+'>'
-      +'<summary>schema — structured output (optional, JSON field→type)'+(hasSchema?' <span class="dim">· set</span>':'')+'</summary>'
-      +'<textarea id="tfSchema" spellcheck="false" placeholder=\'{ "text": "string", "n": "number" }\' '
-      +'style="width:100%;height:54px;margin-top:4px;box-sizing:border-box;font:inherit">'+esc(n.schema?JSON.stringify(n.schema):"")+'</textarea>'
-      +'<div class="dim" style="font-size:11px;margin-top:4px">if set: output is parsed + validated as JSON; a mismatch retries once, then fails</div>'
-      +'</details>';
-  }
+  // ai output schema is NOT here — it describes the OUTPUT shape, so it lives in
+  // the OUTPUT column (renderSchemaEditor → #pnSchema), not the INPUT form.
   return "";
 }
 function onMergeMode(){const w=$("tfKeyWrap");if(w)w.classList.toggle("hidden",$("tfMode").value!=="byKey");}
+
+// ── ai OUTPUT SCHEMA editor ──────────────────────────────────────────────────
+// Lives in the OUTPUT column (schema = the shape this node must return). Two-level:
+// pick an OUTPUT FORMAT first, then only JSON exposes fields. Maps to what the
+// engine actually supports (schema.ts: a flat field→type map; top level MUST be a
+// JSON object):
+//   text → no schema      (model returns plain text, unvalidated — the common case)
+//   json → { f: type, … } (native object output; per-field type via the dropdown)
+//   list → { _list: array}(engine forbids a bare top-level array, so we wrap the
+//                          list in a reserved `_list` field; downstream reads
+//                          {{ $json._list }}. `_list` is pure UI sugar — zero
+//                          engine changes. `_` prefix dodges the `$`-eaten tokenizer
+//                          and collides with nothing, verified across render/items/
+//                          splitOut/aggregate/merge/schema.)
+//
+//   detect on load          render (one wrap, format toggles VISIBILITY only)
+//   ─────────────           ──────────────────────────────────────────────────
+//   no schema      → text   ┌ output format  (•Text)(JSON)(List)
+//   {_list:array}  → list   │ text: "plain text — no validation"
+//   else           → json   │ json: [name][type▾][×] rows + "+ add field"
+//                           │ list: locked _list row
+//                           └ preview — the JSON the model must return
+// Non-destructive: switching format never clears #pnSchemaRows, so a misclick
+// can't nuke fields you built (CLAUDE.md: one expected action, no hidden effects).
+// collectSchema() reads the ACTIVE format at save time.
+function schemaMode(n){
+  const s=n.schema;
+  if(!s||typeof s!=="object"||!Object.keys(s).length)return "text";
+  const keys=Object.keys(s);
+  if(keys.length===1&&keys[0]==="_list"&&s._list==="array")return "list";
+  return "json";
+}
+const SCHEMA_SAMPLE={string:'"…"',number:"0",boolean:"true",array:'["…"]',object:"{…}"};
+function fmtBtn(v,label,mode){return '<button type="button" class="fmtbtn'+(v===mode?" on":"")+'" data-fmt="'+v+'" onclick="onSchemaFormat(this)">'+label+'</button>';}
+function renderSchemaEditor(n){
+  const mode=schemaMode(n);
+  // only JSON mode owns named fields; text/list start the json editor empty so a
+  // later switch to JSON is a clean slate (list has no user fields, just `_list`).
+  const fields=mode==="json"?(n.schema||{}):{};
+  const rows=Object.entries(fields).map(([nm,t])=>schemaRow(nm,t)).join("");
+  return '<div id="pnSchemaWrap" class="schemawrap fmt-'+mode+'" data-fmt="'+mode+'">'
+    +'<label style="margin-top:0">output format</label>'
+    +'<div class="fmtsel">'+fmtBtn("text","Text",mode)+fmtBtn("json","JSON",mode)+fmtBtn("list","List",mode)+'</div>'
+    +'<div class="schema-text dim" style="font-size:11px;margin-top:8px">model returns plain text — no validation (most common)</div>'
+    +'<div class="schema-json">'
+      +'<div id="pnSchemaRows">'+rows+'</div>'
+      +'<button type="button" class="addparam" onclick="addSchemaRow()">+ add field</button>'
+    +'</div>'
+    +'<div class="schema-list dim" style="font-size:11px;margin-top:8px">system wraps your list in a reserved field <code>_list</code> — downstream reads <code>{{ $json._list }}</code></div>'
+    +'<div id="pnSchemaPrev"></div>'
+    +'<div class="dim" style="font-size:11px;margin-top:6px">if set: output is parsed + validated as JSON; a mismatch retries once, then fails</div>'
+    +'</div>';
+}
+// one JSON field: [name][type ▾][×]. Reuses the input editor's .paramrow / .pf-*
+// styles; the dropdown carries array/object too (engine validates the container).
+function schemaRow(name,type){
+  type=type||"string";
+  const topt=v=>'<option value="'+v+'"'+(type===v?" selected":"")+'>'+v+'</option>';
+  return '<div class="paramrow">'
+    +'<input class="pf-name" spellcheck="false" placeholder="field name" value="'+esc(name||"")+'" oninput="schemaPreview()">'
+    +'<select class="pf-type" title="value type" onchange="schemaPreview()">'+topt("string")+topt("number")+topt("boolean")+topt("array")+topt("object")+'</select>'
+    +'<button type="button" class="pf-del" title="remove field" onclick="this.closest(\'.paramrow\').remove();schemaPreview()">×</button>'
+    +'</div>';
+}
+function addSchemaRow(){const c=$("pnSchemaRows");if(c){c.insertAdjacentHTML("beforeend",schemaRow());/** @type {any} */(c.lastElementChild).querySelector(".pf-name").focus();schemaPreview();}}
+// switch format: toggle visibility only — NEVER touch #pnSchemaRows (non-destructive).
+function onSchemaFormat(btn){
+  const fmt=btn.dataset.fmt;const wrap=$("pnSchemaWrap");if(!wrap)return;
+  wrap.className="schemawrap fmt-"+fmt;wrap.dataset.fmt=fmt;
+  wrap.querySelectorAll(".fmtbtn").forEach(b=>b.classList.toggle("on",b===btn));
+  schemaPreview();
+}
+// live "model returns:" example built from the active format + current fields.
+function schemaPreview(){
+  const wrap=$("pnSchemaWrap");if(!wrap)return;
+  const prev=$("pnSchemaPrev");if(!prev)return;
+  const fmt=wrap.dataset.fmt;
+  if(fmt==="text"){prev.innerHTML="";return;}
+  let body;
+  if(fmt==="list"){body='{ "_list": [ "…", "…" ] }';}
+  else{
+    const parts=[];
+    document.querySelectorAll("#pnSchemaRows .paramrow").forEach(r=>{
+      const nm=/** @type {any} */(r.querySelector(".pf-name")).value.trim();if(!nm)return;
+      const t=/** @type {any} */(r.querySelector(".pf-type")).value;
+      parts.push('"'+esc(nm)+'": '+(SCHEMA_SAMPLE[t]||'"…"'));
+    });
+    body=parts.length?"{ "+parts.join(", ")+" }":"{ }";
+  }
+  prev.innerHTML='<div class="dim" style="font-size:11px;margin-top:8px">preview — model returns:</div><code class="prevcode">'+body+'</code>';
+}
+// read the ACTIVE format into a schema value for saveNode. text → null (no schema);
+// json → {field:type} (null if no named fields); list → {_list:array}.
+function collectSchema(){
+  const wrap=$("pnSchemaWrap");if(!wrap)return null;
+  const fmt=wrap.dataset.fmt;
+  if(fmt==="text")return null;
+  if(fmt==="list")return {_list:"array"};
+  const out=/** @type {any} */({});
+  document.querySelectorAll("#pnSchemaRows .paramrow").forEach(r=>{
+    const nm=/** @type {any} */(r.querySelector(".pf-name")).value.trim();if(!nm)return;
+    out[nm]=/** @type {any} */(r.querySelector(".pf-type")).value;
+  });
+  return Object.keys(out).length?out:null;
+}
 // render an Item[] (the n8n items model) item by item — value per item, with the
 // paired-item lineage tag when present. null = not run yet; [] = ran, 0 items.
 function renderItems(items){
@@ -600,8 +698,8 @@ async function saveNode(){
   else if(n.type==="assemble"){sets.push(["prompt",$("pnPrompt").value]);}
   else if(n.type==="ai"){
     sets.push(["prompt",$("pnPrompt").value]);
-    const sv=$("tfSchema")?$("tfSchema").value.trim():"";
-    if(sv){let obj;try{obj=JSON.parse(sv);}catch(e){return setMsg("pnMsg","err","schema is not valid JSON");}sets.push(["schema",obj]);}
+    const sc=collectSchema();   // reads the active OUTPUT FORMAT (text→null/json/list)
+    if(sc)sets.push(["schema",sc]);
     else if(n.schema)sets.push(["schema",null]); // had a schema, now cleared → remove (parse drops null)
   }
   else if(n.type==="splitOut"||n.type==="aggregate"){if($("tfField"))sets.push(["field",$("tfField").value]);}
@@ -716,4 +814,4 @@ boot();
 // Migration bridge: these handlers are still referenced by inline onclick= in
 // app.html (and in runtime-generated card markup), so a module must expose them
 // on window. Converting to addEventListener is the follow-up.
-Object.assign(window,{listFlows,createFlow,back,toggleRaw,runAll,runNode,saveNode,deleteNode,closeNode,addNode,saveRaw,renameSelected,schedulePreview,insertVar,insertEarlier,runTo,setInputVal,onMergeMode,addParamRow,changeType});
+Object.assign(window,{listFlows,createFlow,back,toggleRaw,runAll,runNode,saveNode,deleteNode,closeNode,addNode,saveRaw,renameSelected,schedulePreview,insertVar,insertEarlier,runTo,setInputVal,onMergeMode,addParamRow,addSchemaRow,onSchemaFormat,schemaPreview,changeType});
