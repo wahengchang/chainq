@@ -48,9 +48,24 @@ test("editor sets an ai node's output schema via the two-level format selector (
   // editor: pick an OUTPUT FORMAT first (Text/JSON/List), only JSON exposes fields.
   const editor = page.locator("#pnSchema");
   const wrap = editor.locator("#pnSchemaWrap");
+  const hdr = editor.locator(".schemahdr");
+  const chip = editor.locator("#pnFmtNow");
+  const body = editor.locator(".schemabody");
   const rows = editor.locator("#pnSchemaRows .paramrow");
   const fmt = (v: string) => editor.locator(`.fmtbtn[data-fmt="${v}"]`);
   const save = async () => { await page.getByRole("button", { name: "Save" }).click(); await expect(page.locator("#pnMsg")).toContainText("saved"); };
+
+  // COLLAPSE/EXPAND: the OUTPUT FORMAT box starts collapsed — only the active
+  // format shows (as a chip in the header); the selector/fields stay hidden.
+  await expect(wrap).toHaveClass(/collapsed/);
+  await expect(chip).toHaveText("Text");
+  await expect(body).toBeHidden();
+  await dwell(page, 700);
+  await hdr.click(); // expand → the full settings appear, the chip goes away
+  await expect(wrap).not.toHaveClass(/collapsed/);
+  await expect(body).toBeVisible();
+  await expect(chip).toBeHidden();
+  await dwell(page, 700);
 
   // a node with no schema defaults to Text (the common case) — no fields shown.
   await expect(wrap).toHaveClass(/fmt-text/);
@@ -69,6 +84,14 @@ test("editor sets an ai node's output schema via the two-level format selector (
   await dwell(page, 500);
   // preview reflects the live fields (sample value per type)
   await expect(editor.locator("#pnSchemaPrev .prevcode")).toContainText('"title": "…", "tags": ["…"]');
+  // collapsing now shows JSON as the active format; expanding restores the fields.
+  await hdr.click();
+  await expect(wrap).toHaveClass(/collapsed/);
+  await expect(chip).toHaveText("JSON");
+  await dwell(page, 600);
+  await hdr.click();
+  await expect(wrap).not.toHaveClass(/collapsed/);
+  await dwell(page, 400);
   await fmt("text").click(); // misclick to Text…
   await expect(wrap).toHaveClass(/fmt-text/);
   await fmt("json").click(); // …and back: the 2 fields are still here (not nuked)
