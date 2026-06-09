@@ -41,24 +41,63 @@ let proc: ChildProcess, baseURL: string;
 test.beforeAll(async () => ({ url: baseURL, proc } = await startServer()));
 test.afterAll(() => proc?.kill());
 
-test("editor sets an ai node's structured-output schema from the panel (offline)", async ({ page }) => {
+test("editor sets an ai node's output schema via the two-level format selector (offline)", async ({ page }) => {
   await page.goto(baseURL);
   await nodeByName(page, "gen").click();
-  // schema is an OPTIONAL folded field: a node with no schema opens collapsed.
-  const fold = page.locator("#tfSchemaFold");
-  await expect(fold).not.toHaveAttribute("open", /.*/); // no schema → collapsed
+  // schema describes the OUTPUT shape → it lives in the output column as a two-level
+  // editor: pick an OUTPUT FORMAT first (Text/JSON/List), only JSON exposes fields.
+  const editor = page.locator("#pnSchema");
+  const wrap = editor.locator("#pnSchemaWrap");
+  const rows = editor.locator("#pnSchemaRows .paramrow");
+  const fmt = (v: string) => editor.locator(`.fmtbtn[data-fmt="${v}"]`);
+  const save = async () => { await page.getByRole("button", { name: "Save" }).click(); await expect(page.locator("#pnMsg")).toContainText("saved"); };
+
+  // a node with no schema defaults to Text (the common case) — no fields shown.
+  await expect(wrap).toHaveClass(/fmt-text/);
+  await expect(rows).toHaveCount(0);
+  await dwell(page, 600);
+
+  // NON-DESTRUCTIVE SWITCH: build JSON fields, flip to Text, flip back — fields survive.
+  await fmt("json").click();
+  await expect(wrap).toHaveClass(/fmt-json/);
+  const addField = editor.getByRole("button", { name: "+ add field" });
+  await addField.click();
+  await rows.nth(0).locator(".pf-name").fill("title");
+  await addField.click();
+  await rows.nth(1).locator(".pf-name").fill("tags");
+  await rows.nth(1).locator(".pf-type").selectOption("array");
   await dwell(page, 500);
-  await fold.locator("summary").click(); // expand to edit
-  await expect(fold).toHaveAttribute("open", /.*/);
-  const schema = page.locator("#tfSchema");
-  await expect(schema).toHaveValue(""); // no schema to start
-  await schema.fill('{"text":"string","n":"number"}');
+  // preview reflects the live fields (sample value per type)
+  await expect(editor.locator("#pnSchemaPrev .prevcode")).toContainText('"title": "…", "tags": ["…"]');
+  await fmt("text").click(); // misclick to Text…
+  await expect(wrap).toHaveClass(/fmt-text/);
+  await fmt("json").click(); // …and back: the 2 fields are still here (not nuked)
+  await expect(rows).toHaveCount(2);
+  await expect(rows.nth(0).locator(".pf-name")).toHaveValue("title");
+  await expect(rows.nth(1).locator(".pf-type")).toHaveValue("array");
   await dwell(page, 500);
-  await page.getByRole("button", { name: "Save" }).click();
-  await expect(page.locator("#pnMsg")).toContainText("saved");
-  // re-parsed from YAML → the schema persisted (normalized JSON) AND the fold
-  // auto-opens because the node now HAS a schema (an existing contract is never hidden).
-  await expect(page.locator("#tfSchemaFold")).toHaveAttribute("open", /.*/);
-  await expect(page.locator("#tfSchema")).toHaveValue('{"text":"string","n":"number"}');
-  await dwell(page, 1000);
+
+  // JSON ROUND-TRIP: save → re-parsed from YAML → mode + fields + types persist.
+  await save();
+  await expect(wrap).toHaveClass(/fmt-json/);
+  await expect(rows).toHaveCount(2);
+  await expect(rows.nth(0).locator(".pf-name")).toHaveValue("title");
+  await expect(rows.nth(0).locator(".pf-type")).toHaveValue("string");
+  await expect(rows.nth(1).locator(".pf-name")).toHaveValue("tags");
+  await expect(rows.nth(1).locator(".pf-type")).toHaveValue("array");
+  await dwell(page, 500);
+
+  // LIST ROUND-TRIP: a bare list can't be top-level, so List wraps it in `_list`.
+  await fmt("list").click();
+  await expect(wrap).toHaveClass(/fmt-list/);
+  await expect(editor.locator("#pnSchemaPrev .prevcode")).toContainText('"_list": [ "…", "…" ]');
+  await save();
+  await expect(wrap).toHaveClass(/fmt-list/); // {_list:array} detected as List on reload
+  await dwell(page, 500);
+
+  // BACK TO TEXT: clearing the format removes the schema entirely.
+  await fmt("text").click();
+  await save();
+  await expect(wrap).toHaveClass(/fmt-text/);
+  await dwell(page, 800);
 });
