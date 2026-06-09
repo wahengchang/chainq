@@ -333,13 +333,13 @@ async function handle(req: IncomingMessage, res: ServerResponse, opts: WebOption
   // lights up one node at a time, in execution order — not all at once.
   if (method === "POST" && path === "/api/run") {
     const b = (await body(req)) as RunBody;
-    return streamRun(res, resolve(b.path ?? ""), b.profile ?? "", Boolean(b.fresh), (runner) => runner.runChain(), b.input);
+    return streamRun(res, resolve(b.path ?? ""), b.profile ?? "", Boolean(b.fresh), (runner) => runner.runChain(), b.input, b.overrides);
   }
 
   // Run UP TO one node (its upstream cone) — streamed, same as /api/run.
   if (method === "POST" && path === "/api/run-node") {
     const b = (await body(req)) as RunBody;
-    return streamRun(res, resolve(b.path ?? ""), b.profile ?? "", Boolean(b.fresh), (runner) => runner.runToNode(b.node ?? ""), b.input);
+    return streamRun(res, resolve(b.path ?? ""), b.profile ?? "", Boolean(b.fresh), (runner) => runner.runToNode(b.node ?? ""), b.input, b.overrides);
   }
 
   // Rewire a node's `from` (which upstream steps feed it; first = $json).
@@ -401,7 +401,26 @@ type RunBody = {
   profile?: string;
   fresh?: unknown;
   input?: Record<string, unknown>[];
+  // Draft override: the UI's UNSAVED edits for ONE node (the open panel). Applied
+  // in-memory before the run so you can "run what's on screen" without saving — the
+  // file is never touched. Only the open node can be dirty, so it's a single node's
+  // fields (prompt/run/schema/field/mode/key/path/params). null field → remove it.
+  overrides?: { node?: string; fields?: Record<string, unknown> };
 };
+
+// Overlay the UI's unsaved draft onto the parsed flow IN MEMORY (never the file),
+// so a run reflects exactly what's in the open panel. Same idea as /api/render's
+// `template` override, generalized to every editable field. Applied before validate
+// so a draft that breaks the contract is rejected just like a save would be.
+function applyOverrides(flow: ReturnType<typeof parseFlow>, overrides?: RunBody["overrides"]): void {
+  if (!overrides || !overrides.node) return;
+  const n = flow.steps[overrides.node] as unknown as Record<string, unknown>;
+  if (!n) return;
+  for (const [k, v] of Object.entries(overrides.fields ?? {})) {
+    if (v === null || v === undefined) delete n[k];
+    else n[k] = v;
+  }
+}
 
 // Run a flow, streaming each node's result as one NDJSON line as it settles.
 // Validation errors come back as a normal JSON 400 (before the stream starts).
@@ -416,8 +435,10 @@ async function streamRun(
   fresh: boolean,
   run: (runner: Runner) => Promise<unknown>,
   input?: Record<string, unknown>[],
+  overrides?: RunBody["overrides"],
 ): Promise<void> {
   const flow = parseFlow(readFileSync(fp, "utf8"));
+  applyOverrides(flow, overrides); // run the open panel's unsaved draft, file untouched
   if (profile && !flow.profiles[profile]) {
     return json(res, 400, { errors: [{ node: "(profile)", message: `no profile "${profile}"` }] });
   }
