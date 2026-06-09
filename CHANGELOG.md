@@ -1,7 +1,24 @@
 # Changelog
 
-## Unreleased
+## 0.1.7
 
+- **Editor: run your unsaved edits without saving first (draft model).** A node's
+  edits used to live only in the textarea, while a run read the flow from disk — so
+  a re-run executed the SAVED prompt and the stream's re-render wiped what you
+  typed. Now an edit is kept as a per-node DRAFT: a run sends it as an in-memory
+  override (the file is never touched, same idea as the `/api/render` template
+  override), the run stream redraws only the output region so the edit survives,
+  and the draft PERSISTS across close / node-switch / raw toggle — no prompt on
+  leave. `Save` writes it to the file; `↩ Reset` discards it back to the saved
+  value; a `●` marker on the canvas node + a footer chip flag unsaved drafts.
+  Browser-only, per flow, per session. Covered by `e2e/browser/draft-run.spec.ts`.
+- **Editor: ai output-schema field editor in the output column.** An ai node's
+  structured-output schema moved from a raw JSON textarea to a two-level editor
+  that sits above the output (where the contract belongs): pick an output format
+  (Text / JSON / List), and JSON exposes `field → type` rows with a live "model
+  returns:" preview. `List` wraps the array in a reserved `_list` field (the engine
+  forbids a bare top-level array) — pure UI sugar, zero engine change. Covered by
+  `e2e/browser/schema-editor.spec.ts`.
 - **Run state: "queued" vs "running" are now distinct.** A run marked the WHOLE
   cone "running" at once, so a sequential chain looked like every node was
   executing simultaneously. The engine now emits an `onStart` the instant a node
