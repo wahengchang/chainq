@@ -157,7 +157,7 @@ describe("web server", () => {
         .trim()
         .split("\n")
         .map((l) => JSON.parse(l) as any)
-        .find((r) => r.id === "out");
+        .filter((r) => r.id === "out").pop();
     try {
       // parse exposes params so the editor can draw the form
       const parsed = await getJson(base, `/api/parse?path=${enc}`);
@@ -201,7 +201,7 @@ describe("web server", () => {
     );
     const run = (input?: unknown) => post(base, "/api/run-node", { path: flow, node: "out", input });
     const okOut = async (r: Response) =>
-      (await r.text()).trim().split("\n").map((l) => JSON.parse(l) as any).find((x) => x.id === "out");
+      (await r.text()).trim().split("\n").map((l) => JSON.parse(l) as any).filter((x) => x.id === "out").pop();
     try {
       // required `name` missing → 400, no run, message names the param
       const missing = await run(undefined);
@@ -293,7 +293,7 @@ describe("web server", () => {
     try {
       const lines = (await (await post(base, "/api/run", { path: flow })).text())
         .trim().split("\n").map((l) => JSON.parse(l) as any);
-      const use = lines.find((r) => r.id === "use");
+      const use = lines.filter((r) => r.id === "use").pop();
       expect(use.status).toBe("ran");
       expect(use.output).toContain("hi-structured"); // {{ $json.text }} resolved → structured
     } finally {
@@ -312,9 +312,54 @@ describe("web server", () => {
     );
     try {
       const gen = (await (await post(base, "/api/run", { path: flow })).text())
-        .trim().split("\n").map((l) => JSON.parse(l) as any).find((r) => r.id === "gen");
+        .trim().split("\n").map((l) => JSON.parse(l) as any).filter((r) => r.id === "gen").pop();
       expect(gen.status).toBe("failed");
       expect(String(gen.error).toLowerCase()).toMatch(/json|schema/);
+    } finally {
+      close();
+    }
+  });
+
+  // Run lifecycle: a node that actually executes streams a `running` start-record
+  // BEFORE its settled record — so the UI can show the ONE node running (spinner)
+  // vs the rest queued, instead of marking the whole cone running at once.
+  it("streams a `running` record before the settled record for an executing node (offline)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "chain-web-lifecycle-"));
+    const { base, close } = await listen(dir);
+    const flow = join(dir, "lc.yaml");
+    writeFileSync(
+      flow,
+      [`profiles:`, `  default: { cmd: 'echo hi' }`, `steps:`,
+       `  gen:`, `    type: ai`, `    prompt: 'x'`, ``].join("\n"),
+    );
+    try {
+      const recs = (await (await post(base, "/api/run", { path: flow })).text())
+        .trim().split("\n").map((l) => JSON.parse(l) as any).filter((r) => r.id === "gen");
+      // exactly two records, in order: running → ran
+      expect(recs.map((r) => r.status)).toEqual(["running", "ran"]);
+      // the start-record is a pure status ping (no stale output leaks through)
+      expect(recs[0].output ?? "").toBe("");
+      expect(recs[1].output).toContain("hi");
+    } finally {
+      close();
+    }
+  });
+
+  // A cached node never "runs" — it gets NO start-record, just the settled one.
+  it("a cached node streams only a settled record, no `running` ping (offline)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "chain-web-cached-"));
+    const { base, close } = await listen(dir);
+    const flow = join(dir, "c.yaml");
+    writeFileSync(
+      flow,
+      [`profiles:`, `  default: { cmd: 'echo hi' }`, `steps:`,
+       `  gen:`, `    type: ai`, `    prompt: 'x'`, ``].join("\n"),
+    );
+    try {
+      await (await post(base, "/api/run", { path: flow })).text(); // warm the cache
+      const recs = (await (await post(base, "/api/run", { path: flow })).text())
+        .trim().split("\n").map((l) => JSON.parse(l) as any).filter((r) => r.id === "gen");
+      expect(recs.map((r) => r.status)).toEqual(["cached"]); // no "running" ping
     } finally {
       close();
     }
@@ -354,7 +399,7 @@ describe("web server", () => {
     );
     try {
       const split = (await (await post(base, "/api/run", { path: flow })).text())
-        .trim().split("\n").map((l) => JSON.parse(l) as any).find((r) => r.id === "split");
+        .trim().split("\n").map((l) => JSON.parse(l) as any).filter((r) => r.id === "split").pop();
       expect(split.status).toBe("ran");
       expect(split.items).toBe(3); // fence stripped → array → 3 items
     } finally {

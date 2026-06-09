@@ -449,6 +449,9 @@ async function streamRun(
     // UI a generous 5-min ceiling so a genuine model call isn't killed as a
     // false "timed out" — the CLI default (120s) is too tight for the UI.
     timeoutMs: 300_000,
+    // a node actually started → tell the UI to flip it from "queued" to "running"
+    // (the spinner), so only the ONE executing node spins, not the whole cone.
+    onStart: (id) => res.write(JSON.stringify({ id, status: "running" }) + "\n"),
     onResult: (r) =>
       res.write(
         JSON.stringify({
