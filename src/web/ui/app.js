@@ -127,10 +127,14 @@ function collectParams(){
 // transitive upstream of a node (its input cone)
 function ancestors(id){const set=new Set();let stack=[...(nodes.find(n=>n.id===id)?.from||[])];
   while(stack.length){const c=stack.pop();if(set.has(c))continue;set.add(c);const n=nodes.find(x=>x.id===c);if(n)stack=stack.concat(n.from||[]);}return [...set];}
-function setRunningUI(ids){ids.forEach(id=>results[id]={status:"running"});renderGraph();}
+// Mark the whole cone QUEUED up front. The engine runs nodes one at a time, so
+// only the node actually executing is "running" (the server streams a `running`
+// record via onStart); the rest sit "pending" until their turn. This is what lets
+// the canvas show ONE spinner + a queue, instead of every node spinning at once.
+function setPendingUI(ids){ids.forEach(id=>results[id]={status:"pending"});renderGraph();}
 // a run rejected before it streams (e.g. a 400 from the input contract) must not
-// leave nodes stuck spinning — drop the "running" placeholders we optimistically set.
-function clearRunning(ids){ids.forEach(id=>{if(results[id]&&results[id].status==="running")delete results[id];});}
+// leave nodes stuck — drop the optimistic pending/running placeholders we set.
+function clearRunning(ids){ids.forEach(id=>{const s=results[id]&&results[id].status;if(s==="pending"||s==="running")delete results[id];});}
 
 async function boot(){const{data}=await api("/api/context");$("dir").value=data.cwd;if(data.initialFlow)return open(data.initialFlow);listFlows();}
 async function listFlows(){
@@ -196,7 +200,8 @@ function nodeCard(n){
   const glyph=r?('<span class="glyph g-'+r.status+(r.status==="running"?" spin":"")+'">'+G[r.status]+'</span>'):'<span class="glyph g-pending">○</span>';
   const BADGE={ran:"✓ ran · called the model",cached:"⊘ cached · reused, no call",failed:"✗ failed",skipped:"– skipped"};
   let out="";
-  if(r&&r.status==="running")out='<div class="nodeout dim">◌ running…</div>';
+  if(r&&r.status==="running")out='<div class="nodeout dim"><span class="spin">◌</span> running…</div>';
+  else if(r&&r.status==="pending")out='<div class="nodeout dim">○ queued — waiting its turn…</div>';
   else if(r&&(r.error||r.output)){
     const badge='<div class="outbadge g-'+r.status+'">'+(BADGE[r.status]||r.status)+'</div>';
     out='<div class="nodeout'+(r.status==="failed"?" bad":"")+'">'+badge+esc(r.error||r.output)+'</div>';
@@ -457,16 +462,20 @@ function selectNode(id){
     // you can SEE every prior step's data. Lives in its own box so loadItems (which
     // owns #pnInput after a run) never clobbers it. read-only (wire one in to use).
     const earlier=[...ancestorIds(n.id)].filter(u=>!ups.includes(u));
-    $("pnEarlier").innerHTML=earlier.length?'<div class="dim" style="margin-top:4px">earlier outputs (wire one in to use)</div>'
+    $("pnEarlier").innerHTML=earlier.length?'<div class="dim" style="margin-top:4px">earlier outputs (click to wire in + insert)</div>'
       +earlier.map(u=>{const r=results[u];const val=r?esc(r.output||r.error||"(empty)"):'<span class="dim">(run to see)</span>';
-        return '<div class="infield ro" title="'+esc(u)+' — connect it on the canvas to reference $(\''+esc(u)+'\')">'
-          +'<span class="intag">'+esc(u)+'</span><div class="inval">'+val+'</div></div>';}).join(""):"";
+        return '<div class="infield" onclick="insertEarlier(\''+u+'\')" title="wire '+esc(u)+' into from: and insert {{ $node[&quot;'+esc(u)+'&quot;] }} at the cursor">'
+          +'<span class="ins">↵ wire + insert</span><span class="intag">'+esc(u)+'</span><div class="inval">'+val+'</div></div>';}).join(""):"";
   }
   // OUTPUT
   const ro=results[n.id];
-  $("pnOut").className="mbody"+(ro&&ro.status==="failed"?" out err":(ro&&ro.status==="running"?" dim":(ro?"":" dim")));
-  $("pnOut").textContent=ro?(ro.status==="running"?"running…":(ro.error||ro.output||"(empty)")):"Run to see this node's output.";
-  const lab={ran:'<span class="g-ran">✓ ran · called the model</span>',cached:'<span class="g-cached">⊘ cached · reused, no call</span>',failed:'<span class="g-failed">✗ failed</span>',skipped:'<span class="g-skipped">– skipped</span>',running:'<span class="g-running">◌ running…</span>'};
+  // while a node is queued or running its OLD output is stale — never show it as
+  // if it were this run's result. Dim + a status line; the real output replaces it
+  // when onResult streams back (and loadItems is guarded the same way).
+  const busy=ro&&(ro.status==="running"||ro.status==="pending");
+  $("pnOut").className="mbody"+(ro&&ro.status==="failed"?" out err":(busy?" dim":(ro?"":" dim")));
+  $("pnOut").textContent=ro?(ro.status==="running"?"running…":(ro.status==="pending"?"queued — waiting its turn…":(ro.error||ro.output||"(empty)"))):"Run to see this node's output.";
+  const lab={ran:'<span class="g-ran">✓ ran · called the model</span>',cached:'<span class="g-cached">⊘ cached · reused, no call</span>',failed:'<span class="g-failed">✗ failed</span>',skipped:'<span class="g-skipped">– skipped</span>',running:'<span class="g-running"><span class="spin">◌</span> running…</span>',pending:'<span class="g-pending">○ queued…</span>'};
   $("pnOutStatus").innerHTML=ro?(lab[ro.status]||""):"";
   $("pnTypeFields").innerHTML=renderTypeFields(n);   // P2-a: type-specific editor
   if(invalid[id])setMsg("pnMsg","err","⚠ "+invalid[id]);else setMsg("pnMsg","","");
@@ -540,6 +549,11 @@ async function loadItems(id){
   if(selected!==id)return;
   const{ok,data}=await api("/api/items?path="+encodeURIComponent(current)+"&node="+encodeURIComponent(id));
   if(!ok||selected!==id)return;
+  // /api/items serves the LAST cached output — stale while this node is queued or
+  // running. Don't paint it over the "running…"/"queued…" indicator selectNode set,
+  // or the user sees an old result next to a live spinner (looks like THIS run's).
+  const st=results[id]&&results[id].status;
+  if(st==="running"||st==="pending")return;
   if(data.output&&data.output.length){$("pnOut").className="mbody";$("pnOut").innerHTML=renderItems(data.output);}
   const n=nodes.find(x=>x.id===id);if(!n)return;
   const ups=n.from||[];
@@ -623,7 +637,7 @@ async function runNode(force){
   if(!selected)return;
   $("pnOut").className="mbody dim";$("pnOut").textContent="running…";$("pnOutStatus").innerHTML='<span class="g-running">◌ running…</span>';
   const ids=[selected,...ancestors(selected)];
-  setRunningUI(ids);
+  setPendingUI(ids);
   const r=await streamRun("/api/run-node",{path:current,node:selected,profile:$("profile").value,fresh:!!force,input:collectInput()});
   if(!r.ok){clearRunning(ids);renderGraph();return setMsg("pnMsg","err",errs(r.data)||"run failed");}
 }
@@ -632,7 +646,7 @@ async function runNode(force){
 // (not ▷) if you want to open the editor panel.
 async function runTo(id,fresh){
   const ids=[id,...ancestors(id)];
-  setRunningUI(ids);
+  setPendingUI(ids);
   const r=await streamRun("/api/run-node",{path:current,node:id,profile:$("profile").value,fresh:!!fresh,input:collectInput()});
   if(!r.ok){clearRunning(ids);renderGraph();return setMsg("canvasMsg","err",errs(r.data)||"run failed");}
 }
@@ -643,6 +657,28 @@ function insertVar(id,primary){
   ta.value=ta.value.slice(0,s)+expr+ta.value.slice(e);
   ta.focus();ta.selectionStart=ta.selectionEnd=s+expr.length;
   schedulePreview();
+}
+// click an EARLIER (transitive, not-yet-wired) output → wire it into `from:` AND
+// insert {{ $node["id"] }} in one move. The reference is invalid until the node
+// is wired (validate.ts), so a bare insert would render to a broken prompt — so
+// we append it to `from` (NOT as primary: $json stays the first input) first.
+// Wiring reloads + re-renders the panel, which would reset #pnPrompt to the saved
+// value — so we capture the live text + cursor and any UNSAVED edits BEFORE the
+// reload and restore them with the reference spliced in, matching insertVar's
+// "never lose what you typed" behaviour.
+async function insertEarlier(u){
+  const n=nodes.find(x=>x.id===selected);if(!n)return;
+  if((n.from||[]).includes(u))return insertVar(u,false); // already wired — plain insert
+  const ta=$("pnPrompt");const expr='{{ $node["'+u+'"] }}';
+  const s=ta.selectionStart??ta.value.length,e=ta.selectionEnd??s;
+  const next=ta.value.slice(0,s)+expr+ta.value.slice(e),caret=s+expr.length;
+  const from=[...(n.from||[]),u];
+  const{ok,data}=await api("/api/connect",{method:"POST",body:JSON.stringify({path:current,node:selected,from})});
+  if(!ok)return setMsg("pnMsg","err",errs(data)||"wire failed");
+  await loadNodes();selectNode(selected);
+  const t2=$("pnPrompt");t2.value=next;t2.focus();t2.selectionStart=t2.selectionEnd=caret;
+  schedulePreview();
+  setMsg("pnMsg","ok","wired "+u+" in · inserted reference — Save to keep");
 }
 async function deleteNode(){
   if(!selected)return;
@@ -660,7 +696,7 @@ async function addNode(){
   await loadNodes();selectNode(id);
 }
 async function runAll(fresh){
-  setRunningUI(nodes.map(n=>n.id));
+  setPendingUI(nodes.map(n=>n.id));
   const r=await streamRun("/api/run",{path:current,profile:$("profile").value,fresh:!!fresh,input:collectInput()});
   if(!r.ok){results={};renderGraph();return setMsg("canvasMsg","err",errs(r.data)||"run failed");}
 }
@@ -680,4 +716,4 @@ boot();
 // Migration bridge: these handlers are still referenced by inline onclick= in
 // app.html (and in runtime-generated card markup), so a module must expose them
 // on window. Converting to addEventListener is the follow-up.
-Object.assign(window,{listFlows,createFlow,back,toggleRaw,runAll,runNode,saveNode,deleteNode,closeNode,addNode,saveRaw,renameSelected,schedulePreview,insertVar,runTo,setInputVal,onMergeMode,addParamRow,changeType});
+Object.assign(window,{listFlows,createFlow,back,toggleRaw,runAll,runNode,saveNode,deleteNode,closeNode,addNode,saveRaw,renameSelected,schedulePreview,insertVar,insertEarlier,runTo,setInputVal,onMergeMode,addParamRow,changeType});

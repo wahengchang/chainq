@@ -1,5 +1,29 @@
 # Changelog
 
+## Unreleased
+
+- **Run state: "queued" vs "running" are now distinct.** A run marked the WHOLE
+  cone "running" at once, so a sequential chain looked like every node was
+  executing simultaneously. The engine now emits an `onStart` the instant a node
+  actually begins (past the cache/skip gates), streamed to the UI as a `running`
+  record. The canvas shows the ONE executing node with the live spinner (solid
+  accent + pulse) and the rest "queued" (dashed dim border, no spinner) — so you
+  can see the queue advance one step at a time. Covered by `run-state.spec.ts` +
+  server-stream tests.
+- **Run state: a running node no longer shows its stale previous output.** While a
+  node is queued or running, the panel's OUTPUT (and the canvas card) showed the
+  LAST run's cached result — looking like the current run already finished with
+  wrong data. It now shows "running…" / "queued — waiting its turn…" instead, and
+  the real output replaces it when the run settles (`loadItems` is guarded so the
+  cached items can't paint over the live indicator).
+- **Editor: click an earlier output to wire it in + insert its reference.** The
+  node panel's "earlier outputs" box (transitive upstreams not yet wired) was
+  read-only — you had to drag a wire on the canvas, then come back and click the
+  reference. Now one click on an earlier output appends it to `from:` (NON-primary,
+  so `$json` stays the first input) AND inserts `{{ $node["id"] }}` at the cursor.
+  Unsaved prompt edits are preserved across the wiring reload, matching the
+  existing direct-input insert. Covered by `e2e/browser/insert-earlier.spec.ts`.
+
 ## 0.1.6
 
 Docs release (no code changes).

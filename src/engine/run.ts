@@ -48,6 +48,15 @@ export interface RunOptions {
   timeoutMs?: number;
   /** Called as each node settles — lets the UI stream ran/cached/failed live. */
   onResult?: (r: NodeResult) => void;
+  /**
+   * Called the instant a node ACTUALLY starts executing — after it clears the
+   * cache/skip gates, before its (possibly long) model call. Fires only for nodes
+   * that genuinely run, never for cache hits or skips. Lets the UI distinguish
+   * "queued / waiting" from the ONE node currently running, instead of marking the
+   * whole cone running at once. (runChain/runToNode execute nodes sequentially, so
+   * at most one node sits between onStart and onResult.)
+   */
+  onStart?: (id: string) => void;
 }
 
 /**
@@ -196,6 +205,7 @@ export class Runner {
       return r;
     }
 
+    this.opts.onStart?.(id); // past the cache/skip gates — this node really runs now
     const r = await this.runNode(id, key, ctx);
     if (r.status === "failed") ctx.blocked.add(id); // halt downstream (E2)
     this.opts.onResult?.(r);
