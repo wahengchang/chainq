@@ -61,34 +61,46 @@ macOS 會自動開預設瀏覽器;否則複製它印出的網址(`http://127.0.0
 
 - **改名**:點最上方的 id 欄,改完按 Enter(或點開)。引擎會同步改掉所有下游的 `from`
   和 prompt 裡的 `$('id')` 參照,cache 也跟著搬,不會斷。
-- **接上游(from)**:在 input 欄的 **from** 輸入框填逗號清單(例:`draft, other`,
-  第一個是 `{{ $json }}`)。或用第 5 節的拖拉接線。
+- **接上游(from)**:input 欄上方顯示目前接進來的上游,每個是一顆 **chip**(第一個標
+  `$json`,是主輸入),點 chip 上的 **×** 斷線。**加**上游用第 5 節的拖拉接線(或一條線上
+  的 **+** 在兩節點間插一步)。這裡不再用打字填 `from`。
 - **型別專屬欄位**(input 欄中段,依型別自動切換):
 
   | 型別 | 面板顯示的欄位 |
   |---|---|
-  | `ai` | **schema** — 結構化輸出(選填,JSON `欄位→型別`;見下) |
   | `cmd` | **mode** — `once`(整批跑一次)/ `perItem`(每筆跑一次) |
   | `splitOut` / `aggregate` | **field** — 要拆出 / 收集的屬性(留空 = 整筆) |
   | `merge` | **mode**(append / byPosition / byKey)+ **key**(byKey 時 join 的屬性) |
   | `write` | **path**(輸出檔,支援 `{{date}}` / `{{datetime}}`)+ **mode**(overwrite / append) |
+  | `input` | **input fields** — 宣告執行期欄位(name / type / default / required) |
+
+  > `ai` 的 **schema** 不在這裡 —— 它描述的是**輸出**形狀,所以放在 **output 欄**上方(見下)。
 
 - **prompt**:中欄是 prompt 範本(`ai` / `assemble` 用);下方 **fx rendered** 會在你
   ▷ Run to here 之後,顯示 `{{ }}` 代入真實上游資料後的樣子(沒跑過則維持字面)。
-- 改完按 **Save**(面板上的存檔鈕)。
+- **不存檔就能跑(草稿)**:改了欄位**不必先按 Save**。你的編輯會被當成這個節點的
+  **草稿**留著 —— ▷ Run / ↻ re-run **跑的就是草稿**(後端在記憶體套用,`flow.yaml`
+  不動),切到別的節點、關掉面板都**不會丟**,回來編輯還在。畫布上有草稿的節點會標一顆
+  **●**,面板左下也有「未儲存」提示。
+  - 按 **Save** 把草稿寫進 `flow.yaml`(正式生效)。
+  - 按 **↩ 重設** 丟掉這個節點的草稿,還原成存檔值。
+  - 草稿只活在瀏覽器、這份 flow、這個工作階段;關掉整個分頁才會清掉。
 
 ### ai 的 schema(原生結構化輸出)
 
-`ai` 節點面板有一個 **schema** 欄。填一個 JSON 的「欄位→型別」表,例如:
+schema 描述的是節點**輸出**的形狀,所以編輯器放在 **output 欄**最上方(實際輸出的上面)。
+它是兩段式 —— 先選**輸出格式**,只有 JSON 會展開欄位:
 
-```json
-{ "title": "string", "score": "number", "tags": "array" }
-```
+| 格式 | 意思 |
+|---|---|
+| **Text** | 生文字、不驗證(最常見,預設) |
+| **JSON** | 原生物件輸出 —— 一列一個 **`欄位 → 型別`**,下方即時預覽「模型該回什麼」 |
+| **List** | 一個清單。引擎不允許頂層是裸陣列,所以系統把它包進保留欄位 **`_list`**,下游讀 `{{ $json._list }}`(純 UI 包裝,引擎零改動) |
 
-設了之後,該節點的輸出會被**當 JSON 解析並驗證**:對不上會自動帶更正提示**重試一次**,
-再不行就讓節點 fail。成功時這個節點的輸出 item 就是**解析後的物件**(不再是生文字)。
-型別可用 `string` / `number` / `boolean` / `array` / `object`(`array`/`object` 只淺檢查容器)。
-留空則維持舊行為(生文字)。
+JSON 模式下,每列填欄位名 + 選型別(`string` / `number` / `boolean` / `array` / `object`;
+`array`/`object` 只淺檢查容器),按 **+ add field** 加列。設了之後,該節點輸出會被
+**當 JSON 解析並驗證**:對不上自動帶更正提示**重試一次**,再不行就 fail;成功時輸出 item
+就是**解析後的物件**。切換格式**不會清掉**已建的 JSON 欄位(誤點不會弄丟)。
 
 ---
 
@@ -123,9 +135,13 @@ steps:
 
 - 單一節點:面板的 **▷ Run to here**(跑它和它的上游;吃 cache)、**↻ re-run**(忽略 cache 重跑它)。
 - 整條:頂列 **▷ Run all** / **↻ fresh**。
-- 執行時節點**逐一亮起**(NDJSON 串流),跑完該節點即翻成完成色;面板 output 欄顯示輸出,
-  並可看每筆 item。
-- `input` 節點宣告的 `params` 會在畫面上變成輸入框,執行時一起送出(等同 CLI `--input`)。
+- **跑的是你眼前的版本**:有未存草稿時,執行跑的就是草稿(後端記憶體套用,`flow.yaml` 不動)。
+  想看結果不必先 Save;滿意了再 Save、不要就 ↩ 重設。
+- 執行**逐一進行**(NDJSON 串流):同一時間只有**一個**節點在跑(實心 + 轉圈),其餘是
+  **排隊中**(虛線、不轉圈),跑完即翻成完成色。面板 output 欄顯示輸出,可看每筆 item;
+  節點排隊/執行時不會顯示上一次的舊輸出。
+- `input` 節點宣告的 `params` 會在畫面上變成輸入框,執行時一起送出(等同 CLI `--input`,
+  **不存進 flow**)。
 
 ---
 
@@ -135,11 +151,12 @@ steps:
 |---|---|
 | Create → | `POST /api/create` |
 | + add step | `POST /api/add-node`(自動 id `stepN`) |
-| Save(面板) | `POST /api/set`(逐欄)+ `POST /api/set-from` |
-| 拖拉接線 | `POST /api/connect` |
+| Save(面板) | `POST /api/set`(逐欄寫該節點自己的欄位) |
+| ↩ 重設 | 純前端 —— 丟掉草稿、用存檔值重畫,不打 API |
+| 拖拉接線 / 斷線 | `POST /api/connect` |
 | 改名 | `POST /api/rename` |
 | Save raw YAML | `POST /api/save`(先驗證) |
-| ▷ Run all / Run to here | `POST /api/run` / `POST /api/run-node`(NDJSON 串流) |
+| ▷ Run all / Run to here | `POST /api/run` / `POST /api/run-node`(NDJSON 串流;未存草稿用 `overrides` 隨請求帶上,記憶體套用) |
 | delete | `POST /api/delete-node`(下游還在用會被擋) |
 
 ## 相關
