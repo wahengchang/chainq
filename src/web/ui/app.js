@@ -44,6 +44,13 @@ let current=null,nodes=[],selected=null,results={},previewTimer=null;
 // time — the open one — because that's the only editable panel. Set by markDirty on
 // any edit; cleared by a fresh render from saved (selectNode) or a successful save.
 let panelDirty=false;
+// per-node UNSAVED drafts (browser-only, this flow, this session): node id → the
+// field values you edited but haven't Saved. The draft is "what a run executes" and
+// it PERSISTS across panel close / node switch — you don't get nagged on leave, the
+// edit is just kept. Save writes it to the file + clears it; ↩ Reset throws it away.
+// Cleared wholesale only when a DIFFERENT flow loads (open()) — so back→reopen the
+// same flow keeps your drafts; only a real tab close can lose them (beforeunload).
+let drafts={};
 // node id → validation error message (from /api/validate). Drives the ⚠/red
 // flag on the canvas so "input not wired" is visible BEFORE you run.
 let invalid={};
@@ -155,12 +162,12 @@ async function createFlow(){
   const{ok,data}=await api("/api/create",{method:"POST",body:JSON.stringify({dir:$("dir").value,name})});
   if(!ok)return setMsg("createMsg","err",data.error||"create failed");open(data.path);
 }
-async function open(path){current=path;selected=null;results={};inputVals={};layout={};manual=false;$("path").textContent=path;
+async function open(path){if(path!==current)drafts={};current=path;selected=null;results={};inputVals={};layout={};manual=false;$("path").textContent=path;
   $("create").classList.add("hidden");$("editor").classList.remove("hidden");showNodes();await loadLayout();await loadNodes();}
 // load saved node positions; any saved layout switches the canvas to free positioning.
 async function loadLayout(){const{data}=await api("/api/layout?path="+encodeURIComponent(current));
   layout=(data&&data.layout)||{};manual=Object.keys(layout).length>0;}
-async function back(){if(!await guardLeave())return;closeNodeNow();$("editor").classList.add("hidden");$("create").classList.remove("hidden");listFlows();}
+function back(){closeNodeNow();$("editor").classList.add("hidden");$("create").classList.remove("hidden");listFlows();} // drafts kept in memory; reopening the same flow restores them
 
 async function loadNodes(){
   const{ok,data}=await api("/api/parse?path="+encodeURIComponent(current));
@@ -198,8 +205,10 @@ function nodeCard(n){
   const multi=(n.from||[]).length>1;
   const col=COLLECTION.has(n.type);
   const bad=invalid[n.id];
-  const d=document.createElement("div");d.className="node "+(r?r.status:"")+(multi?" multi":"")+(col?" col":"")+(bad?" invalid":"");
+  const d=document.createElement("div");d.className="node "+(r?r.status:"")+(multi?" multi":"")+(col?" col":"")+(bad?" invalid":"")+(drafts[n.id]?" dirty":"");
   d.dataset.id=n.id;
+  // ● unsaved-draft marker — this node has edits kept but not Saved (runs as draft).
+  const draftDot=drafts[n.id]?'<span class="ndirty" title="未儲存的草稿 — 執行會跑這個版本">●</span>':'';
   // ×N item-count badge: how many items this node emitted (items model). Shown
   // after a run streams the count back; hidden for the 1-in-1-out base case.
   const xn=(r&&r.items!=null&&r.items!==1)?'<span class="xn" title="items emitted on this wire">×'+r.items+'</span>':'';
@@ -219,7 +228,7 @@ function nodeCard(n){
       +'<button class="noderun" title="run to here (reuse cache)" onclick="event.stopPropagation();runTo(\''+n.id+'\')">▷</button>'
       +'<button class="noderun" title="re-run fresh — really call the model" onclick="event.stopPropagation();runTo(\''+n.id+'\',true)">↻</button>'
     +'</div>'
-    +'<div class="nh">'+typeBadge(n.type)+'<span class="nn">'+esc(n.id)+'</span>'+xn+glyph+typeChip(n.type)+'</div>'
+    +'<div class="nh">'+typeBadge(n.type)+'<span class="nn">'+esc(n.id)+'</span>'+draftDot+xn+glyph+typeChip(n.type)+'</div>'
     +fromLine
     +'<div class="npreview">'+esc((n.prompt||n.run||"").slice(0,70))+'</div>'+out+warnLine
     +'<div class="port" title="drag onto another node to connect →"></div>';
@@ -443,11 +452,15 @@ function startMove(id,ev){
 
 function selectNode(id){
   selected=id;const n=nodes.find(x=>x.id===id);if(!n)return;
+  // a kept draft for this node overrides the saved values in the EDITABLE fields, so
+  // reopening shows what you were typing (not the stale saved value). Wiring / type /
+  // output still come from the saved node — only your edited fields are the draft.
+  const d=drafts[id];const eff=d?{...n,...d}:n;
   $("modal").classList.remove("hidden");
   $("pnId").value=n.id;$("pnType").innerHTML=typeBadge(n.type)+'<span style="margin-left:6px">'+esc(TYPE_GLYPH[n.type]||n.type)+'</span>';
   setTypeOptions(n);
   const isCmd=n.type==="cmd";
-  $("pnPrompt").value=isCmd?(n.run||""):(n.prompt||"");
+  $("pnPrompt").value=isCmd?(eff.run||""):(eff.prompt||"");
   renderWire(n);   // current input as chips (× to disconnect) — wiring is on the canvas, not typed
   $("pnFromWrap").classList.toggle("hidden",n.type==="input"); // input is a trigger — no `from`
   $("pnPromptCol").classList.toggle("hidden",n.type==="input"); // a trigger has no prompt — hide the whole prompt column
@@ -477,13 +490,13 @@ function selectNode(id){
   // output; every other type has none, so the box clears. (It's an EDITOR, built
   // here on a full render — never on a run; refreshSelectedOutput leaves it alone,
   // which keeps an unsaved schema edit from being wiped mid-run.)
-  $("pnSchema").innerHTML=n.type==="ai"?renderSchemaEditor(n):"";
+  $("pnSchema").innerHTML=n.type==="ai"?renderSchemaEditor(eff):"";
   if(n.type==="ai")schemaPreview();
-  $("pnTypeFields").innerHTML=renderTypeFields(n);   // P2-a: type-specific editor
+  $("pnTypeFields").innerHTML=renderTypeFields(eff);   // P2-a: type-specific editor (draft-aware)
   if(invalid[id])setMsg("pnMsg","err","⚠ "+invalid[id]);else setMsg("pnMsg","","");
   renderPreview();
   refreshSelectedOutput();   // the actual output/status/items — the ONLY part a run redraws
-  panelDirty=false;updateDirty();   // a fresh render from saved is, by definition, clean
+  panelDirty=!!d;updateDirty();   // dirty iff this node has a kept draft
 }
 // status labels for the output column — shared by selectNode + refreshSelectedOutput.
 const STATUS_LAB={ran:'<span class="g-ran">✓ ran · called the model</span>',cached:'<span class="g-cached">⊘ cached · reused, no call</span>',failed:'<span class="g-failed">✗ failed</span>',skipped:'<span class="g-skipped">– skipped</span>',running:'<span class="g-running"><span class="spin">◌</span> running…</span>',pending:'<span class="g-pending">○ queued…</span>'};
@@ -746,7 +759,8 @@ async function saveNode(){
     const r=await api("/api/set",{method:"POST",body:JSON.stringify({path:current,node:selected,field:f,value:v})});
     if(!r.ok){setMsg("pnMsg","err",errs(r.data)||"save failed");return false;}
   }
-  await loadNodes();selectNode(selected);   // re-render from saved → panelDirty cleared
+  delete drafts[selected];   // saved → the draft IS the file now, drop it
+  await loadNodes();selectNode(selected);   // re-render from saved → panelDirty cleared, ● gone
   setMsg("pnMsg","ok","saved ✓");   // after the re-render (selectNode clears pnMsg) so it actually shows
   return true;
 }
@@ -844,9 +858,7 @@ async function runAll(fresh){
 }
 let rawOn=false;
 async function toggleRaw(){
-  // leaving node view for raw YAML re-reads the file — an unsaved panel draft would
-  // vanish, so guard it (only when switching INTO raw; coming back loses nothing).
-  if(!rawOn){if(!await guardLeave())return;closeNodeNow();}
+  if(!rawOn)closeNodeNow();   // hide the panel when going to raw; drafts stay in memory
   rawOn=!rawOn;
   if(rawOn){const{data}=await api("/api/read?path="+encodeURIComponent(current));$("yaml").value=data.yaml||"";
     $("nodeView").classList.add("hidden");$("rawView").classList.remove("hidden");$("rawBtn").textContent="◧ nodes";}
@@ -857,52 +869,50 @@ async function saveRaw(){const{ok,data}=await api("/api/save",{method:"POST",bod
   setMsg("rawMsg",ok?"ok":"err",ok?"saved ✓":errs(data));}
 function setMsg(id,cls,t){const e=$(id);if(!e)return;e.className="msg "+cls;e.textContent=t;}
 
-// ---- unsaved-edit tracking + leave guard ----
-// Any FLOW edit in the open panel marks it dirty. <input>/<select>/<textarea> raise
-// input/change; button-driven edits (schema format/add/remove rows, programmatic
-// prompt inserts) call markDirty() directly. Two controls are NOT flow edits and so
-// must NOT mark dirty: the rename field (#pnId, commits on its own via renameSelected)
-// and the input node's runtime test-value form (.paramin → inputVals, sent with each
-// run like CLI --input, never saved to the flow). Both are excluded below.
-function markDirty(){if(!selected)return;panelDirty=true;updateDirty();}
+// ---- unsaved-edit tracking (auto-kept drafts, no leave guard) ----
+// Any FLOW edit captures the open node's live fields as its draft (drafts[selected]).
+// <input>/<select>/<textarea> raise input/change; button-driven edits (schema format/
+// add/remove rows, programmatic prompt inserts) call markDirty() directly. Two controls
+// are NOT flow edits and so must NOT mark a draft: the rename field (#pnId, commits on
+// its own via renameSelected) and the input node's runtime test-value form (.paramin →
+// inputVals, sent with each run like CLI --input, never saved to the flow).
+function markDirty(){
+  if(!selected)return;
+  const n=nodes.find(x=>x.id===selected);if(!n)return;
+  const was=!!drafts[selected];
+  drafts[selected]=Object.fromEntries(panelFieldSets(n)); // the live edit IS the draft
+  panelDirty=true;updateDirty();
+  if(!was)renderGraph();   // first edit on this node → paint its ● marker on the canvas
+}
 function isFlowEdit(t){return t&&t.id!=="pnId"&&!(t.classList&&t.classList.contains("paramin"));}
 $("modal").addEventListener("input",e=>{if(isFlowEdit(/** @type {any} */(e.target)))markDirty();});
 $("modal").addEventListener("change",e=>{if(isFlowEdit(/** @type {any} */(e.target)))markDirty();});
-// reflect dirty state: the footer "● 未儲存" chip + a Save-button highlight. Both are
-// optional ($ guards null), so it's safe to call before the elements exist.
+// reflect dirty state: the footer "● 未儲存" chip + Save/Reset button emphasis. Optional
+// ($ guards null), so it's safe to call before the elements exist.
 function updateDirty(){
   const chip=$("pnDirty");if(chip)chip.classList.toggle("hidden",!panelDirty);
-  const btn=$("pnSaveBtn");if(btn)btn.classList.toggle("dirty",panelDirty);
+  const sb=$("pnSaveBtn");if(sb)sb.classList.toggle("dirty",panelDirty);
+  const rb=$("pnResetBtn");if(rb)rb.classList.toggle("hidden",!panelDirty); // Reset only when there's a draft
 }
-// The save-or-discard gate every exit passes through. Resolves true = "go ahead"
-// (saved or discarded), false = "stay" (cancelled, or a save that failed). A clean
-// panel resolves true at once. We use an IN-PANEL bar — never native confirm() or a
-// beforeunload prompt mid-session — since a blocking dialog freezes the extension.
-let guardResolve=null;
-function guardLeave(){
-  if(!panelDirty)return Promise.resolve(true);
-  $("pnGuard").classList.remove("hidden");
-  return new Promise(res=>{guardResolve=res;});
+// ↩ Reset — throw away THIS node's draft, re-render from the saved value. The only
+// way to discard an edit now (leaving never discards — drafts are kept).
+function resetNode(){
+  if(!selected||!drafts[selected])return;
+  delete drafts[selected];
+  selectNode(selected);   // re-render from saved → panelDirty=false (no draft)
+  renderGraph();           // drop the ● marker on the canvas
+  setMsg("pnMsg","","reset to saved");
 }
-async function guardPick(choice){   // 'save' | 'discard' | 'cancel'
-  $("pnGuard").classList.add("hidden");
-  const done=guardResolve;guardResolve=null;
-  if(choice==="cancel"){if(done)done(false);return;}
-  if(choice==="save"){const ok=await saveNode();if(!ok){if(done)done(false);return;}} // failed save → stay so the error shows
-  if(choice==="discard"){panelDirty=false;updateDirty();}
-  if(done)done(true);
-}
-// guarded close (× / backdrop / Esc) and guarded node-switch (card click). Internal
-// re-renders (after save/run/connect) still call selectNode directly — no guard.
-async function closeNode(){if(!await guardLeave())return;closeNodeNow();}
-async function trySelect(id){if(id===selected)return;if(!await guardLeave())return;selectNode(id);}
-// last-ditch native guard for a genuine tab close / refresh (normal interaction and
-// Playwright won't trip it). Standard returnValue prompt, not a JS confirm().
-window.addEventListener("beforeunload",e=>{if(panelDirty){e.preventDefault();e.returnValue="";}});
+// close / Esc just hide the panel — the draft is KEPT, reopening restores it. No prompt.
+function closeNode(){closeNodeNow();}
+function trySelect(id){if(id!==selected)selectNode(id);}   // switching keeps both nodes' drafts
+// last-ditch native guard for a genuine tab close / refresh — the only place a kept
+// draft can actually be lost. Standard returnValue prompt, not a JS confirm().
+window.addEventListener("beforeunload",e=>{if(Object.keys(drafts).length){e.preventDefault();e.returnValue="";}});
 window.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("modal").classList.contains("hidden"))closeNode();});
 boot();
 
 // Migration bridge: these handlers are still referenced by inline onclick= in
 // app.html (and in runtime-generated card markup), so a module must expose them
 // on window. Converting to addEventListener is the follow-up.
-Object.assign(window,{listFlows,createFlow,back,toggleRaw,runAll,runNode,saveNode,deleteNode,closeNode,addNode,saveRaw,renameSelected,schedulePreview,insertVar,insertEarlier,runTo,setInputVal,onMergeMode,addParamRow,addSchemaRow,onSchemaFormat,schemaPreview,changeType,markDirty,guardPick});
+Object.assign(window,{listFlows,createFlow,back,toggleRaw,runAll,runNode,saveNode,deleteNode,closeNode,addNode,saveRaw,renameSelected,schedulePreview,insertVar,insertEarlier,runTo,setInputVal,onMergeMode,addParamRow,addSchemaRow,onSchemaFormat,schemaPreview,changeType,markDirty,resetNode});
