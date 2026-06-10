@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.8
+
+- **Editor: zoom the canvas to manage big graphs.** A large flow ran off-screen
+  with no way to see its whole shape. The canvas now zooms — `−` / `+` / `fit`
+  buttons in the top bar, plus `⌘ +` / `⌘ -` and trackpad pinch. `fit` frames the
+  entire graph; zoom is layout-only and never touches the flow.
+- **Editor: the ai output-format box collapses.** The output-schema selector
+  (Text / JSON / List) now folds up, and collapsed it shows just the current
+  format — so the output column stays tidy when you're not editing the schema.
+
 ## 0.1.7
 
 - **Editor: run your unsaved edits without saving first (draft model).** A node's
