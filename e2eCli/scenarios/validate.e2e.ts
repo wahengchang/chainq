@@ -14,11 +14,11 @@ describe("validate & cmd", () => {
     expect(r.out).toMatch(/from: "ghost" does not exist/);
   });
 
-  it("rejects a prompt reference with no matching from: edge — no model runs", () => {
+  it("rejects a prompt reference to a node that is not upstream — no model runs", () => {
     const p = newProject().write("flow.yaml", mock("unwired-ref"));
     const v = p.chain("validate", "flow.yaml");
     expect(v.code).toBe(1);
-    expect(v.out).toMatch(/references \$node\["B"\] but it is not in from/);
+    expect(v.out).toMatch(/references \$node\["B"\] but B is not upstream/);
 
     const r = p.chain("run", "flow.yaml", "--cache");
     expect(r.code).toBe(1);
