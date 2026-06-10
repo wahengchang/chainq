@@ -1,0 +1,45 @@
+# 三層・扇出（fan-out）範例 — 專門用來測「刪掉中間節點」：
+#
+#   trigger ─→ outline ─┬─→ tweet
+#                       └─→ instagram
+#
+# 三層:trigger(L1) → outline(L2,中間) → tweet / instagram(L3,兩個下游)。
+# 在編輯器裡點開「中間的 outline」按 delete:
+#   • outline 會被刪掉(不再被擋下)
+#   • 後面接著的 tweet 與 instagram 兩個節點會「同時標紅 ⚠」,
+#     各自顯示 from: "outline" does not exist —— 提示你去重接。
+#   • 畫布右下角訊息會點名這兩個失效的下游步驟。
+#
+# 跑（每個 ai 節點都呼叫真實模型，需先 claude login）：
+#   chainq run examples/fan-out.yaml
+# 或在編輯器裡開：
+#   chainq ui examples/fan-out.yaml
+profiles:
+  default: { cmd: 'claude -p' }
+
+steps:
+  # L1 觸發點:給一個主題(其餘節點都從這裡長出去)
+  trigger:
+    type: input
+    params:
+      topic:
+        type: string
+        default: 'a weekend trip in Macau'
+
+  # L2 中間節點:把主題擴成 3 點大綱 —— 這就是你要拆掉的那一個
+  outline:
+    type: ai
+    from: trigger
+    prompt: 'write a 3-bullet outline for: {{ $json.topic }}. very short, in zh-tw'
+
+  # L3-a 下游一:依大綱寫成一則推文
+  tweet:
+    type: ai
+    from: outline
+    prompt: 'rewrite this outline into one tweet, in zh-tw: {{ $json }}'
+
+  # L3-b 下游二:依大綱寫成一則 Instagram 貼文
+  instagram:
+    type: ai
+    from: outline
+    prompt: 'rewrite this outline into one Instagram caption with emojis, in zh-tw: {{ $json }}'
