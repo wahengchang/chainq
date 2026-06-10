@@ -406,4 +406,56 @@ describe("web server", () => {
       close();
     }
   });
+
+  // delete-node is GUARDED: editFlow only writes if no NEW validation error is
+  // introduced. A node that something downstream still references therefore can't
+  // be deleted (deleting it would orphan the dependent's `from:`) — the API refuses
+  // with 400 + a "rewire it first" message and the node stays in the file. This is
+  // exactly the symptom seen in the editor: the `delete` button does nothing
+  // visible because the step has a live dependent. The escape hatch is to remove /
+  // rewire the dependent first, after which the node deletes cleanly.
+  it("refuses to delete a node a downstream step still depends on, then deletes once it's a leaf", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "chain-web-del-"));
+    const { base, close } = await listen(dir);
+    const flow = join(dir, "d.yaml");
+    const enc = encodeURIComponent(flow);
+    writeFileSync(
+      flow,
+      [
+        "profiles:",
+        "  default: { cmd: 'claude -p' }",
+        "steps:",
+        "  a:",
+        "    type: ai",
+        "    prompt: 'x'",
+        "  b:",            // b depends on a → a is NOT a leaf
+        "    type: assemble",
+        "    from: a",
+        "    prompt: '{{ $json }}'",
+        "",
+      ].join("\n"),
+    );
+    const ids = async () =>
+      (await getJson(base, `/api/parse?path=${enc}`)).nodes.map((n: any) => n.id);
+    const del = (node: string) => post(base, "/api/delete-node", { path: flow, node });
+    try {
+      // a has a dependent (b) → delete is REFUSED, a survives (the reported bug).
+      const blocked = await del("a");
+      expect(blocked.status).toBe(400);
+      expect(((await blocked.json()) as any).errors[0].message).toContain("depends");
+      expect(await ids()).toEqual(["a", "b"]); // nothing was removed
+
+      // remove the dependent first: b is a leaf, so deleting it is allowed.
+      const leaf = await del("b");
+      expect(leaf.status).toBe(200);
+      expect(await ids()).toEqual(["a"]);
+
+      // now a has no dependents → it deletes cleanly too.
+      const ok = await del("a");
+      expect(ok.status).toBe(200);
+      expect(await ids()).toEqual([]);
+    } finally {
+      close();
+    }
+  });
 });
