@@ -954,9 +954,15 @@ function insertVar(id,primary){
 function insertEarlier(u){ insertVar(u,false); }
 async function deleteNode(){
   if(!selected)return;
-  const{ok,data}=await api("/api/delete-node",{method:"POST",body:JSON.stringify({path:current,node:selected})});
+  const gone=selected;
+  const{ok,data}=await api("/api/delete-node",{method:"POST",body:JSON.stringify({path:current,node:gone})});
   if(!ok)return setMsg("pnMsg","err",errs(data)||"delete failed");
   closeNodeNow();await loadNodes();   // node's gone — nothing to save, skip the guard
+  // delete is forced: any step that still referenced it is now broken (red ⚠ on
+  // canvas). Name them in the canvas msg so the breakage isn't silent. loadNodes
+  // clears canvasMsg first, so set it AFTER.
+  const dep=[...new Set(((data&&data.warnings)||[]).map(e=>e.node))];
+  if(dep.length)setMsg("canvasMsg","err","⚠ 已刪除「"+gone+"」— "+dep.length+" 個下游步驟的引用失效:"+dep.join("、")+"(已標紅,點進去修正)");
 }
 // Add a step via the engine's nodeStarter (server-side, single source of truth
 // for each type's minimal fields). The node is unwired — drag/edit `from` next.
