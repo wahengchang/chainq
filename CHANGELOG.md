@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.1.11
+
+- **Editor: delete a node even when a downstream step still points at it.** Deleting
+  a node that another step's `from:` still referenced used to be rejected outright
+  (`another step still depends on this — rewire it first`) — the panel stayed, the
+  node stayed, and it looked like the delete did nothing. Now the delete always
+  lands: any downstream step left with a dangling reference is flagged red on the
+  canvas (`⚠ from: "X" does not exist`) and named in a canvas message, so the
+  breakage is loud and you can rewire it. Edits that would corrupt the YAML are
+  still rejected (壞不落地 still holds for corruption). The deleted node's reference
+  is left in place on purpose — so the broken step shows an error to fix, rather
+  than silently dropping the wiring. Covered by `e2e/browser/delete-node.spec.ts`
+  (single dependent) and `e2e/browser/delete-fanout.spec.ts` (a fan-out middle node
+  whose two downstream leaves both turn red). New `examples/fan-out.yaml` to try it.
+
 ## 0.1.10
 
 - **Editor: reference wires — see which upstreams are data, which are just looked up.**
