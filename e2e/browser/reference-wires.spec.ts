@@ -113,3 +113,43 @@ test("reference wires read distinctly and toggle on/off", async ({ page }) => {
   await expect(toggle).toHaveClass(/\bon\b/);
   await expect(refWires.first()).toBeVisible();
 });
+
+test("a cross-layer reference draws a wire that isn't in from: (#33 Phase 2)", async ({ page }) => {
+  // refine reaches across draft to the grandparent `start` via {{ $node["start"] }},
+  // but only wires `draft`. The start→refine edge exists ONLY as a reference — it must
+  // still be drawn (as a reference wire), and the node must validate clean.
+  const FLOW2 = `profiles:
+  default: { cmd: 'claude -p' }
+steps:
+  start: { type: ai, prompt: 'one city' }
+  draft: { type: ai, from: start, prompt: '{{ $json }}' }
+  refine: { type: ai, from: draft, prompt: '{{ $json }} about {{ $node["start"] }}' }
+`;
+  const dir = mkdtempSync(join(tmpdir(), "chain-crosslayer-"));
+  writeFileSync(join(dir, "flow.yaml"), FLOW2);
+  const { url, proc: p2 } = await startServer(dir);
+  try {
+    await page.goto(url);
+    await expect(page.locator(".node")).toHaveCount(3);
+
+    // edges drawn: start→draft (flow), draft→refine (flow), start→refine (reference,
+    // NOT a from: edge). Three paths, exactly one of them a reference wire.
+    await expect(page.locator("svg.wires path")).toHaveCount(3);
+    await expect(page.locator("svg.wires path.refwire")).toHaveCount(1);
+    await expect(page.locator("svg.wires path.refwire").first()).toHaveAttribute("stroke", "var(--ref)");
+
+    // the cross-layer ref is legal now → refine is not flagged invalid…
+    const refine = page.locator(".node", { has: page.locator(".nn", { hasText: /^refine$/ }) });
+    await expect(refine).not.toHaveClass(/invalid/);
+    // …and start was NOT silently wired into refine.from (it stays a pure reference).
+    await expect(refine).toContainText("from [draft]");
+    await expect(refine).not.toContainText("from [draft, start]");
+
+    // toggle hides the cross-layer reference wire; the two data-flow wires stay.
+    await page.locator("#refToggle").click();
+    await expect(page.locator("svg.wires path.refwire").first()).toBeHidden();
+    await expect(page.locator("svg.wires path:not(.refwire)").first()).toBeVisible();
+  } finally {
+    p2.kill();
+  }
+});

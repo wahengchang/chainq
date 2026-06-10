@@ -37,7 +37,7 @@ steps:
     expect(validate(flow).some((e) => /profile "deflt" not found/.test(e.message))).toBe(true);
   });
 
-  it("flags a prompt referencing an upstream not wired in from:", () => {
+  it("flags a prompt referencing a node that is NOT an ancestor", () => {
     const flow = parseFlow(`
 profiles:
   default: { cmd: 'cat' }
@@ -45,9 +45,21 @@ steps:
   a: { type: ai, prompt: 'x' }
   b: { type: ai, prompt: 'y' }
   m: { type: ai, from: a, prompt: '{{ $json }} {{ $node["b"] }}' }
-`); // m reads b but only wired to a
+`); // m reads b, but b is a sibling — not upstream of m at all
     const errs = validate(flow);
-    expect(errs.some((e) => e.node === "m" && /\$node\["b"\] but it is not in from/.test(e.message))).toBe(true);
+    expect(errs.some((e) => e.node === "m" && /\$node\["b"\] but b is not upstream/.test(e.message))).toBe(true);
+  });
+
+  it("accepts a cross-layer reference to a transitive ANCESTOR (not a direct from:)", () => {
+    const flow = parseFlow(`
+profiles:
+  default: { cmd: 'cat' }
+steps:
+  a: { type: ai, prompt: 'x' }
+  b: { type: ai, from: a, prompt: '{{ $json }}' }
+  c: { type: ai, from: b, prompt: '{{ $json }} {{ $node["a"] }}' }
+`); // c reaches across b to grandparent a — a IS an ancestor → allowed (#33 Phase 2)
+    expect(validate(flow)).toEqual([]);
   });
 
   it("accepts $node / $('id') / $json when all are wired in from:", () => {

@@ -27,6 +27,22 @@ describe("Runner — G2 fake model", () => {
     expect(r.every((x) => x.status === "ran")).toBe(true);
   });
 
+  it("resolves a cross-layer reference to a grandparent ancestor (#33 Phase 2)", async () => {
+    const flow: Flow = {
+      profiles: cat,
+      steps: {
+        a: { id: "a", type: "ai", prompt: "ALPHA" },
+        b: { id: "b", type: "ai", from: "a", prompt: "{{ $json }}" },
+        // c only wires b, but reaches across to the grandparent a via $node["a"].
+        c: { id: "c", type: "ai", from: "b", prompt: 'gp={{ $node["a"] }}' },
+      },
+    };
+    const r = await new Runner(flow, { chainDir: dir() }).runChain();
+    // a is NOT a direct from: of c — but run loads referenced ancestors, so the
+    // reference resolves to a's value instead of rendering verbatim.
+    expect(itemsText(r.find((x) => x.id === "c")!.output)).toContain("gp=ALPHA");
+  });
+
   it("a second identical run serves everything from cache", async () => {
     const flow: Flow = {
       profiles: cat,

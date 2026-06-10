@@ -12,7 +12,7 @@ import { dirname, isAbsolute, resolve } from "node:path";
 import { ancestorsOf, descendantsOf, topoOrder, upstreamsOf } from "./dag.js";
 import { CacheStore, computeKeys, volatileSet } from "./cache.js";
 import { cmdToArgv, resolveProfile } from "./profiles.js";
-import { renderPrompt } from "./render.js";
+import { renderPrompt, promptRefs } from "./render.js";
 import { runSubprocess } from "./proc.js";
 import { extractJson, schemaErrors, correctionNote } from "./schema.js";
 import { nodeDisposition, planRun, type PlanDeps, type RunPlan } from "./plan.js";
@@ -309,6 +309,17 @@ export class Runner {
         // pass every upstream's full items; render pairs by index / supports .all()
         const itemsByUp: Record<string, Item[]> = {};
         for (const u of ups) itemsByUp[u] = itemsOf(u);
+        // cross-layer references ({{ $('grandparent') }}): a prompt may name an
+        // ANCESTOR that isn't a direct `from`. validate guarantees every ref is an
+        // ancestor, so by topo order it has already run — load its items so
+        // resolveExpr can resolve it. Pairing rides the existing lineage spine
+        // (computed below); off-spine ancestors fall back to pairedIndex/idx, the
+        // same best-effort today's off-spine direct refs already use.
+        if (node.prompt) {
+          for (const r of promptRefs(node.prompt).nodes) {
+            if (!(r in itemsByUp) && this.flow.steps[r]) itemsByUp[r] = itemsOf(r);
+          }
+        }
         const primaryItems = primary ? itemsByUp[primary]! : [];
         for (let i = 0; i < runCount; i++) {
           // cross-refs to other upstreams pair via this item's lineage, not loop index.
