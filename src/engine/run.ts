@@ -46,6 +46,12 @@ export interface RunOptions {
   input?: Record<string, unknown>[];
   /** Per-node timeout. */
   timeoutMs?: number;
+  /**
+   * Cancel an in-flight run (UI Stop). Aborting it stops the runner before the
+   * next node and kills the currently-executing subprocess (SIGTERM→SIGKILL).
+   * Nodes that already settled keep their results; the run throws out of its loop.
+   */
+  signal?: AbortSignal;
   /** Called as each node settles — lets the UI stream ran/cached/failed live. */
   onResult?: (r: NodeResult) => void;
   /**
@@ -160,8 +166,16 @@ export class Runner {
     for (const n of cone) await this.ensure(n, false, ctx);
   }
 
+  /** Common subprocess options — folds in the run's cancel signal (UI Stop). */
+  private procOpts(): { timeoutMs?: number; cwd: string; signal?: AbortSignal } {
+    return { timeoutMs: this.opts.timeoutMs, cwd: this.baseDir, signal: this.opts.signal };
+  }
+
   // Run a node if needed (or forced); otherwise serve cache. Memoized per OPERATION.
+  // Single choke point for EVERY node in EVERY run path → the one place we honour a
+  // cancel: a stopped run throws here before the next node ever starts.
   private async ensure(id: string, force: boolean, ctx: RunCtx): Promise<NodeResult> {
+    if (this.opts.signal?.aborted) throw new Error("run stopped");
     if (ctx.memo.has(id)) {
       return { id, status: "cached", output: ctx.memo.get(id)! };
     }
@@ -264,20 +278,16 @@ export class Runner {
           output = [];
           const items = primary ? itemsOf(primary) : [];
           for (let i = 0; i < items.length; i++) {
-            const res = await runSubprocess(cmdToArgv(node.run ?? ""), itemValue(items[i]!), {
-              timeoutMs: this.opts.timeoutMs,
-              cwd: this.baseDir,
-            });
+            const res = await runSubprocess(cmdToArgv(node.run ?? ""), itemValue(items[i]!), this.procOpts());
+            if (res.aborted) return this.fail(id, "stopped");
             if (res.timedOut) return this.fail(id, "timed out");
             if (res.code !== 0) return this.fail(id, res.stderr || `exit ${res.code}`);
             output.push(textItem(res.stdout, i));
           }
         } else {
           // mode: once (default) — run a single time, no stdin
-          const res = await runSubprocess(cmdToArgv(node.run ?? ""), "", {
-            timeoutMs: this.opts.timeoutMs,
-            cwd: this.baseDir,
-          });
+          const res = await runSubprocess(cmdToArgv(node.run ?? ""), "", this.procOpts());
+          if (res.aborted) return this.fail(id, "stopped");
           if (res.timedOut) return this.fail(id, "timed out");
           if (res.code !== 0) return this.fail(id, res.stderr || `exit ${res.code}`);
           output = [textItem(res.stdout)];
@@ -311,10 +321,8 @@ export class Runner {
             output.push(textItem(rendered, i)); // pure data assembly, no external call
           } else {
             const profile = resolveProfile(this.flow, this.opts.profileOverride ?? node.profile);
-            const res = await runSubprocess(cmdToArgv(profile.cmd), rendered, {
-              timeoutMs: this.opts.timeoutMs,
-              cwd: this.baseDir,
-            });
+            const res = await runSubprocess(cmdToArgv(profile.cmd), rendered, this.procOpts());
+            if (res.aborted) return this.fail(id, "stopped");
             if (res.timedOut) return this.fail(id, "timed out");
             if (res.code !== 0) {
               return this.fail(id, res.stderr || `exit ${res.code}`, isAuthError(res.stderr));
@@ -330,10 +338,8 @@ export class Runner {
                 errs = [e instanceof Error ? e.message : String(e)];
               }
               if (errs.length) {
-                const retry = await runSubprocess(cmdToArgv(profile.cmd), rendered + correctionNote(errs), {
-                  timeoutMs: this.opts.timeoutMs,
-                  cwd: this.baseDir,
-                });
+                const retry = await runSubprocess(cmdToArgv(profile.cmd), rendered + correctionNote(errs), this.procOpts());
+                if (retry.aborted) return this.fail(id, "stopped");
                 if (retry.timedOut) return this.fail(id, "timed out");
                 if (retry.code !== 0) return this.fail(id, retry.stderr || `exit ${retry.code}`, isAuthError(retry.stderr));
                 try {

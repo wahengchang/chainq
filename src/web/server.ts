@@ -460,6 +460,14 @@ async function streamRun(
     return json(res, 409, { errors: [{ node: "(lock)", message: msg(e) }] });
   }
   res.writeHead(200, { "content-type": "application/x-ndjson" });
+  // UI Stop: the browser aborts the fetch → the socket closes before we finished.
+  // That close is the cancel signal — abort the run so queued nodes stop and the
+  // in-flight child is killed. `writableFinished` guards the NORMAL end (where we
+  // already called res.end()), so a clean run never self-cancels.
+  const ac = new AbortController();
+  res.on("close", () => { if (!res.writableFinished) ac.abort(); });
+  // Once the socket is gone, res.write throws — swallow it (the client left).
+  const send = (o: unknown) => { if (!res.writableEnded) { try { res.write(JSON.stringify(o) + "\n"); } catch { /* client gone */ } } };
   const runner = new Runner(flow, {
     chainDir: join(baseDir, ".chain"),
     baseDir,
@@ -470,28 +478,27 @@ async function streamRun(
     // UI a generous 5-min ceiling so a genuine model call isn't killed as a
     // false "timed out" — the CLI default (120s) is too tight for the UI.
     timeoutMs: 300_000,
+    signal: ac.signal, // ← Stop button aborts this
     // a node actually started → tell the UI to flip it from "queued" to "running"
     // (the spinner), so only the ONE executing node spins, not the whole cone.
-    onStart: (id) => res.write(JSON.stringify({ id, status: "running" }) + "\n"),
+    onStart: (id) => send({ id, status: "running" }),
     onResult: (r) =>
-      res.write(
-        JSON.stringify({
-          id: r.id,
-          status: r.status,
-          output: itemsText(r.output), // flatten items → text for the UI
-          items: r.output.length, // item count (items model)
-          error: r.error ?? null,
-        }) + "\n",
-      ),
+      send({
+        id: r.id,
+        status: r.status,
+        output: itemsText(r.output), // flatten items → text for the UI
+        items: r.output.length, // item count (items model)
+        error: r.error ?? null,
+      }),
   });
   try {
     await run(runner);
   } catch (e) {
-    res.write(JSON.stringify({ error: msg(e) }) + "\n");
+    if (!ac.signal.aborted) send({ error: msg(e) }); // a real failure, not the Stop
   } finally {
     lock.release();
   }
-  res.end();
+  if (!res.writableEnded) res.end();
 }
 
 function atomicWrite(file: string, data: string): void {

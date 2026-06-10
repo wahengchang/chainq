@@ -18,6 +18,8 @@ export interface SubprocessResult {
   code: number | null;
   /** True when the process was killed because it exceeded the timeout. */
   timedOut: boolean;
+  /** True when the process was killed because the caller aborted (UI Stop). */
+  aborted: boolean;
 }
 
 export interface SubprocessOptions {
@@ -31,6 +33,13 @@ export interface SubprocessOptions {
    * files" drift the design warns about.
    */
   cwd?: string;
+  /**
+   * Abort the in-flight child (UI Stop / cancelled run). On abort the process is
+   * SIGTERM'd, then SIGKILL'd after the grace period — same escalation as the
+   * timeout — and the result comes back with `aborted: true`. If the signal is
+   * already aborted, no child is spawned.
+   */
+  signal?: AbortSignal;
 }
 
 const DEFAULT_TIMEOUT = 120_000;
@@ -46,11 +55,17 @@ export async function runSubprocess(
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT;
   const killGraceMs = opts.killGraceMs ?? DEFAULT_KILL_GRACE;
 
+  // Already cancelled before we even start → don't spawn anything.
+  if (opts.signal?.aborted) {
+    return Promise.resolve({ stdout: "", stderr: "", code: null, timedOut: false, aborted: true });
+  }
+
   return new Promise<SubprocessResult>((resolve, reject) => {
     const child = spawn(cmd, args, { stdio: ["pipe", "pipe", "pipe"], cwd: opts.cwd });
     let stdout = "";
     let stderr = "";
     let timedOut = false;
+    let aborted = false;
     let killTimer: NodeJS.Timeout | undefined;
 
     const timer = setTimeout(() => {
@@ -60,19 +75,30 @@ export async function runSubprocess(
       killTimer = setTimeout(() => child.kill("SIGKILL"), killGraceMs);
     }, timeoutMs);
 
+    // UI Stop / cancelled run: kill the child the same way the timeout does.
+    const onAbort = () => {
+      aborted = true;
+      child.kill("SIGTERM");
+      killTimer = setTimeout(() => child.kill("SIGKILL"), killGraceMs);
+    };
+    opts.signal?.addEventListener("abort", onAbort, { once: true });
+    const cleanup = () => {
+      clearTimeout(timer);
+      if (killTimer) clearTimeout(killTimer);
+      opts.signal?.removeEventListener("abort", onAbort);
+    };
+
     child.stdout.on("data", (d) => (stdout += d.toString()));
     child.stderr.on("data", (d) => (stderr += d.toString()));
 
     child.on("error", (err) => {
-      clearTimeout(timer);
-      if (killTimer) clearTimeout(killTimer);
+      cleanup();
       reject(err); // e.g. ENOENT — command not found (caught upstream by `which` preflight)
     });
 
     child.on("close", (code) => {
-      clearTimeout(timer);
-      if (killTimer) clearTimeout(killTimer);
-      resolve({ stdout, stderr, code, timedOut });
+      cleanup();
+      resolve({ stdout, stderr, code, timedOut, aborted });
     });
 
     // Feed the prompt, then close stdin so the model knows input is complete.

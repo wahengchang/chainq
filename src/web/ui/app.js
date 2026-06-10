@@ -843,15 +843,42 @@ async function saveNode(){
   setMsg("pnMsg","ok","saved ✓");   // after the re-render (selectNode clears pnMsg) so it actually shows
   return true;
 }
-// read an NDJSON stream, calling onNode for each node result as it arrives
+// the in-flight run's AbortController, or null when nothing is running. Aborting it
+// = Stop: the fetch cancels → the server sees the socket close → it stops the runner
+// and kills the current child. Also the re-entry guard (one run at a time).
+let runAbort=null;
+function setRunning(on){
+  runAbort=on?new AbortController():null;
+  const b=$("stopBtn");if(b)b.classList.toggle("hidden",!on);
+}
+// Stop: abort the in-flight run. The currently-running node's subprocess is killed
+// and every still-queued node is dropped — you keep whatever already finished.
+function stopRun(){if(runAbort)runAbort.abort();}
+// read an NDJSON stream, calling onNode for each node result as it arrives.
+// Stoppable: a Stop aborts the fetch; we treat that as a clean end (not an error),
+// drop the unfinished pending/running placeholders, and leave settled nodes intact.
 async function streamRun(url,bodyObj){
-  const r=await fetch(url,{method:"POST",body:JSON.stringify(bodyObj)});
-  if(!r.ok)return{ok:false,data:await r.json().catch(()=>({}))};
-  const reader=r.body.getReader(),dec=new TextDecoder();let buf="";
-  while(true){const{done,value}=await reader.read();if(done)break;
-    buf+=dec.decode(value,{stream:true});let i;
-    while((i=buf.indexOf("\n"))>=0){const line=buf.slice(0,i).trim();buf=buf.slice(i+1);if(line){try{onNode(JSON.parse(line));}catch(e){}}}}
-  return{ok:true};
+  setRunning(true);
+  const signal=runAbort.signal;
+  try{
+    const r=await fetch(url,{method:"POST",body:JSON.stringify(bodyObj),signal});
+    if(!r.ok)return{ok:false,data:await r.json().catch(()=>({}))};
+    const reader=r.body.getReader(),dec=new TextDecoder();let buf="";
+    while(true){const{done,value}=await reader.read();if(done)break;
+      buf+=dec.decode(value,{stream:true});let i;
+      while((i=buf.indexOf("\n"))>=0){const line=buf.slice(0,i).trim();buf=buf.slice(i+1);if(line){try{onNode(JSON.parse(line));}catch(e){}}}}
+    return{ok:true};
+  }catch(e){
+    if(signal.aborted){   // Stop, not a failure — tidy the canvas back to a stable state
+      clearRunning(nodes.map(n=>n.id));renderGraph();
+      if(selected)refreshSelectedOutput();
+      setMsg("canvasMsg","","■ 已中止 · 停在已完成的節點");
+      return{ok:true,stopped:true};
+    }
+    throw e;
+  }finally{
+    setRunning(false);
+  }
 }
 function onNode(rec){
   if(rec.error&&!rec.id){setMsg("canvasMsg","err",rec.error);return;}
@@ -862,7 +889,7 @@ function onNode(rec){
   if(selected===rec.id)refreshSelectedOutput();
 }
 async function runNode(force){
-  if(!selected)return;
+  if(!selected||runAbort)return;   // already running — Stop it first
   $("pnOut").className="mbody dim";$("pnOut").textContent="running…";$("pnOutStatus").innerHTML='<span class="g-running">◌ running…</span>';
   const ids=[selected,...ancestors(selected)];
   setPendingUI(ids);
@@ -874,6 +901,7 @@ async function runNode(force){
 // The result shows on the card itself (see renderGraph). Click the card body
 // (not ▷) if you want to open the editor panel.
 async function runTo(id,fresh){
+  if(runAbort)return;   // already running — Stop it first
   const ids=[id,...ancestors(id)];
   setPendingUI(ids);
   // a card ▷/↻ runs the SAVED flow — unless it's the open node, where the panel's
@@ -930,6 +958,7 @@ async function addNode(){
   await loadNodes();selectNode(id);
 }
 async function runAll(fresh){
+  if(runAbort)return;   // a run is already in flight — Stop it first
   setPendingUI(nodes.map(n=>n.id));
   // if a node panel is open with unsaved edits, Run all runs THAT draft too (in-memory).
   const r=await streamRun("/api/run",{path:current,profile:$("profile").value,fresh:!!fresh,input:collectInput(),overrides:draftOverride()});
@@ -988,10 +1017,12 @@ function trySelect(id){if(id!==selected)selectNode(id);}   // switching keeps bo
 // last-ditch native guard for a genuine tab close / refresh — the only place a kept
 // draft can actually be lost. Standard returnValue prompt, not a JS confirm().
 window.addEventListener("beforeunload",e=>{if(Object.keys(drafts).length){e.preventDefault();e.returnValue="";}});
-window.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("modal").classList.contains("hidden"))closeNode();});
+window.addEventListener("keydown",e=>{if(e.key!=="Escape")return;
+  if(runAbort){stopRun();return;}   // Esc while running = Stop (before closing any panel)
+  if(!$("modal").classList.contains("hidden"))closeNode();});
 boot();
 
 // Migration bridge: these handlers are still referenced by inline onclick= in
 // app.html (and in runtime-generated card markup), so a module must expose them
 // on window. Converting to addEventListener is the follow-up.
-Object.assign(window,{listFlows,createFlow,back,toggleRaw,runAll,runNode,saveNode,deleteNode,closeNode,addNode,saveRaw,renameSelected,schedulePreview,insertVar,insertEarlier,runTo,setInputVal,onMergeMode,addParamRow,addSchemaRow,onSchemaFormat,toggleSchema,schemaPreview,changeType,markDirty,resetNode,zoomBy,zoomReset,zoomFit});
+Object.assign(window,{listFlows,createFlow,back,toggleRaw,runAll,runNode,saveNode,deleteNode,closeNode,addNode,saveRaw,renameSelected,schedulePreview,insertVar,insertEarlier,runTo,setInputVal,onMergeMode,addParamRow,addSchemaRow,onSchemaFormat,toggleSchema,schemaPreview,changeType,markDirty,resetNode,zoomBy,zoomReset,zoomFit,stopRun});
