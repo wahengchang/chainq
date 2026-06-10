@@ -369,15 +369,13 @@ async function handle(req: IncomingMessage, res: ServerResponse, opts: WebOption
     return editFlow(res, resolve(String(file)), (doc) => setFrom(doc, String(node), list));
   }
 
-  // Delete a node (comment-preserving). Rejected if a downstream still needs it.
+  // Delete a node (comment-preserving). Always succeeds (force): if a downstream
+  // still references it, the delete lands and the now-dangling refs come back as
+  // `warnings` — the editor flags those steps red (⚠) for the user to rewire,
+  // rather than blocking the delete outright.
   if (method === "POST" && path === "/api/delete-node") {
     const { path: file = "", node = "" } = await body(req);
-    return editFlow(
-      res,
-      resolve(file),
-      (doc) => doc.deleteIn(["steps", node]),
-      () => [{ node, message: "another step still depends on this — rewire it first" }],
-    );
+    return editFlow(res, resolve(file), (doc) => doc.deleteIn(["steps", node]), { force: true });
   }
 
   res.writeHead(404, { "content-type": "text/plain" });
@@ -557,12 +555,15 @@ function introducedErrors(originalYaml: string, mutatedYaml: string): FlowError[
 
 // Load → mutate the yaml Document (comment-preserving) → reject only NEW errors →
 // atomicWrite, serialized per flow (壞不落地 for corruption, permissive for
-// work-in-progress). `onInvalid` lets a caller (e.g. delete) reword the errors.
+// work-in-progress). `force` (delete) lets the mutation land even when it
+// introduces validation errors — they come back as `warnings` for the editor to
+// surface (red ⚠ nodes) — but a mutation that breaks YAML *parsing* is always
+// rejected (壞不落地 still holds for corruption).
 function editFlow(
   res: ServerResponse,
   fp: string,
   mutate: (doc: Document) => void,
-  onInvalid?: (errors: FlowError[]) => FlowError[],
+  opts: { force?: boolean } = {},
 ): Promise<void> {
   return withFlow(fp, () => {
     const original = readFileSync(fp, "utf8");
@@ -572,9 +573,9 @@ function editFlow(
     if (introduced === "parse") {
       return json(res, 400, { errors: [{ node: "(parse)", message: "edit would break the YAML" }] });
     }
-    if (introduced.length) return json(res, 400, { errors: onInvalid ? onInvalid(introduced) : introduced });
+    if (introduced.length && !opts.force) return json(res, 400, { errors: introduced });
     atomicWrite(fp, String(doc));
-    return json(res, 200, { ok: true });
+    return json(res, 200, introduced.length ? { ok: true, warnings: introduced } : { ok: true });
   });
 }
 
