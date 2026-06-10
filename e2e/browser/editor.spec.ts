@@ -82,6 +82,20 @@ test("editor renders the real flow graph from chain ui (offline)", async ({ page
   await expect(split.locator(".ntype")).toContainText("split out");
   await expect(gather.locator(".ntype")).toContainText("aggregate");
 
+  // PLACEMENT: the add-step control is a floating toolbar grouped with the zoom
+  // control in the bottom-right corner (one canvas toolbar cluster), stacked just
+  // above it — not stranded in the document flow at the top-left.
+  const vp = page.viewportSize()!;
+  const addBox = (await page.locator(".addnode").boundingBox())!;
+  const zoomBox = (await page.locator(".zoomctl").boundingBox())!;
+  // both pinned to the right edge…
+  expect(vp.width - (addBox.x + addBox.width)).toBeLessThan(40);
+  expect(vp.width - (zoomBox.x + zoomBox.width)).toBeLessThan(40);
+  // …and to the bottom half of the viewport…
+  expect(addBox.y).toBeGreaterThan(vp.height * 0.55);
+  // …with add-step sitting ABOVE the zoom bar, not overlapping it.
+  expect(addBox.y + addBox.height).toBeLessThanOrEqual(zoomBox.y + 1);
+
   // add a new node from the canvas, choosing its type — goes through the real
   // /api/add-node (engine nodeStarter), so a brand-new merge node appears with
   // its own accent chip. The old editor could only ever add an `ai` step.

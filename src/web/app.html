@@ -115,9 +115,11 @@
   /* true-DAG canvas: depth columns + wires that show fan-out / fan-in */
   #graphport{position:relative}  /* sized in JS to the scaled graph so scrollbars stay honest */
   .gwrap{position:relative;width:max-content;padding:30px 40px}
-  /* floating zoom control — fixed to the viewport corner (does not scroll with the
-     canvas); sits under the node-panel backdrop (z4) so editing a node hides it. */
-  .zoomctl{position:fixed;right:18px;bottom:18px;z-index:3;display:flex;gap:2px;
+  /* bottom-right canvas toolbar cluster — fixed to the viewport corner (does not
+     scroll with the canvas); sits under the node-panel backdrop (z4) so editing a
+     node hides it. Children stack as a column, right-aligned, never overlapping. */
+  .canvastools{position:fixed;right:18px;bottom:18px;z-index:3;display:flex;flex-direction:column;align-items:flex-end;gap:8px}
+  .zoomctl{display:flex;gap:2px;
     background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:3px;box-shadow:0 6px 22px rgba(0,0,0,.45)}
   .zoomctl button{padding:3px 9px;font-size:14px;line-height:1.2;border:1px solid transparent;background:transparent;color:var(--ink);border-radius:5px}
   .zoomctl button:hover{background:#1b1e22;color:var(--accent);border-color:transparent}
@@ -132,7 +134,20 @@
     font-size:14px;opacity:0;pointer-events:none;transition:opacity .12s}
   .gwrap:hover .wins{opacity:.5;pointer-events:auto} .wins:hover{opacity:1;border-color:var(--accent)}
   .node.multi{box-shadow:0 0 0 1px rgba(224,166,77,.35)}
-  .addnode{padding:0 30px 30px}
+  /* add-step control: part of the bottom-right toolbar cluster (same panel look as
+     zoom), sits just above the zoom bar so the two read as one toolbar. */
+  .addnode{display:flex;gap:6px;align-items:center;
+    background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:5px;box-shadow:0 6px 22px rgba(0,0,0,.45)}
+  .addnode #addType{padding:5px 8px;font-size:12px}
+  .addnode button{padding:5px 11px;font-size:12px}
+  /* Stop: aborts the whole run mid-flight. Lives in the cluster, shown only while a
+     run is in progress; red so it reads as the abort, distinct from Run all. */
+  .stopbtn{background:color-mix(in srgb,var(--bad) 16%,var(--panel));border:1px solid var(--bad);color:var(--bad);
+    border-radius:7px;padding:6px 16px;font-size:12px;box-shadow:0 6px 22px rgba(0,0,0,.45)}
+  .stopbtn:hover{background:color-mix(in srgb,var(--bad) 28%,var(--panel));border-color:var(--bad)}
+  /* run/add messages: sit at the top of the cluster, right-aligned. */
+  #canvasMsg{max-width:340px;text-align:right;pointer-events:none}
+  #canvasMsg:empty{display:none}
   /* n8n-style floating node panel */
   .backdrop{position:absolute;inset:0;background:rgba(0,0,0,.5);z-index:4}
   .modal{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:5;
@@ -217,26 +232,32 @@
   <div id="nodeView" class="stage">
     <!-- graphport is a sizer scaled to the zoomed graph so the canvas scrolls right -->
     <div id="graphport"><div id="graph" class="flowrow"></div></div>
-    <!-- floating zoom control (figma-style): −  100%(reset)  +  ⤢fit -->
-    <div class="zoomctl">
-      <button onclick="zoomBy(-0.1)" title="zoom out (⌘ −)">−</button>
-      <button id="zoomLbl" onclick="zoomReset()" title="reset to 100% (⌘ 0)">100%</button>
-      <button onclick="zoomBy(0.1)" title="zoom in (⌘ +)">+</button>
-      <button onclick="zoomFit()" title="fit graph to view">⤢</button>
+    <!-- bottom-right canvas toolbar cluster: stacks (top→bottom) the run message,
+         the Stop button (only while a run is in flight), the add-step control, and
+         the zoom control — one fixed column so they never overlap. -->
+    <div class="canvastools">
+      <div id="canvasMsg" class="msg"></div>
+      <button id="stopBtn" class="stopbtn hidden" onclick="stopRun()" title="中止整個流程（停在已完成的節點，Esc）">■ stop</button>
+      <div class="addnode row">
+        <select id="addType" title="node type">
+          <option value="ai">✦ ai</option>
+          <option value="cmd">$ cmd</option>
+          <option value="assemble">⊕ assemble</option>
+          <option value="splitOut">⤙ split out</option>
+          <option value="aggregate">⤚ aggregate</option>
+          <option value="merge">⋈ merge</option>
+          <option value="write">⤓ write</option>
+        </select>
+        <button onclick="addNode()">+ add step</button>
+      </div>
+      <!-- floating zoom control (figma-style): −  100%(reset)  +  ⤢fit -->
+      <div class="zoomctl">
+        <button onclick="zoomBy(-0.1)" title="zoom out (⌘ −)">−</button>
+        <button id="zoomLbl" onclick="zoomReset()" title="reset to 100% (⌘ 0)">100%</button>
+        <button onclick="zoomBy(0.1)" title="zoom in (⌘ +)">+</button>
+        <button onclick="zoomFit()" title="fit graph to view">⤢</button>
+      </div>
     </div>
-    <div class="addnode row">
-      <select id="addType" title="node type">
-        <option value="ai">✦ ai</option>
-        <option value="cmd">$ cmd</option>
-        <option value="assemble">⊕ assemble</option>
-        <option value="splitOut">⤙ split out</option>
-        <option value="aggregate">⤚ aggregate</option>
-        <option value="merge">⋈ merge</option>
-        <option value="write">⤓ write</option>
-      </select>
-      <button onclick="addNode()">+ add step</button>
-    </div>
-    <div id="canvasMsg" class="msg" style="padding:0 30px"></div>
 
     <!-- floating node panel (n8n style) -->
     <div id="modal" class="hidden">

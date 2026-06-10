@@ -2,7 +2,7 @@
 // save — over real HTTP against a real temp project.
 
 import { describe, it, expect } from "vitest";
-import { existsSync, mkdtempSync, writeFileSync, readFileSync, mkdirSync } from "node:fs";
+import { existsSync, mkdtempSync, writeFileSync, readFileSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AddressInfo } from "node:net";
@@ -406,4 +406,53 @@ describe("web server", () => {
       close();
     }
   });
+
+  // Stop: aborting the /api/run fetch mid-flight must halt the chain — the running
+  // node's child is killed and the still-queued downstream NEVER runs. Offline: a
+  // slow `cmd` (sleep) followed by a `write` whose marker file is the witness. If
+  // the abort were ignored, `write` would run when `sleep` finishes and the marker
+  // would appear; it must not.
+  it("aborting /api/run mid-flight stops the chain — queued downstream never runs (offline)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "chain-web-stop-"));
+    const { base, close } = await listen(dir);
+    const flow = join(dir, "stop.yaml");
+    writeFileSync(
+      flow,
+      [
+        "profiles:",
+        "  default: { cmd: 'claude -p' }",
+        "steps:",
+        "  slow: { type: cmd, run: 'sleep 1' }",
+        "  after: { type: write, from: slow, path: marker.txt }",
+        "",
+      ].join("\n"),
+    );
+    const marker = join(dir, "marker.txt");
+    const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    try {
+      // control: a full run reaches `after` and writes the marker (not vacuous).
+      await (await post(base, "/api/run", { path: flow })).text();
+      expect(existsSync(marker)).toBe(true);
+      rmSync(marker);
+
+      // stop: abort while `slow` is still sleeping → `after` must never run.
+      const ctrl = new AbortController();
+      const run = fetch(base + "/api/run", {
+        method: "POST",
+        body: JSON.stringify({ path: flow }),
+        signal: ctrl.signal,
+      }).then((r) => r.text()).catch(() => "");
+      await delay(300); // inside slow's 1s sleep
+      ctrl.abort();
+      await run; // request settles (aborted)
+      await delay(1200); // past when `after` WOULD have written had we not stopped
+      expect(existsSync(marker)).toBe(false);
+
+      // the flow lock was released on abort → a fresh run still works afterwards.
+      await (await post(base, "/api/run", { path: flow })).text();
+      expect(existsSync(marker)).toBe(true);
+    } finally {
+      close();
+    }
+  }, 15000);
 });
