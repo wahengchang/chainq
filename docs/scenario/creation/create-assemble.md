@@ -58,7 +58,7 @@ curl -s http://127.0.0.1:<PORT>/api/set \
 
 ## 常見錯誤(validate 會擋)
 
-- `prompt references $node["X"] but it is not in from:` — 範本引用的上游沒寫進 `from`。
+- `prompt references $node["X"] but X is not upstream` — 範本引用的節點不是上游。引用可**跨層**取任一祖先的值(不必直接寫進 `from`),但被引用的節點必須在上游某處。
 - `prompt uses {{ $json }} but the step has no from:` — 用了 `{{ $json }}` 卻沒接上游。
 
 ## 相關

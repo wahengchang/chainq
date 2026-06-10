@@ -26,9 +26,11 @@ model), `cmd` (a shell command), or a data op (`splitOut` · `aggregate` · `mer
 - **CLI** — `chainq init · new · run · validate · ls`. `run` re-runs everything by
   default; add `--cache` to reuse unchanged steps.
 - **Visual editor** (`chainq ui`) — canvas with drag-to-connect, insert-a-step-on-a-wire,
-  per-node type switching, and live invalid-wiring warnings. Edit a node and run it
-  without saving — your edit is kept as a draft (run executes it, the file is untouched)
-  until you Save or ↩ Reset. Binds to `127.0.0.1` only.
+  per-node type switching, and live invalid-wiring warnings. Data-flow wires (the `$json`
+  main input) and **reference wires** (`$('id')` cross-step value lookups, even several
+  steps back) read distinctly — warm-solid vs cool-dashed, with a toggle to hide the
+  reference wires. Edit a node and run it without saving — your edit is kept as a draft
+  (run executes it, the file is untouched) until you Save or ↩ Reset. Binds to `127.0.0.1` only.
 
 ## Docs
 

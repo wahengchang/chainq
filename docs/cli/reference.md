@@ -85,8 +85,16 @@ Resolved against the **current item** (each node runs once per input item).
 | `{{ $('id').item }}` | same as above, explicit |
 | `{{ $('id').all() }}` | **all** of upstream `id`'s items, as a JSON array |
 
-Unknown expressions are left verbatim (visible, not silently blanked). `$('id')`
-must reference a wired upstream — `validate` flags it otherwise.
+Unknown expressions are left verbatim (visible, not silently blanked). `$('id')` may
+reference **any ancestor** — a node anywhere upstream, not just a direct `from:` — so
+you can reach across several steps to grab a value. (`$json` still binds the primary
+`from[0]` input.) `validate` flags a reference to a non-ancestor, since it has not run.
+
+In the visual editor (`chainq ui`) these two relationships read differently on the
+canvas: a **data-flow wire** (the `$json` main input) is warm and solid; a **reference
+wire** (a `$('id')` / `$node["id"]` value lookup, including cross-step ones not in
+`from:`) is cool and dashed. A toggle in the zoom toolbar hides the reference wires
+when you want a cleaner view.
 
 ## The item model
 
