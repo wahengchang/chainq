@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.9
+
+- **Editor: stop a run in flight.** A run had to finish on its own — a slow model
+  call left you waiting, or killing the server. A **Stop** button now cancels the
+  running chain: it aborts the in-flight node's subprocess and skips everything
+  downstream, so you can fix a prompt and re-run without waiting it out. The
+  add-step control also moved into the canvas toolbar (next to zoom), keeping the
+  canvas chrome in one place.
+
 ## 0.1.8
 
 - **Editor: zoom the canvas to manage big graphs.** A large flow ran off-screen
