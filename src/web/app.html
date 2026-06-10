@@ -2,7 +2,7 @@
 <html lang="en"><head><meta charset="utf-8"><title>chainq</title>
 <style>
   :root{--bg:#0e0f11;--panel:#15171a;--panel2:#101214;--line:#2a2d31;--ink:#d7dadd;--dim:#7f868d;
-    --accent:#e0a64d;--ran:#5db07e;--cached:#6b7177;--bad:#e0635b;--pin:#7aa2d6;
+    --accent:#e0a64d;--ran:#5db07e;--cached:#6b7177;--bad:#e0635b;--pin:#7aa2d6;--ref:#6b8cae;
     --mono:"Berkeley Mono","JetBrains Mono",ui-monospace,Menlo,monospace;}
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--mono);font-size:13px;line-height:1.5;height:100vh;overflow:hidden}
@@ -125,9 +125,19 @@
   .zoomctl button:hover{background:#1b1e22;color:var(--accent);border-color:transparent}
   .zoomctl #zoomLbl{min-width:46px;font-size:11px;color:var(--dim)}
   .zoomctl #zoomLbl:hover{color:var(--accent)}
+  .zoomctl .zsep{width:1px;align-self:stretch;margin:3px 2px;background:var(--line)}
+  /* 引用線 toggle: shares the zoom toolbar; cool accent + dashed underline when ON,
+     dim when OFF, so its state reads at a glance. #33 */
+  .zoomctl #refToggle{font-size:11px;color:var(--dim)}
+  .zoomctl #refToggle.on{color:var(--ref);text-decoration:underline dashed var(--ref) from-font}
+  .zoomctl #refToggle:hover{background:#1b1e22;color:var(--ref)}
   .gcols{position:relative;display:flex;gap:64px;align-items:flex-start;z-index:1}
   .gcol{display:flex;flex-direction:column;gap:26px;justify-content:center}
   svg.wires{position:absolute;left:0;top:0;pointer-events:none;z-index:0;overflow:visible}
+  /* reference wires ({{ $('id') }} cross-step value lookups): cool + dashed, set
+     apart from the warm data-flow wires. The toggle hides them via this class on
+     #graph (instant, no redraw). #33 */
+  #graph.hideRefs .refwire{display:none}
   /* "+" on an edge midpoint → insert a step between two nodes (appears on canvas hover) */
   .wins{position:absolute;transform:translate(-50%,-50%);z-index:2;width:20px;height:20px;padding:0;
     line-height:1;border-radius:50%;border:1px solid var(--line);background:var(--panel);color:var(--accent);
@@ -256,6 +266,8 @@
         <button id="zoomLbl" onclick="zoomReset()" title="reset to 100% (⌘ 0)">100%</button>
         <button onclick="zoomBy(0.1)" title="zoom in (⌘ +)">+</button>
         <button onclick="zoomFit()" title="fit graph to view">⤢</button>
+        <span class="zsep"></span>
+        <button id="refToggle" class="on" onclick="toggleRefs()" title="顯示／隱藏引用線（prompt 用 {{ $('id') }} 跨步取值的連線）">⇠ 引用線</button>
       </div>
     </div>
 

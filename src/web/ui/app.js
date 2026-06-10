@@ -259,7 +259,18 @@ function renderGraph(){
     }
   }
   applyZoom();   // (re)apply the current scale + size the scroll port, then draw wires
+  applyRefs();   // renderGraph reset #graph.className above — re-assert the hide-refs state
 }
+// ---- reference-wire visibility (#33) ----
+// Show/hide the cool dashed reference wires without touching data-flow wires.
+// A class on #graph flips them via CSS (instant, no redraw); state persists in
+// localStorage so the canvas remembers your preference. Default: shown.
+let showRefs=localStorage.getItem("showRefs")!=="0";
+function applyRefs(){
+  const g=$("graph");if(g)g.classList.toggle("hideRefs",!showRefs);
+  const b=$("refToggle");if(b)b.classList.toggle("on",showRefs);
+}
+function toggleRefs(){showRefs=!showRefs;localStorage.setItem("showRefs",showRefs?"1":"0");applyRefs();}
 // auto layout used by manual mode for nodes with no saved position — mirrors the
 // depth-column auto layout so a freshly-dragged graph keeps its readable shape.
 function autoPositions(){
@@ -288,7 +299,15 @@ function drawWires(svg,wrap){
       const x1=(fr.right-base.left)/zoom,y1=(fr.top+fr.height/2-base.top)/zoom;
       const x2=(tr.left-base.left)/zoom, y2=(tr.top+tr.height/2-base.top)/zoom;
       const mx=(x1+x2)/2,my=(y1+y2)/2;
-      paths+='<path d="M'+x1+','+y1+' C'+mx+','+y1+' '+mx+','+y2+' '+x2+','+y2+'" fill="none" stroke="var(--accent)" stroke-width="2" opacity="0.7"/>';
+      // classify the edge by how the target CONSUMES it (#33). `refs` is the engine's
+      // promptRefs output (see /api/parse): an upstream named via {{ $('id') }} /
+      // {{ $node["id"] }} is a reference wire (cool, dashed, faint). Everything else is
+      // a data-flow wire (warm, solid) — the $json main input. If an upstream is BOTH
+      // the main input and referenced, reference wins (it's the one worth flagging).
+      const isRef=(n.refs||[]).includes(f);
+      paths+=isRef
+        ? '<path class="refwire" d="M'+x1+','+y1+' C'+mx+','+y1+' '+mx+','+y2+' '+x2+','+y2+'" fill="none" stroke="var(--ref)" stroke-width="1.5" stroke-dasharray="5,4" opacity="0.5"/>'
+        : '<path d="M'+x1+','+y1+' C'+mx+','+y1+' '+mx+','+y2+' '+x2+','+y2+'" fill="none" stroke="var(--accent)" stroke-width="2" opacity="0.7"/>';
       // a "+" on each edge → insert a new step between source and target (#4).
       // Skip it if the midpoint would sit over a node (multi-column edges) — an
       // invisible button there would steal that node's clicks. rects are screen px,
@@ -1025,4 +1044,4 @@ boot();
 // Migration bridge: these handlers are still referenced by inline onclick= in
 // app.html (and in runtime-generated card markup), so a module must expose them
 // on window. Converting to addEventListener is the follow-up.
-Object.assign(window,{listFlows,createFlow,back,toggleRaw,runAll,runNode,saveNode,deleteNode,closeNode,addNode,saveRaw,renameSelected,schedulePreview,insertVar,insertEarlier,runTo,setInputVal,onMergeMode,addParamRow,addSchemaRow,onSchemaFormat,toggleSchema,schemaPreview,changeType,markDirty,resetNode,zoomBy,zoomReset,zoomFit,stopRun});
+Object.assign(window,{listFlows,createFlow,back,toggleRaw,runAll,runNode,saveNode,deleteNode,closeNode,addNode,saveRaw,renameSelected,schedulePreview,insertVar,insertEarlier,runTo,setInputVal,onMergeMode,addParamRow,addSchemaRow,onSchemaFormat,toggleSchema,schemaPreview,changeType,markDirty,resetNode,zoomBy,zoomReset,zoomFit,stopRun,toggleRefs});

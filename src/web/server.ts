@@ -26,6 +26,7 @@ import {
   Runner,
   upstreamsOf,
   renderPrompt,
+  promptRefs,
   itemsText,
   renameNode,
   nodeStarter,
@@ -136,6 +137,10 @@ async function handle(req: IncomingMessage, res: ServerResponse, opts: WebOption
       params: n.params ?? null, // input: declared params (the form fields the editor draws)
       path: n.path ?? null, // write: output file path
       schema: n.schema ?? null, // ai: structured-output schema (C4)
+      // by-ID references the prompt makes ({{ $('id') }} / {{ $node["id"] }}),
+      // from the engine's single source of truth (promptRefs). The canvas paints
+      // these edges as reference wires (cool, dashed) vs data-flow wires. #33
+      refs: n.prompt ? promptRefs(n.prompt).nodes : [],
     }));
     return json(res, 200, { nodes });
   }
