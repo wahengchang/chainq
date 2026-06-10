@@ -259,7 +259,18 @@ function renderGraph(){
     }
   }
   applyZoom();   // (re)apply the current scale + size the scroll port, then draw wires
+  applyRefs();   // renderGraph reset #graph.className above — re-assert the hide-refs state
 }
+// ---- reference-wire visibility (#33) ----
+// Show/hide the cool dashed reference wires without touching data-flow wires.
+// A class on #graph flips them via CSS (instant, no redraw); state persists in
+// localStorage so the canvas remembers your preference. Default: shown.
+let showRefs=localStorage.getItem("showRefs")!=="0";
+function applyRefs(){
+  const g=$("graph");if(g)g.classList.toggle("hideRefs",!showRefs);
+  const b=$("refToggle");if(b)b.classList.toggle("on",showRefs);
+}
+function toggleRefs(){showRefs=!showRefs;localStorage.setItem("showRefs",showRefs?"1":"0");applyRefs();}
 // auto layout used by manual mode for nodes with no saved position — mirrors the
 // depth-column auto layout so a freshly-dragged graph keeps its readable shape.
 function autoPositions(){
@@ -279,7 +290,12 @@ function drawWires(svg,wrap){
   nodes.forEach(n=>{
     const to=card(n.id);if(!to)return;
     const tr=to.getBoundingClientRect();
-    (n.from||[]).forEach(f=>{
+    // edges to draw = data-flow wires (direct from:) + cross-layer reference wires
+    // (a ref that ISN'T a direct from: — it reaches across steps to an ancestor). #33
+    const fromSet=new Set(n.from||[]);
+    const edges=[...(n.from||[])];
+    (n.refs||[]).forEach(r=>{if(!fromSet.has(r)&&card(r))edges.push(r);});
+    edges.forEach(f=>{
       const fe=card(f);if(!fe)return;
       const fr=fe.getBoundingClientRect();
       // getBoundingClientRect is post-transform (scaled screen px); the SVG + .wins
@@ -288,8 +304,17 @@ function drawWires(svg,wrap){
       const x1=(fr.right-base.left)/zoom,y1=(fr.top+fr.height/2-base.top)/zoom;
       const x2=(tr.left-base.left)/zoom, y2=(tr.top+tr.height/2-base.top)/zoom;
       const mx=(x1+x2)/2,my=(y1+y2)/2;
-      paths+='<path d="M'+x1+','+y1+' C'+mx+','+y1+' '+mx+','+y2+' '+x2+','+y2+'" fill="none" stroke="var(--accent)" stroke-width="2" opacity="0.7"/>';
-      // a "+" on each edge → insert a new step between source and target (#4).
+      // classify by how the target CONSUMES f (#33). `refs` = engine promptRefs output
+      // (see /api/parse): f named via {{ $('id') }} / {{ $node["id"] }} → reference wire
+      // (cool, dashed, faint), maybe crossing several steps. Else → data-flow wire (warm,
+      // solid, the $json main input). BOTH main-input-and-referenced → reference wins.
+      const isRef=(n.refs||[]).includes(f);
+      paths+=isRef
+        ? '<path class="refwire" d="M'+x1+','+y1+' C'+mx+','+y1+' '+mx+','+y2+' '+x2+','+y2+'" fill="none" stroke="var(--ref)" stroke-width="1.5" stroke-dasharray="5,4" opacity="0.5"/>'
+        : '<path d="M'+x1+','+y1+' C'+mx+','+y1+' '+mx+','+y2+' '+x2+','+y2+'" fill="none" stroke="var(--accent)" stroke-width="2" opacity="0.7"/>';
+      // a "+" insert belongs only on real data-flow wiring (from:), never on a
+      // cross-layer reference edge — you don't splice a step into a value lookup.
+      if(!fromSet.has(f))return;
       // Skip it if the midpoint would sit over a node (multi-column edges) — an
       // invisible button there would steal that node's clicks. rects are screen px,
       // so bring the (unscaled) midpoint back to screen space (×zoom) to compare.
@@ -538,14 +563,15 @@ function selectNode(id){
   if(n.type==="input"){$("pnInput").innerHTML=renderParamsForm(n);$("pnEarlier").innerHTML="";}
   else{
     $("pnInput").innerHTML=ups.length?ups.map(inField).join(""):"";  // no-upstream note already shown by the chips area above
-    // earlier steps = transitive upstreams not directly wired — their outputs, so
-    // you can SEE every prior step's data. Lives in its own box so loadItems (which
-    // owns #pnInput after a run) never clobbers it. read-only (wire one in to use).
+    // earlier steps = transitive ancestors not directly wired — their outputs, so you
+    // can SEE every prior step's data. Lives in its own box so loadItems (which owns
+    // #pnInput after a run) never clobbers it. Click → insert a cross-step reference
+    // {{ $node["id"] }} WITHOUT wiring it into from: (the engine resolves ancestor refs).
     const earlier=[...ancestorIds(n.id)].filter(u=>!ups.includes(u));
-    $("pnEarlier").innerHTML=earlier.length?'<div class="dim" style="margin-top:4px">earlier outputs (click to wire in + insert)</div>'
+    $("pnEarlier").innerHTML=earlier.length?'<div class="dim" style="margin-top:4px">earlier outputs (click to reference — 跨步取值)</div>'
       +earlier.map(u=>{const r=results[u];const val=r?esc(r.output||r.error||"(empty)"):'<span class="dim">(run to see)</span>';
-        return '<div class="infield" onclick="insertEarlier(\''+u+'\')" title="wire '+esc(u)+' into from: and insert {{ $node[&quot;'+esc(u)+'&quot;] }} at the cursor">'
-          +'<span class="ins">↵ wire + insert</span><span class="intag">'+esc(u)+'</span><div class="inval">'+val+'</div></div>';}).join(""):"";
+        return '<div class="infield" onclick="insertEarlier(\''+u+'\')" title="insert {{ $node[&quot;'+esc(u)+'&quot;] }} at the cursor — a cross-step reference, does not change from:">'
+          +'<span class="ins">↵ insert ref</span><span class="intag">'+esc(u)+'</span><div class="inval">'+val+'</div></div>';}).join(""):"";
   }
   // OUTPUT column — for ai nodes the output-schema editor sits above the actual
   // output; every other type has none, so the box clears. (It's an EDITOR, built
@@ -919,29 +945,13 @@ function insertVar(id,primary){
   markDirty();   // a programmatic .value change fires no input event — mark it ourselves
   schedulePreview();
 }
-// click an EARLIER (transitive, not-yet-wired) output → wire it into `from:` AND
-// insert {{ $node["id"] }} in one move. The reference is invalid until the node
-// is wired (validate.ts), so a bare insert would render to a broken prompt — so
-// we append it to `from` (NOT as primary: $json stays the first input) first.
-// Wiring reloads + re-renders the panel, which would reset #pnPrompt to the saved
-// value — so we capture the live text + cursor and any UNSAVED edits BEFORE the
-// reload and restore them with the reference spliced in, matching insertVar's
-// "never lose what you typed" behaviour.
-async function insertEarlier(u){
-  const n=nodes.find(x=>x.id===selected);if(!n)return;
-  if((n.from||[]).includes(u))return insertVar(u,false); // already wired — plain insert
-  const ta=$("pnPrompt");const expr='{{ $node["'+u+'"] }}';
-  const s=ta.selectionStart??ta.value.length,e=ta.selectionEnd??s;
-  const next=ta.value.slice(0,s)+expr+ta.value.slice(e),caret=s+expr.length;
-  const from=[...(n.from||[]),u];
-  const{ok,data}=await api("/api/connect",{method:"POST",body:JSON.stringify({path:current,node:selected,from})});
-  if(!ok)return setMsg("pnMsg","err",errs(data)||"wire failed");
-  await loadNodes();selectNode(selected);
-  const t2=$("pnPrompt");t2.value=next;t2.focus();t2.selectionStart=t2.selectionEnd=caret;
-  markDirty();   // the spliced-in reference is an unsaved prompt edit (loadNodes cleared dirty)
-  schedulePreview();
-  setMsg("pnMsg","ok","wired "+u+" in · inserted reference — Save to keep");
-}
+// click an EARLIER (transitive, not-yet-wired) output → insert {{ $node["id"] }} as a
+// pure CROSS-STEP REFERENCE. It does NOT touch `from:` — the engine now resolves a
+// reference to any ancestor (validate allows it, run loads the ancestor's items), so
+// the earlier node stays a reference, not a forced data-flow input. This keeps the
+// two distinct: "connected nodes" = data flow (from:), "earlier outputs" = cross-ref.
+// Just a text splice at the cursor (same as insertVar) — no /api/connect, no reload.
+function insertEarlier(u){ insertVar(u,false); }
 async function deleteNode(){
   if(!selected)return;
   const{ok,data}=await api("/api/delete-node",{method:"POST",body:JSON.stringify({path:current,node:selected})});
@@ -1025,4 +1035,4 @@ boot();
 // Migration bridge: these handlers are still referenced by inline onclick= in
 // app.html (and in runtime-generated card markup), so a module must expose them
 // on window. Converting to addEventListener is the follow-up.
-Object.assign(window,{listFlows,createFlow,back,toggleRaw,runAll,runNode,saveNode,deleteNode,closeNode,addNode,saveRaw,renameSelected,schedulePreview,insertVar,insertEarlier,runTo,setInputVal,onMergeMode,addParamRow,addSchemaRow,onSchemaFormat,toggleSchema,schemaPreview,changeType,markDirty,resetNode,zoomBy,zoomReset,zoomFit,stopRun});
+Object.assign(window,{listFlows,createFlow,back,toggleRaw,runAll,runNode,saveNode,deleteNode,closeNode,addNode,saveRaw,renameSelected,schedulePreview,insertVar,insertEarlier,runTo,setInputVal,onMergeMode,addParamRow,addSchemaRow,onSchemaFormat,toggleSchema,schemaPreview,changeType,markDirty,resetNode,zoomBy,zoomReset,zoomFit,stopRun,toggleRefs});

@@ -5,7 +5,7 @@
 // Shared by the CLI (chainq validate / before run) and the UI (before save-back)
 // — one validator, never two (eng review code-quality rule).
 
-import { topoOrder, upstreamsOf } from "./dag.js";
+import { topoOrder, upstreamsOf, ancestorsOf } from "./dag.js";
 import { promptRefs } from "./render.js";
 import { staticParamErrors } from "./input.js";
 import type { Flow } from "./types.js";
@@ -40,20 +40,23 @@ export function validate(flow: Flow): ValidationError[] {
       }
     }
 
-    // prompt references must be wired in `from:` — else they silently render
-    // verbatim at run time (only declared upstreams are loaded). Catches the
-    // {{ $node["X"] }} / {{ $('X') }} / {{ $json }} footgun before any model runs.
+    // prompt references must resolve to an ANCESTOR — a node somewhere upstream,
+    // not necessarily the direct `from`. $json binds to the primary (from[0]) so it
+    // still needs a from:; but {{ $('X') }} / {{ $node["X"] }} may reach across steps
+    // to any node in the upstream cone (run loads referenced ancestors). Referencing
+    // a non-ancestor is still a footgun (it hasn't run / isn't reachable) → flagged.
     if (node.prompt) {
       const refs = promptRefs(node.prompt);
       const ups = upstreamsOf(node);
+      const anc = ancestorsOf(flow, id); // transitive upstream cone
       if (refs.usesJson && ups.length === 0) {
         errors.push({ node: id, message: `prompt uses {{ $json }} but the step has no from:` });
       }
       for (const ref of refs.nodes) {
-        if (!ups.includes(ref)) {
+        if (!anc.has(ref)) {
           errors.push({
             node: id,
-            message: `prompt references $node["${ref}"] but it is not in from:${suggest(ref, ups)}`,
+            message: `prompt references $node["${ref}"] but ${ref} is not upstream (no path leads from it)${suggest(ref, [...anc])}`,
           });
         }
       }

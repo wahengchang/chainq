@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.1.10
+
+- **Editor: reference wires — see which upstreams are data, which are just looked up.**
+  Every connection on the canvas used to look the same warm line, so a real `$json`
+  data input and a `{{ $('id') }}` value lookup were impossible to tell apart. Now the
+  canvas draws two kinds: **data-flow wires** (warm, solid — the `$json` main input)
+  and **reference wires** (cool, dashed — a `$('id')` / `$node["id"]` value lookup). A
+  **引用線 / reference wires** toggle in the zoom toolbar hides the reference wires when
+  you want a cleaner view. Covered by `e2e/browser/reference-wires.spec.ts`.
+- **You can now reference a value from any step back, not just a direct `from:`.** A
+  prompt's `{{ $('id') }}` / `{{ $node["id"] }}` can reach **any ancestor** — a node
+  anywhere upstream — instead of only a node wired into `from:`. So you can pull a
+  value from several steps back without adding it to the data flow. (`$json` still
+  binds the primary `from[0]` input; referencing a non-ancestor is still flagged.)
+  Spine-aligned ancestors pair by lineage; off-spine ones fall back to best-effort.
+- **Editor: clicking an "earlier output" now inserts a reference without rewiring.**
+  This reverses the 0.1.7 behavior: a click on an earlier output used to append the
+  node to `from:` as well. It now inserts `{{ $node["id"] }}` as a pure cross-step
+  reference and leaves `from:` untouched — keeping "connected nodes" (data flow) and
+  "earlier outputs" (references) distinct. Paired with the engine change above, the
+  reference resolves at run time on its own.
+
 ## 0.1.9
 
 - **Editor: stop a run in flight.** A run had to finish on its own — a slow model

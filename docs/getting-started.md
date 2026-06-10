@@ -138,7 +138,9 @@ chainq ls                      # list every flow in this project
 - **Step types:** `ai` (calls the model), `cmd` (runs a shell command), `assemble` (just shuffles data).
 - **`from:`** wires a step to the one(s) it reads. `{{ $json }}` is that input; `{{ $json.field }}`
   picks a field out of JSON. **Multi-input** (n8n-style): `from: [a, b]` — `{{ $json }}` is the first
-  (`a`); reach any named upstream with `{{ $node["b"] }}` or the n8n alias `{{ $('b') }}`.
+  (`a`); reach any named upstream with `{{ $node["b"] }}` or the n8n alias `{{ $('b') }}`. A
+  `$('id')` reference can reach **any ancestor**, not just a direct `from:` — so you can pull a
+  value from several steps back without wiring it into the data flow.
 - **Profiles** map a name to a model command (e.g. `default: claude -p`). Every `ai` step calls
   the real local model — there is no offline/fake profile.
 - **Cache:** with `--cache`, editing a step re-runs it and everything downstream; everything else
