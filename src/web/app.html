@@ -113,7 +113,16 @@
   .outbadge.g-ran{color:var(--ran)} .outbadge.g-cached{color:var(--cached)} .outbadge.g-failed{color:var(--bad)}
   .arrow{align-self:center;color:var(--dim);padding:0 8px}
   /* true-DAG canvas: depth columns + wires that show fan-out / fan-in */
+  #graphport{position:relative}  /* sized in JS to the scaled graph so scrollbars stay honest */
   .gwrap{position:relative;width:max-content;padding:30px 40px}
+  /* floating zoom control — fixed to the viewport corner (does not scroll with the
+     canvas); sits under the node-panel backdrop (z4) so editing a node hides it. */
+  .zoomctl{position:fixed;right:18px;bottom:18px;z-index:3;display:flex;gap:2px;
+    background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:3px;box-shadow:0 6px 22px rgba(0,0,0,.45)}
+  .zoomctl button{padding:3px 9px;font-size:14px;line-height:1.2;border:1px solid transparent;background:transparent;color:var(--ink);border-radius:5px}
+  .zoomctl button:hover{background:#1b1e22;color:var(--accent);border-color:transparent}
+  .zoomctl #zoomLbl{min-width:46px;font-size:11px;color:var(--dim)}
+  .zoomctl #zoomLbl:hover{color:var(--accent)}
   .gcols{position:relative;display:flex;gap:64px;align-items:flex-start;z-index:1}
   .gcol{display:flex;flex-direction:column;gap:26px;justify-content:center}
   svg.wires{position:absolute;left:0;top:0;pointer-events:none;z-index:0;overflow:visible}
@@ -206,7 +215,15 @@
 
   <!-- canvas -->
   <div id="nodeView" class="stage">
-    <div id="graph" class="flowrow"></div>
+    <!-- graphport is a sizer scaled to the zoomed graph so the canvas scrolls right -->
+    <div id="graphport"><div id="graph" class="flowrow"></div></div>
+    <!-- floating zoom control (figma-style): −  100%(reset)  +  ⤢fit -->
+    <div class="zoomctl">
+      <button onclick="zoomBy(-0.1)" title="zoom out (⌘ −)">−</button>
+      <button id="zoomLbl" onclick="zoomReset()" title="reset to 100% (⌘ 0)">100%</button>
+      <button onclick="zoomBy(0.1)" title="zoom in (⌘ +)">+</button>
+      <button onclick="zoomFit()" title="fit graph to view">⤢</button>
+    </div>
     <div class="addnode row">
       <select id="addType" title="node type">
         <option value="ai">✦ ai</option>

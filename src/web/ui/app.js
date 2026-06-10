@@ -258,7 +258,7 @@ function renderGraph(){
       cols.appendChild(colEl);
     }
   }
-  drawWires(svg,g);
+  applyZoom();   // (re)apply the current scale + size the scroll port, then draw wires
 }
 // auto layout used by manual mode for nodes with no saved position — mirrors the
 // depth-column auto layout so a freshly-dragged graph keeps its readable shape.
@@ -282,14 +282,18 @@ function drawWires(svg,wrap){
     (n.from||[]).forEach(f=>{
       const fe=card(f);if(!fe)return;
       const fr=fe.getBoundingClientRect();
-      const x1=fr.right-base.left,y1=fr.top+fr.height/2-base.top;
-      const x2=tr.left-base.left, y2=tr.top+tr.height/2-base.top;
+      // getBoundingClientRect is post-transform (scaled screen px); the SVG + .wins
+      // live INSIDE the scaled wrap, so their coords are the wrap's own (unscaled)
+      // space → divide every screen-space delta by zoom.
+      const x1=(fr.right-base.left)/zoom,y1=(fr.top+fr.height/2-base.top)/zoom;
+      const x2=(tr.left-base.left)/zoom, y2=(tr.top+tr.height/2-base.top)/zoom;
       const mx=(x1+x2)/2,my=(y1+y2)/2;
       paths+='<path d="M'+x1+','+y1+' C'+mx+','+y1+' '+mx+','+y2+' '+x2+','+y2+'" fill="none" stroke="var(--accent)" stroke-width="2" opacity="0.7"/>';
       // a "+" on each edge → insert a new step between source and target (#4).
       // Skip it if the midpoint would sit over a node (multi-column edges) — an
-      // invisible button there would steal that node's clicks.
-      const cx=base.left+mx,cy=base.top+my;
+      // invisible button there would steal that node's clicks. rects are screen px,
+      // so bring the (unscaled) midpoint back to screen space (×zoom) to compare.
+      const cx=base.left+mx*zoom,cy=base.top+my*zoom;
       if(rects.some(r=>cx>=r.left-2&&cx<=r.right+2&&cy>=r.top-2&&cy<=r.bottom+2))return;
       const b=document.createElement("button");
       b.className="wins";b.textContent="+";b.title="insert a step between "+f+" and "+n.id;
@@ -301,6 +305,63 @@ function drawWires(svg,wrap){
   svg.innerHTML=paths;
 }
 window.addEventListener("resize",()=>{const g=$("graph");if(g&&g.classList.contains("gwrap")){const s=g.querySelector("svg.wires");if(s)drawWires(s,g);}});
+
+// ---- canvas zoom ----
+// Big graphs get hard to manage; zoom shrinks the whole canvas so more nodes fit
+// (or magnifies to read one). Implemented as a CSS transform:scale on #graph with a
+// top-left origin; #graphport is a sizer box scaled to match so the scrollbars stay
+// honest in BOTH directions. Every screen↔canvas coordinate conversion (wires,
+// connect-drag, move-drag, snapshot) divides by `zoom`, so wiring stays pixel-exact
+// at any scale. Sticky across renders (transform lives on the element, reapplied by
+// applyZoom at the end of renderGraph).
+const ZMIN=0.3,ZMAX=1.6;
+let zoom=1;
+function clampZoom(z){return Math.min(ZMAX,Math.max(ZMIN,Math.round(z*100)/100));}
+// size the scroll port to the scaled content so the canvas scrolls to every node at
+// any zoom (transform doesn't change layout size, so we mirror it on the port).
+function sizePort(){const g=$("graph"),port=$("graphport");if(!g||!port)return;
+  port.style.width=(g.offsetWidth*zoom)+"px";port.style.height=(g.offsetHeight*zoom)+"px";}
+function applyZoom(){
+  const g=$("graph");if(!g)return;
+  g.style.transformOrigin="0 0";g.style.transform="scale("+zoom+")";
+  sizePort();
+  const svg=g.querySelector("svg.wires");if(svg)drawWires(svg,g);
+  const lbl=$("zoomLbl");if(lbl)lbl.textContent=Math.round(zoom*100)+"%";
+}
+// zoom while keeping a client point fixed (default: viewport centre) — the figma feel:
+// the thing under your cursor (wheel) or the centre (buttons) stays put.
+function setZoom(z,ax,ay){
+  const stage=$("nodeView");if(!stage)return;
+  const prev=zoom;z=clampZoom(z);if(z===prev)return;
+  const r=stage.getBoundingClientRect();
+  if(ax==null){ax=r.left+stage.clientWidth/2;ay=r.top+stage.clientHeight/2;}
+  // unscaled content point under the anchor, before the zoom change
+  const cx=(stage.scrollLeft+(ax-r.left))/prev,cy=(stage.scrollTop+(ay-r.top))/prev;
+  zoom=z;applyZoom();
+  stage.scrollLeft=cx*zoom-(ax-r.left);stage.scrollTop=cy*zoom-(ay-r.top);
+}
+function zoomBy(d){setZoom(zoom+d);}
+function zoomReset(){setZoom(1);}
+// fit the whole graph in view (only ever shrinks; never magnifies past 100%).
+function zoomFit(){
+  const stage=$("nodeView"),g=$("graph");if(!stage||!g)return;
+  const w=g.offsetWidth,h=g.offsetHeight;if(!w||!h)return;   // offset* is the unscaled layout size
+  const pad=28;
+  zoom=clampZoom(Math.min((stage.clientWidth-pad)/w,(stage.clientHeight-pad)/h,1));
+  applyZoom();stage.scrollLeft=0;stage.scrollTop=0;
+}
+// ⌘/Ctrl + wheel (and trackpad pinch, which Chrome reports as ctrl+wheel) → zoom at cursor.
+$("nodeView").addEventListener("wheel",e=>{
+  if(!(e.ctrlKey||e.metaKey))return;
+  e.preventDefault();setZoom(zoom*(e.deltaY<0?1.1:0.9),e.clientX,e.clientY);
+},{passive:false});
+// ⌘/Ctrl + = / - / 0 — only while the editor canvas is up.
+window.addEventListener("keydown",e=>{
+  if(!(e.ctrlKey||e.metaKey)||$("editor").classList.contains("hidden"))return;
+  if(e.key==="="||e.key==="+"){e.preventDefault();zoomBy(0.1);}
+  else if(e.key==="-"){e.preventDefault();zoomBy(-0.1);}
+  else if(e.key==="0"){e.preventDefault();zoomReset();}
+});
 
 // ---- P2-b drag-to-connect ----
 // Drag a node's output port onto another node → add the source to that node's
@@ -317,13 +378,13 @@ function startConnect(source,ev){
   const base=g.getBoundingClientRect();
   const sc=g.querySelector('.node[data-id="'+CSS.escape(source)+'"]');if(!sc)return;
   const sr=sc.getBoundingClientRect();
-  const x1=sr.right-base.left,y1=sr.top+sr.height/2-base.top; // wrap-relative (matches drawWires)
+  const x1=(sr.right-base.left)/zoom,y1=(sr.top+sr.height/2-base.top)/zoom; // wrap-relative, unscaled (matches drawWires)
   const temp=document.createElementNS("http://www.w3.org/2000/svg","path");
   temp.setAttribute("fill","none");temp.setAttribute("stroke","var(--accent)");
   temp.setAttribute("stroke-width","2");temp.setAttribute("stroke-dasharray","5,4");
   svg.appendChild(temp);connecting=true;g.classList.add("connecting");
   const move=e=>{
-    const x2=e.clientX-base.left,y2=e.clientY-base.top,mx=(x1+x2)/2;
+    const x2=(e.clientX-base.left)/zoom,y2=(e.clientY-base.top)/zoom,mx=(x1+x2)/2;
     temp.setAttribute("d","M"+x1+","+y1+" C"+mx+","+y1+" "+mx+","+y2+" "+x2+","+y2);
     g.querySelectorAll(".node.drop").forEach(el=>el.classList.remove("drop"));
     const t=nodeUnder(e);if(t&&t.dataset.id!==source)t.classList.add("drop");
@@ -426,7 +487,7 @@ document.addEventListener("pointerdown",e=>{
 function snapshotPositions(){
   const g=$("graph");const base=g.getBoundingClientRect();
   nodes.forEach(n=>{const c=g.querySelector('.node[data-id="'+CSS.escape(n.id)+'"]');
-    if(c){const r=c.getBoundingClientRect();layout[n.id]={x:r.left-base.left,y:r.top-base.top};}});
+    if(c){const r=c.getBoundingClientRect();layout[n.id]={x:(r.left-base.left)/zoom,y:(r.top-base.top)/zoom};}});
 }
 function saveLayout(){clearTimeout(layoutTimer);
   layoutTimer=setTimeout(()=>{api("/api/layout",{method:"POST",body:JSON.stringify({path:current,layout})});},400);}
@@ -439,7 +500,7 @@ function startMove(id,ev){
       if(!manual){snapshotPositions();manual=true;renderGraph();}
       start=layout[id]||{x:0,y:0};moving=true;movingNode=true;
     }
-    const nx=Math.max(0,start.x+(e.clientX-ox)),ny=Math.max(0,start.y+(e.clientY-oy));
+    const nx=Math.max(0,start.x+(e.clientX-ox)/zoom),ny=Math.max(0,start.y+(e.clientY-oy)/zoom);
     layout[id]={x:nx,y:ny};
     const c=g.querySelector('.node[data-id="'+CSS.escape(id)+'"]');
     if(c){c.style.left=nx+"px";c.style.top=ny+"px";}
@@ -933,4 +994,4 @@ boot();
 // Migration bridge: these handlers are still referenced by inline onclick= in
 // app.html (and in runtime-generated card markup), so a module must expose them
 // on window. Converting to addEventListener is the follow-up.
-Object.assign(window,{listFlows,createFlow,back,toggleRaw,runAll,runNode,saveNode,deleteNode,closeNode,addNode,saveRaw,renameSelected,schedulePreview,insertVar,insertEarlier,runTo,setInputVal,onMergeMode,addParamRow,addSchemaRow,onSchemaFormat,toggleSchema,schemaPreview,changeType,markDirty,resetNode});
+Object.assign(window,{listFlows,createFlow,back,toggleRaw,runAll,runNode,saveNode,deleteNode,closeNode,addNode,saveRaw,renameSelected,schedulePreview,insertVar,insertEarlier,runTo,setInputVal,onMergeMode,addParamRow,addSchemaRow,onSchemaFormat,toggleSchema,schemaPreview,changeType,markDirty,resetNode,zoomBy,zoomReset,zoomFit});
