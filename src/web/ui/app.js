@@ -209,19 +209,25 @@ function nodeCard(n){
   const multi=(n.from||[]).length>1;
   const col=COLLECTION.has(n.type);
   const bad=invalid[n.id];
-  const d=document.createElement("div");d.className="node "+(r?r.status:"")+(multi?" multi":"")+(col?" col":"")+(bad?" invalid":"")+(drafts[n.id]?" dirty":"");
+  const d=document.createElement("div");d.className="node "+(r?r.status:"")+(multi?" multi":"")+(col?" col":"")+(bad?" invalid":"")+(drafts[n.id]?" dirty":"")+(multiSel.has(n.id)?" selsel":"");
   d.dataset.id=n.id;
   // ● unsaved-draft marker — this node has edits kept but not Saved (runs as draft).
   const draftDot=drafts[n.id]?'<span class="ndirty" title="未儲存的草稿 — 執行會跑這個版本">●</span>':'';
-  // ×N item-count badge: how many items this node emitted (items model). Shown
-  // after a run streams the count back; hidden for the 1-in-1-out base case.
-  const xn=(r&&r.items!=null&&r.items!==1)?'<span class="xn" title="items emitted on this wire">×'+r.items+'</span>':'';
+  // The ×N badge doubles as the OUTPUT toggle. A finished step's output is HIDDEN by
+  // default (so a tall result never buries the nodes around it); click the badge to
+  // show it, click again to hide. Multi-item shows the count (×3); a single-output
+  // step has no count, so the badge is a ▸/▾ caret instead. #40
+  const hasOut=!!(r&&(r.status==="ran"||r.status==="cached"||r.status==="failed")&&(r.error||r.output));
+  const outOpen=outExpanded.has(n.id);
+  const xn=hasOut
+    ? '<span class="xn tog'+(outOpen?" on":"")+'" title="show / hide this step’s output" onclick="event.stopPropagation();toggleOut(\''+esc(n.id)+'\')">'+(r.items>1?'×'+r.items:(outOpen?'▾':'▸'))+'</span>'
+    : ((r&&r.items!=null&&r.items!==1)?'<span class="xn" title="items emitted on this wire">×'+r.items+'</span>':'');
   const glyph=r?('<span class="glyph g-'+r.status+(r.status==="running"?" spin":"")+'">'+G[r.status]+'</span>'):'<span class="glyph g-pending">○</span>';
   const BADGE={ran:"✓ ran · called the model",cached:"⊘ cached · reused, no call",failed:"✗ failed",skipped:"– skipped"};
   let out="";
   if(r&&r.status==="running")out='<div class="nodeout dim"><span class="spin">◌</span> running…</div>';
   else if(r&&r.status==="pending")out='<div class="nodeout dim">○ queued — waiting its turn…</div>';
-  else if(r&&(r.error||r.output)){
+  else if(hasOut&&outOpen){
     const badge='<div class="outbadge g-'+r.status+'">'+(BADGE[r.status]||r.status)+'</div>';
     out='<div class="nodeout'+(r.status==="failed"?" bad":"")+'">'+badge+esc(r.error||r.output)+'</div>';
   }
@@ -236,7 +242,11 @@ function nodeCard(n){
     +fromLine
     +'<div class="npreview">'+esc((n.prompt||n.run||"").slice(0,70))+'</div>'+out+warnLine
     +'<div class="port" title="drag onto another node to connect →"></div>';
-  d.onclick=()=>{if(connecting||movingNode)return;trySelect(n.id);}; // a drag (connect or reposition) must not also open the panel; trySelect guards unsaved edits
+  d.onclick=(e)=>{
+    if(connecting||movingNode)return; // a drag (connect or reposition) must not also open the panel
+    if(e.shiftKey){toggleMultiSel(n.id);return;} // Shift+click = add/remove from the move-group, no panel
+    clearMultiSel();trySelect(n.id);             // a plain click drops the group + opens the panel (guards unsaved edits)
+  };
   return d;
 }
 function renderGraph(){
@@ -400,6 +410,10 @@ let connecting=false;
 // P3 node positions: `layout` = id→{x,y} (persisted in .chain/layout via /api/layout);
 // `manual` = use free positions (set once any node is dragged or a saved layout loads).
 let manual=false,layout={},movingNode=false,layoutTimer=null;
+// multiSel: ids Shift+clicked into a group that drags together. outExpanded: ids
+// whose finished output is shown on the card (hidden by default so a tall result
+// never buries its neighbours). #40
+let multiSel=new Set(),outExpanded=new Set();
 function nodeUnder(e){const el=document.elementFromPoint(e.clientX,e.clientY);return el?/** @type {HTMLElement|null} */(el.closest(".node")):null;}
 function startConnect(source,ev){
   ev.preventDefault();ev.stopPropagation();
@@ -507,7 +521,12 @@ document.addEventListener("pointerdown",e=>{
   if(port){const c=/** @type {HTMLElement} */(port.closest(".node"));if(c)startConnect(c.dataset.id,e);return;}
   // body drag → reposition (not on a run button; only inside the canvas)
   const card=/** @type {HTMLElement} */(tgt.closest(".node"));
-  if(card&&!tgt.closest(".noderun")&&$("graph").contains(card))startMove(card.dataset.id,e);
+  if(card&&!tgt.closest(".noderun")&&$("graph").contains(card)){startMove(card.dataset.id,e);return;}
+  // empty canvas → drag to pan; a plain press there also clears any multi-selection. #40
+  if(!card&&!tgt.closest(".canvastools,#modal,button,select,input,textarea,a,label")){
+    const stage=$("nodeView");
+    if(stage&&stage.contains(tgt)&&!$("editor").classList.contains("hidden")){clearMultiSel();startPan(e);}
+  }
 });
 
 // ---- P3 drag-to-reposition + persist ----
@@ -521,22 +540,53 @@ function snapshotPositions(){
 function saveLayout(){clearTimeout(layoutTimer);
   layoutTimer=setTimeout(()=>{api("/api/layout",{method:"POST",body:JSON.stringify({path:current,layout})});},400);}
 function startMove(id,ev){
-  const g=$("graph");const ox=ev.clientX,oy=ev.clientY;let moving=false,start;
+  const g=$("graph");const ox=ev.clientX,oy=ev.clientY;let moving=false,starts;
+  // dragging a node that's in the multi-selection moves the WHOLE group by the same
+  // delta; otherwise it's a plain single-node move. #40
+  const group=(multiSel.has(id)&&multiSel.size>1)?[...multiSel]:[id];
   const move=e=>{
     if(!moving){
       if(Math.abs(e.clientX-ox)+Math.abs(e.clientY-oy)<4)return; // under threshold → still a click
       ev.preventDefault();
       if(!manual){snapshotPositions();manual=true;renderGraph();}
-      start=layout[id]||{x:0,y:0};moving=true;movingNode=true;
+      starts={};group.forEach(gid=>{starts[gid]=layout[gid]||{x:0,y:0};});
+      moving=true;movingNode=true;
     }
-    const nx=Math.max(0,start.x+(e.clientX-ox)/zoom),ny=Math.max(0,start.y+(e.clientY-oy)/zoom);
-    layout[id]={x:nx,y:ny};
-    const c=g.querySelector('.node[data-id="'+CSS.escape(id)+'"]');
-    if(c){c.style.left=nx+"px";c.style.top=ny+"px";}
+    const dx=(e.clientX-ox)/zoom,dy=(e.clientY-oy)/zoom;
+    group.forEach(gid=>{
+      const nx=Math.max(0,starts[gid].x+dx),ny=Math.max(0,starts[gid].y+dy);
+      layout[gid]={x:nx,y:ny};
+      const c=g.querySelector('.node[data-id="'+CSS.escape(gid)+'"]');
+      if(c){c.style.left=nx+"px";c.style.top=ny+"px";}
+    });
     const svg=g.querySelector("svg.wires");if(svg)drawWires(svg,g);
   };
   const up=()=>{document.removeEventListener("pointermove",move);document.removeEventListener("pointerup",up);
     if(moving){saveLayout();setTimeout(()=>{movingNode=false;},0);}}; // let the trailing click see movingNode
+  document.addEventListener("pointermove",move);document.addEventListener("pointerup",up);
+}
+
+// ---- multi-select (Shift+click) + output collapse + drag-to-pan (#40) ----
+function toggleMultiSel(id){
+  if(multiSel.has(id))multiSel.delete(id);else multiSel.add(id);
+  const c=$("graph").querySelector('.node[data-id="'+CSS.escape(id)+'"]');
+  if(c)c.classList.toggle("selsel",multiSel.has(id));
+}
+function clearMultiSel(){
+  if(!multiSel.size)return;
+  $("graph").querySelectorAll(".node.selsel").forEach(c=>c.classList.remove("selsel"));
+  multiSel.clear();
+}
+// show / hide a finished node's output on its card (the ×N badge fires this)
+function toggleOut(id){if(outExpanded.has(id))outExpanded.delete(id);else outExpanded.add(id);renderGraph();}
+// drag empty canvas → pan (native scroll). A 4px-free press still scrolls smoothly;
+// a plain press with no drag just clears the multi-selection (handled by the caller).
+function startPan(ev){
+  const stage=$("nodeView");if(!stage)return;
+  const sx=stage.scrollLeft,sy=stage.scrollTop,ox=ev.clientX,oy=ev.clientY;
+  stage.classList.add("panning");
+  const move=e=>{stage.scrollLeft=sx-(e.clientX-ox);stage.scrollTop=sy-(e.clientY-oy);};
+  const up=()=>{document.removeEventListener("pointermove",move);document.removeEventListener("pointerup",up);stage.classList.remove("panning");};
   document.addEventListener("pointermove",move);document.addEventListener("pointerup",up);
 }
 
@@ -1129,4 +1179,4 @@ boot();
 // Migration bridge: these handlers are still referenced by inline onclick= in
 // app.html (and in runtime-generated card markup), so a module must expose them
 // on window. Converting to addEventListener is the follow-up.
-Object.assign(window,{listFlows,createFlow,back,toggleRaw,runAll,runNode,saveNode,deleteNode,closeNode,addNode,saveRaw,renameSelected,schedulePreview,insertVar,insertEarlier,runTo,setInputVal,onMergeMode,addParamRow,addSchemaRow,onSchemaFormat,toggleSchema,schemaPreview,changeType,markDirty,resetNode,zoomBy,zoomReset,zoomFit,stopRun,toggleRefs,toggleTimeout,onTimeoutInput,toggleFlowTimeout,applyFlowTimeout});
+Object.assign(window,{listFlows,createFlow,back,toggleRaw,runAll,runNode,saveNode,deleteNode,closeNode,addNode,saveRaw,renameSelected,schedulePreview,insertVar,insertEarlier,runTo,setInputVal,onMergeMode,addParamRow,addSchemaRow,onSchemaFormat,toggleSchema,schemaPreview,changeType,markDirty,resetNode,zoomBy,zoomReset,zoomFit,stopRun,toggleRefs,toggleTimeout,onTimeoutInput,toggleFlowTimeout,applyFlowTimeout,toggleOut});
