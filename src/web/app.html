@@ -91,6 +91,11 @@
   .toclock.on{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 45%,transparent);background:color-mix(in srgb,var(--accent) 12%,transparent)}
   .tobox{margin-top:10px}
   .tohint{font-size:11px;text-transform:none;letter-spacing:0;color:var(--dim);margin-bottom:5px;line-height:1.5}
+  /* flow-wide default timeout popover (anchored under the ◷ flow clock in the bar) */
+  .fpop{position:fixed;z-index:50;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:11px 13px;width:300px;box-shadow:0 10px 28px rgba(0,0,0,.55)}
+  .fpop.hidden{display:none}
+  .fpop .frow{display:flex;gap:6px;align-items:center}
+  .fpop .frow input{flex:1;min-width:0}
   .schemabody{margin-top:8px}
   .fmtsel{display:flex;gap:6px;margin-top:4px}
   .fmtbtn{font-size:12px;padding:3px 13px;border:1px solid var(--line);border-radius:12px;color:var(--dim);background:transparent}
@@ -240,8 +245,17 @@
     <!-- profile is always the real local model (claude -p); every run calls the model. -->
     <input type="hidden" id="profile" value="">
     <span class="profilepill" title="every run calls the real local model (claude -p)">● claude -p · real</span>
+    <span id="flowTimeoutCtl"></span>
     <button class="primary" onclick="runAll()">▷ Run all</button>
     <button onclick="runAll(true)" title="ignore cache — really call the model for every node">↻ fresh</button>
+  </div>
+  <!-- flow-wide default timeout popover, anchored under the ◷ flow clock (positioned in JS) -->
+  <div id="flowTimeoutPop" class="fpop hidden">
+    <div class="tohint">整條 flow 的預設逾時(秒)· 各節點沒自己設時用這個 · 空白 = 內建 300</div>
+    <div class="frow">
+      <input id="flowTimeoutInput" type="number" min="1" step="1" spellcheck="false" placeholder="例如 600" onkeydown="if(event.key==='Enter')applyFlowTimeout()">
+      <button onclick="applyFlowTimeout()">套用</button>
+    </div>
   </div>
 
   <!-- canvas -->

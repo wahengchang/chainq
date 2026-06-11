@@ -169,10 +169,14 @@ async function loadLayout(){const{data}=await api("/api/layout?path="+encodeURIC
   layout=(data&&data.layout)||{};manual=Object.keys(layout).length>0;}
 function back(){closeNodeNow();$("editor").classList.add("hidden");$("create").classList.remove("hidden");listFlows();} // drafts kept in memory; reopening the same flow restores them
 
+// flow-wide defaults (currently just defaults.timeout) — drives the ◷ flow clock in
+// the bar. Refreshed from /api/parse on every load.
+let flowDefaults=null;
 async function loadNodes(){
   const{ok,data}=await api("/api/parse?path="+encodeURIComponent(current));
   if(!ok){setMsg("canvasMsg","err","could not parse — use { } raw to fix it");$("graph").innerHTML="";return;}
   setMsg("canvasMsg","","");nodes=data.nodes;
+  flowDefaults=data.defaults||null;renderFlowTimeout();
   await loadValidity();   // flag bad nodes (⚠) before the first paint
   renderGraph();
 }
@@ -676,6 +680,43 @@ function onTimeoutInput(){
   b.classList.toggle("on",v!=="");
   b.textContent="◷"+(v!==""?(" "+v+"s"):"");
 }
+// ── flow-wide default timeout (the ◷ flow clock in the top bar) ───────────────
+// Same idea as the per-node clock, but writes flow.defaults.timeout — the default
+// every node falls back to. Bare "◷ flow" when unset, "◷ flow 600s" when set.
+function flowTimeoutVal(){return (flowDefaults&&flowDefaults.timeout!=null)?flowDefaults.timeout:"";}
+function renderFlowTimeout(){
+  const ctl=$("flowTimeoutCtl");if(!ctl)return;
+  const v=flowTimeoutVal();
+  ctl.innerHTML='<button type="button" id="flowTimeoutBtn" class="toclock'+(v!==""?" on":"")
+    +'" onclick="toggleFlowTimeout()" title="整條 flow 的預設逾時(秒)· 套用到沒自己設 timeout 的節點 · 空白用內建 300">'
+    +'◷ flow'+(v!==""?(" "+v+"s"):"")+'</button>';
+}
+function toggleFlowTimeout(){
+  const pop=$("flowTimeoutPop"),btn=$("flowTimeoutBtn");if(!pop||!btn)return;
+  if(!pop.classList.contains("hidden")){pop.classList.add("hidden");return;}
+  $("flowTimeoutInput").value=flowTimeoutVal();
+  const r=btn.getBoundingClientRect();                 // anchor under the button (fixed-positioned)
+  pop.style.top=(r.bottom+6)+"px";
+  pop.style.right=Math.max(8,window.innerWidth-r.right)+"px";
+  pop.classList.remove("hidden");
+  $("flowTimeoutInput").focus();
+}
+async function applyFlowTimeout(){
+  const raw=$("flowTimeoutInput").value.trim(),num=Number(raw);
+  const value=(raw!==""&&Number.isFinite(num)&&num>0)?num:null;   // empty/invalid = clear → fall back to 300
+  const r=await api("/api/set-default",{method:"POST",body:JSON.stringify({path:current,field:"timeout",value})});
+  if(!r.ok)return setMsg("canvasMsg","err",errs(r.data)||"set flow default failed");
+  $("flowTimeoutPop").classList.add("hidden");
+  await loadNodes();   // re-parse → flowDefaults refreshed → the ◷ flow clock relabels
+  setMsg("canvasMsg","","flow 預設逾時已"+(value?("設為 "+value+"s"):"清除（用內建 300）"));
+}
+// click outside the popover (and not on its clock) closes it
+document.addEventListener("click",e=>{
+  const pop=$("flowTimeoutPop");if(!pop||pop.classList.contains("hidden"))return;
+  const t=/** @type {any} */(e.target);
+  if(pop.contains(t)||(t&&t.id==="flowTimeoutBtn"))return;
+  pop.classList.add("hidden");
+});
 
 // ── ai OUTPUT SCHEMA editor ──────────────────────────────────────────────────
 // Lives in the OUTPUT column (schema = the shape this node must return). Two-level:
@@ -1088,4 +1129,4 @@ boot();
 // Migration bridge: these handlers are still referenced by inline onclick= in
 // app.html (and in runtime-generated card markup), so a module must expose them
 // on window. Converting to addEventListener is the follow-up.
-Object.assign(window,{listFlows,createFlow,back,toggleRaw,runAll,runNode,saveNode,deleteNode,closeNode,addNode,saveRaw,renameSelected,schedulePreview,insertVar,insertEarlier,runTo,setInputVal,onMergeMode,addParamRow,addSchemaRow,onSchemaFormat,toggleSchema,schemaPreview,changeType,markDirty,resetNode,zoomBy,zoomReset,zoomFit,stopRun,toggleRefs,toggleTimeout,onTimeoutInput});
+Object.assign(window,{listFlows,createFlow,back,toggleRaw,runAll,runNode,saveNode,deleteNode,closeNode,addNode,saveRaw,renameSelected,schedulePreview,insertVar,insertEarlier,runTo,setInputVal,onMergeMode,addParamRow,addSchemaRow,onSchemaFormat,toggleSchema,schemaPreview,changeType,markDirty,resetNode,zoomBy,zoomReset,zoomFit,stopRun,toggleRefs,toggleTimeout,onTimeoutInput,toggleFlowTimeout,applyFlowTimeout});

@@ -19,7 +19,7 @@ import {
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
-import { parseDocument, type Document } from "yaml";
+import { parseDocument, isMap, type Document } from "yaml";
 import {
   parseFlow,
   validate,
@@ -143,7 +143,9 @@ async function handle(req: IncomingMessage, res: ServerResponse, opts: WebOption
       // these edges as reference wires (cool, dashed) vs data-flow wires. #33
       refs: n.prompt ? promptRefs(n.prompt).nodes : [],
     }));
-    return json(res, 200, { nodes });
+    // flow-level defaults (e.g. defaults.timeout) so the editor can show + edit the
+    // global default that applies to every node without its own value.
+    return json(res, 200, { nodes, defaults: flow.defaults ?? null });
   }
 
   // Per-node validation errors for the canvas to surface (dim/⚠ the bad nodes).
@@ -185,6 +187,22 @@ async function handle(req: IncomingMessage, res: ServerResponse, opts: WebOption
   if (method === "POST" && path === "/api/set") {
     const { path: file = "", node = "", field = "", value = "" } = await body(req);
     return editFlow(res, resolve(file), (doc) => doc.setIn(["steps", node, field], value));
+  }
+
+  // Edit a FLOW-LEVEL default (e.g. defaults.timeout) — applies to every node that
+  // doesn't set the field itself. A null/empty value removes it and prunes an empty
+  // `defaults:` block so the YAML stays clean.
+  if (method === "POST" && path === "/api/set-default") {
+    const { path: file = "", field = "", value = null } = await body(req);
+    return editFlow(res, resolve(file), (doc) => {
+      if (value === null || value === "" || value === undefined) {
+        doc.deleteIn(["defaults", field]);
+        const defs = doc.getIn(["defaults"]);
+        if (isMap(defs) && defs.items.length === 0) doc.deleteIn(["defaults"]);
+      } else {
+        doc.setIn(["defaults", field], value);
+      }
+    });
   }
 
   // Per-item data for a node's panel: each upstream's cached items (inputs) and
