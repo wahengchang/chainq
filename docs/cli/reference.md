@@ -42,6 +42,8 @@ followed by the item count, e.g. `✓ summarize (3 items)`.
 ```yaml
 profiles:
   default: { cmd: 'claude -p' }    # required; `default` is used unless --profile/`profile:` says otherwise
+defaults:                          # optional, flow-wide
+  timeout: 600                     # seconds; the default for any step without its own `timeout`
 steps:
   <id>:
     type: <node type>
@@ -50,12 +52,14 @@ steps:
 
 A node's identity is its YAML key (`<id>`). Wires are the `from:` field.
 
+**`defaults`** is flow-wide. Today it holds one key, **`timeout`** (seconds): the ceiling every `ai`/`cmd` step falls back to when it sets no `timeout` of its own. Resolution, most specific wins: a node's `timeout` → `defaults.timeout` → the built-in **300s** (the same on CLI and in the editor). In the editor it's the **◷ Timeout** clock in the top bar.
+
 ## Node types
 
 | type | Purpose | Fields |
 |---|---|---|
-| `ai` | Call the model once **per input item**. | `from`, `prompt`, `profile?` |
-| `cmd` | Run a shell command (argv, no shell). | `run`, `inputs?`, `from?`, `mode?` |
+| `ai` | Call the model once **per input item**. | `from`, `prompt`, `profile?`, `timeout?` |
+| `cmd` | Run a shell command (argv, no shell). | `run`, `inputs?`, `from?`, `mode?`, `timeout?` |
 | `assemble` | Pure data templating — render the prompt, no model call. | `from`, `prompt` |
 | `splitOut` | One item containing an array → one item per element (fan-out). | `from`, `field?` |
 | `aggregate` | Many items → one item holding the array (fan-in). Empty input → `[{json:[]}]`. | `from`, `field?` |
@@ -70,6 +74,7 @@ Field notes:
 - **`mode`** — `cmd`: `once` (default, single run) | `perItem` (run per input item, item piped to stdin). `merge`: `append` (default) | `byPosition` | `byKey`.
 - **`field`** — `splitOut`/`aggregate`: a single property name to split/aggregate. Omit to use the whole item value.
 - **`key`** — `merge mode: byKey`: the property both sides join on. Required for `byKey`.
+- **`timeout`** — `ai`/`cmd`: **seconds** before this step's subprocess is killed (`timed out`). Overrides the flow default; blank falls back to `defaults.timeout`, then the built-in **300s**. Raise it for a slow step (e.g. an `ai` step writing a long article: `timeout: 1200`). In the editor it lives behind the ◷ clock in a node's INPUT header.
 
 ## Prompt expressions (`{{ }}`)
 

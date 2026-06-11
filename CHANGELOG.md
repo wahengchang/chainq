@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.1.12
+
+- **Timeout is now yours to set — a long `ai` step no longer dies at a hardcoded limit.** An `ai`
+  step writing a whole article used to be killed at a fixed ceiling (120s on the CLI, 300s in the
+  editor — and the two disagreed). Now any `ai`/`cmd` step takes an optional `timeout:` (seconds)
+  in the YAML, and a flow can set a `defaults: { timeout: N }` that every step falls back to.
+  Resolution, most specific wins: a node's own `timeout` → the flow default → a built-in **300s**,
+  identical on the CLI and in the editor. Set `timeout: 1200` on the article step and it runs to
+  the end. In the editor a node's timeout hides behind a **◷ clock** in its INPUT header (bare when
+  unset, `◷ 1200s` when set, click to edit), and the flow-wide default is the **◷ Timeout** clock
+  in the top bar. Covered by `e2e/browser/timeout-field.spec.ts` plus engine tests in
+  `dag.test.ts` (parse/validate) and `run.test.ts` (per-node caps, flow default, precedence).
+
 ## 0.1.11
 
 - **Editor: delete a node even when a downstream step still points at it.** Deleting

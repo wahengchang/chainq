@@ -143,6 +143,9 @@ chainq ls                      # list every flow in this project
   value from several steps back without wiring it into the data flow.
 - **Profiles** map a name to a model command (e.g. `default: claude -p`). Every `ai` step calls
   the real local model — there is no offline/fake profile.
+- **`timeout:`** (seconds) caps how long an `ai`/`cmd` step may run before it's killed. Set it on a
+  slow step (`timeout: 1200` for a long article), or set a flow-wide `defaults: { timeout: 600 }`.
+  Blank falls back to the built-in 300s. In the editor: the ◷ clock in a node, ◷ Timeout in the bar.
 - **Cache:** with `--cache`, editing a step re-runs it and everything downstream; everything else
   is reused. Editing an *upstream* step also re-runs its downstream (never serves a stale result).
 - **`--pin`:** freeze a step's output to a sample so you can iterate on a *later* step without
