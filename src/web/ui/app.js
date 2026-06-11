@@ -579,7 +579,9 @@ function selectNode(id){
   // which keeps an unsaved schema edit from being wiped mid-run.)
   $("pnSchema").innerHTML=n.type==="ai"?renderSchemaEditor(eff):"";
   if(n.type==="ai")schemaPreview();
+  timeoutOpen=false;   // the timeout box starts collapsed every node — open it via the ◷ clock
   $("pnTypeFields").innerHTML=renderTypeFields(eff);   // P2-a: type-specific editor (draft-aware)
+  $("pnTimeoutCtl").innerHTML=timeoutCtl(eff);   // ◷ clock in the INPUT header (ai/cmd only)
   if(invalid[id])setMsg("pnMsg","err","⚠ "+invalid[id]);else setMsg("pnMsg","","");
   renderPreview();
   refreshSelectedOutput();   // the actual output/status/items — the ONLY part a run redraws
@@ -641,12 +643,38 @@ function renderTypeFields(n){
 }
 function onMergeMode(){const w=$("tfKeyWrap");if(w)w.classList.toggle("hidden",$("tfMode").value!=="byKey");}
 // ai/cmd spawn a subprocess, so they honour a per-node `timeout` (SECONDS). Blank =
-// fall back to the flow default (defaults.timeout) → the built-in 300s. Other node
-// types don't run a process, so the field is meaningless for them and not shown.
+// fall back to the flow default (defaults.timeout) → the built-in 300s. Rarely
+// touched, so it hides behind the ◷ clock in the INPUT header and starts collapsed.
+let timeoutOpen=false;
+// the collapsible input box (lives in #pnTypeFields, hidden until the clock opens it).
 function timeoutField(n){
   const v=(n.timeout!=null)?n.timeout:"";
-  return '<label style="margin-top:10px">timeout — seconds before this step is killed (blank = flow default · 300)</label>'
-    +'<input id="tfTimeout" type="number" min="1" step="1" spellcheck="false" value="'+v+'" placeholder="e.g. 1200 for a long article">';
+  return '<div id="pnTimeoutWrap" class="tobox'+(timeoutOpen?"":" hidden")+'">'
+    +'<div class="tohint">逾時 — 幾秒後強制中止這步 · 空白 = 用 flow 預設(300)</div>'
+    +'<input id="tfTimeout" type="number" min="1" step="1" spellcheck="false" oninput="onTimeoutInput()" value="'+v+'" placeholder="例如 1200(長文給多一點)">'
+    +'</div>';
+}
+// the ◷ clock button in the INPUT header — only ai/cmd; shows the current value when
+// set (accent), bare ◷ when not. Clicking toggles the box above.
+function timeoutCtl(n){
+  if(n.type!=="ai"&&n.type!=="cmd")return "";
+  const v=(n.timeout!=null)?n.timeout:"";
+  return '<button type="button" id="pnTimeoutBtn" class="toclock'+(v!==""?" on":"")
+    +'" onclick="toggleTimeout()" title="此步驟逾時上限(秒)· 很少需要改 · 空白 = 用 flow 預設 300">'
+    +'◷'+(v!==""?(" "+v+"s"):"")+'</button>';
+}
+function toggleTimeout(){
+  timeoutOpen=!timeoutOpen;
+  const w=$("pnTimeoutWrap");if(w)w.classList.toggle("hidden",!timeoutOpen);
+  if(timeoutOpen){const i=$("tfTimeout");if(i){i.focus();}}
+}
+// live-sync the clock label as you type (the box and the button live in different
+// containers, so update the button by hand). markDirty still fires via the modal listener.
+function onTimeoutInput(){
+  const i=$("tfTimeout"),b=$("pnTimeoutBtn");if(!i||!b)return;
+  const v=i.value.trim();
+  b.classList.toggle("on",v!=="");
+  b.textContent="◷"+(v!==""?(" "+v+"s"):"");
 }
 
 // ── ai OUTPUT SCHEMA editor ──────────────────────────────────────────────────
@@ -1060,4 +1088,4 @@ boot();
 // Migration bridge: these handlers are still referenced by inline onclick= in
 // app.html (and in runtime-generated card markup), so a module must expose them
 // on window. Converting to addEventListener is the follow-up.
-Object.assign(window,{listFlows,createFlow,back,toggleRaw,runAll,runNode,saveNode,deleteNode,closeNode,addNode,saveRaw,renameSelected,schedulePreview,insertVar,insertEarlier,runTo,setInputVal,onMergeMode,addParamRow,addSchemaRow,onSchemaFormat,toggleSchema,schemaPreview,changeType,markDirty,resetNode,zoomBy,zoomReset,zoomFit,stopRun,toggleRefs});
+Object.assign(window,{listFlows,createFlow,back,toggleRaw,runAll,runNode,saveNode,deleteNode,closeNode,addNode,saveRaw,renameSelected,schedulePreview,insertVar,insertEarlier,runTo,setInputVal,onMergeMode,addParamRow,addSchemaRow,onSchemaFormat,toggleSchema,schemaPreview,changeType,markDirty,resetNode,zoomBy,zoomReset,zoomFit,stopRun,toggleRefs,toggleTimeout,onTimeoutInput});

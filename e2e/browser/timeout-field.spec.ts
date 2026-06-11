@@ -49,43 +49,52 @@ let proc: ChildProcess, baseURL: string;
 test.beforeAll(async () => ({ url: baseURL, proc } = await startServer()));
 test.afterAll(() => proc?.kill());
 
-test("editor sets a per-node timeout (seconds) from the panel — round-trips through YAML", async ({ page }) => {
+test("editor sets a per-node timeout via the ◷ clock — round-trips through YAML", async ({ page }) => {
   await page.goto(baseURL);
+  const clock = page.locator("#pnTimeoutBtn");
+  const box = page.locator("#tfTimeout");
 
-  // ai node `gen`: the timeout field shows, starts empty (no timeout set yet).
+  // ai node `gen`: the ◷ clock shows in the INPUT header; the box is collapsed.
   await nodeByName(page, "gen").click();
-  await expect(page.locator("#tfTimeout")).toHaveValue("");
+  await expect(clock).toBeVisible();
+  await expect(box).toBeHidden();
   await dwell(page, 400);
 
-  // set 1200s (a long article) and Save → it lands in the YAML as a number.
-  await page.locator("#tfTimeout").fill("1200");
+  // click the clock → the box opens; set 1200s; the clock label live-updates.
+  await clock.click();
+  await expect(box).toBeVisible();
+  await box.fill("1200");
+  await expect(clock).toHaveText(/1200s/);
   await dwell(page, 500);
+
+  // Save → lands in the YAML as a number; re-render collapses but the clock still
+  // shows the value (no need to open it to see a timeout is set).
   await page.getByRole("button", { name: "Save" }).click();
   await expect(page.locator("#pnMsg")).toContainText("saved");
-  await expect(page.locator("#tfTimeout")).toHaveValue("1200"); // re-parsed from YAML
+  await expect(clock).toHaveText(/1200s/);
+  await expect(box).toBeHidden();
   expect(readFileSync(flowPath, "utf8")).toMatch(/timeout:\s*1200/);
   await dwell(page, 500);
 
-  // cmd node `shell` carries the field too (it also spawns a subprocess).
+  // cmd node `shell` carries the clock too (it also spawns a subprocess).
   await page.keyboard.press("Escape"); // close gen's panel before switching nodes
   await dwell(page, 300);
   await nodeByName(page, "shell").click();
-  await expect(page.locator("#tfTimeout")).toHaveValue("");
-  await page.locator("#tfTimeout").fill("45");
-  await dwell(page, 400);
+  await expect(clock).toBeVisible();
+  await clock.click();
+  await box.fill("45");
   await page.getByRole("button", { name: "Save" }).click();
   await expect(page.locator("#pnMsg")).toContainText("saved");
-  await expect(page.locator("#tfTimeout")).toHaveValue("45");
+  await expect(clock).toHaveText(/45s/);
 
-  // clear `gen`'s timeout → it falls back to the flow default (field empty again,
-  // and the YAML no longer pins a number for it).
+  // clear `gen`'s timeout → it falls back to the flow default; the clock goes bare.
   await page.keyboard.press("Escape"); // close shell's panel before switching nodes
   await dwell(page, 300);
   await nodeByName(page, "gen").click();
-  await expect(page.locator("#tfTimeout")).toHaveValue("1200");
-  await page.locator("#tfTimeout").fill("");
-  await dwell(page, 400);
+  await expect(clock).toHaveText(/1200s/);
+  await clock.click();
+  await box.fill("");
   await page.getByRole("button", { name: "Save" }).click();
   await expect(page.locator("#pnMsg")).toContainText("saved");
-  await expect(page.locator("#tfTimeout")).toHaveValue("");
+  await expect(clock).toHaveText("◷"); // bare clock = no timeout set
 });

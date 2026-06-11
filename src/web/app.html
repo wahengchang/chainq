@@ -85,6 +85,12 @@
   .fmtnow{margin-left:auto;font-size:11px;color:var(--accent);border:1px solid color-mix(in srgb,var(--accent) 45%,transparent);background:color-mix(in srgb,var(--accent) 12%,transparent);border-radius:10px;padding:1px 10px}
   .schemawrap:not(.collapsed) .fmtnow{display:none}
   .schemawrap.collapsed .schemabody{display:none}
+  /* ◷ timeout clock — a tucked-away per-node setting in the INPUT header */
+  .toclock{cursor:pointer;font:inherit;font-size:11px;color:var(--dim);background:none;border:1px solid var(--line);border-radius:10px;padding:1px 10px;text-transform:none;letter-spacing:0}
+  .toclock:hover{color:var(--ink);border-color:var(--dim)}
+  .toclock.on{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 45%,transparent);background:color-mix(in srgb,var(--accent) 12%,transparent)}
+  .tobox{margin-top:10px}
+  .tohint{font-size:11px;text-transform:none;letter-spacing:0;color:var(--dim);margin-bottom:5px;line-height:1.5}
   .schemabody{margin-top:8px}
   .fmtsel{display:flex;gap:6px;margin-top:4px}
   .fmtbtn{font-size:12px;padding:3px 13px;border:1px solid var(--line);border-radius:12px;color:var(--dim);background:transparent}
@@ -290,7 +296,7 @@
         </div>
         <div class="mcols" id="pnCols">
           <div class="mcol">
-            <div class="chead">input</div>
+            <div class="chead">input <span id="pnTimeoutCtl" style="float:right;text-transform:none;letter-spacing:0"></span></div>
             <div class="mbody">
               <div id="pnFromWrap">
                 <label style="margin-top:0">input <span style="text-transform:none;letter-spacing:0;color:var(--dim)">— wired upstream(s) · first = <span class="intag">$json</span></span></label>
