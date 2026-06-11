@@ -104,8 +104,8 @@ test("editor sets a flow-wide default timeout via the ◷ flow clock in the bar"
   const flowClock = page.locator("#flowTimeoutBtn");
   const pop = page.locator("#flowTimeoutPop");
 
-  // the ◷ flow clock sits in the top bar; bare when no flow default is set.
-  await expect(flowClock).toHaveText("◷ flow");
+  // the ◷ Timeout clock sits in the top bar; bare when no flow default is set.
+  await expect(flowClock).toHaveText("◷ Timeout");
   await expect(pop).toBeHidden();
   await dwell(page, 400);
 
@@ -116,7 +116,7 @@ test("editor sets a flow-wide default timeout via the ◷ flow clock in the bar"
   await dwell(page, 400);
   await page.getByRole("button", { name: "套用" }).click();
   await expect(pop).toBeHidden();
-  await expect(flowClock).toHaveText("◷ flow 600s");
+  await expect(flowClock).toHaveText("◷ Timeout 600s");
   expect(readFileSync(flowPath, "utf8")).toMatch(/defaults:\s*\n\s*timeout:\s*600/);
   await dwell(page, 500);
 
@@ -125,6 +125,6 @@ test("editor sets a flow-wide default timeout via the ◷ flow clock in the bar"
   await flowClock.click();
   await page.locator("#flowTimeoutInput").fill("");
   await page.getByRole("button", { name: "套用" }).click();
-  await expect(flowClock).toHaveText("◷ flow");
+  await expect(flowClock).toHaveText("◷ Timeout");
   expect(readFileSync(flowPath, "utf8")).not.toMatch(/defaults:/);
 });

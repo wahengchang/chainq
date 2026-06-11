@@ -689,7 +689,7 @@ function renderFlowTimeout(){
   const v=flowTimeoutVal();
   ctl.innerHTML='<button type="button" id="flowTimeoutBtn" class="toclock'+(v!==""?" on":"")
     +'" onclick="toggleFlowTimeout()" title="整條 flow 的預設逾時(秒)· 套用到沒自己設 timeout 的節點 · 空白用內建 300">'
-    +'◷ flow'+(v!==""?(" "+v+"s"):"")+'</button>';
+    +'◷ Timeout'+(v!==""?(" "+v+"s"):"")+'</button>';
 }
 function toggleFlowTimeout(){
   const pop=$("flowTimeoutPop"),btn=$("flowTimeoutBtn");if(!pop||!btn)return;
