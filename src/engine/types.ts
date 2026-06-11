@@ -86,12 +86,21 @@ export interface FlowNode {
   /** input: declared parameters (name → spec with optional default). Supplied at
    * run time via --input / --input-file; one set → 1 seed item, many → batch. */
   params?: Record<string, ParamSpec>;
+  /** ai/cmd: per-node subprocess timeout in SECONDS. Overrides the flow default
+   * (Flow.defaults.timeout) and the built-in 300s fallback for THIS node only —
+   * e.g. an ai step that writes a whole article needs more than the default. */
+  timeout?: number;
 }
 
 export interface Flow {
   profiles: Record<string, ProfileSpec>;
   /** Insertion order is preserved and used as the deterministic run order. */
   steps: Record<string, FlowNode>;
+  /** Flow-wide defaults applied to every node unless the node overrides them. */
+  defaults?: {
+    /** Subprocess timeout in SECONDS for nodes without their own `timeout`. */
+    timeout?: number;
+  };
 }
 
 export type NodeStatus = "ran" | "cached" | "failed" | "skipped";

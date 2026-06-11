@@ -22,6 +22,12 @@ steps:
     type: ai
     from: load
     prompt: 'Summarize in one sentence: {{ $json }}'
+    # timeout: 1200                 # optional: seconds for THIS node (e.g. a long
+    #                               # article). Overrides the flow default below.
+
+# defaults:
+#   timeout: 600                    # optional: seconds for every node without its
+#                                   # own timeout (built-in fallback: 300)
 `;
 
 const GITIGNORE = `.chain/\n`;

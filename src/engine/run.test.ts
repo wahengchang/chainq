@@ -157,6 +157,38 @@ describe("Runner — G2 fake model", () => {
     expect(res[0]!.error).toMatch(/timed out/);
   });
 
+  it("a node's own `timeout` (seconds) caps it — exceeding fails as timed out", async () => {
+    const flow: Flow = {
+      profiles: cat,
+      steps: { slow: { id: "slow", type: "cmd", run: "sleep 5", timeout: 0.1 } },
+    };
+    const res = await new Runner(flow, { chainDir: dir() }).runChain();
+    expect(res[0]!.status).toBe("failed");
+    expect(res[0]!.error).toMatch(/timed out/);
+  });
+
+  it("flow.defaults.timeout caps a node that has no `timeout` of its own", async () => {
+    const flow: Flow = {
+      profiles: cat,
+      steps: { slow: { id: "slow", type: "cmd", run: "sleep 5" } },
+      defaults: { timeout: 0.1 },
+    };
+    const res = await new Runner(flow, { chainDir: dir() }).runChain();
+    expect(res[0]!.status).toBe("failed");
+    expect(res[0]!.error).toMatch(/timed out/);
+  });
+
+  it("a node's `timeout` overrides a tighter flow.defaults.timeout", async () => {
+    const flow: Flow = {
+      profiles: cat,
+      // flow default would kill at 100ms, but the node grants itself 5s → it finishes.
+      steps: { slow: { id: "slow", type: "cmd", run: "sleep 0.2", timeout: 5 } },
+      defaults: { timeout: 0.1 },
+    };
+    const res = await new Runner(flow, { chainDir: dir() }).runChain();
+    expect(res[0]!.status).toBe("ran");
+  });
+
   it("a failed node is not cached (next run retries it)", async () => {
     const d = dir();
     const flow: Flow = {

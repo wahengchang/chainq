@@ -137,6 +137,7 @@ async function handle(req: IncomingMessage, res: ServerResponse, opts: WebOption
       params: n.params ?? null, // input: declared params (the form fields the editor draws)
       path: n.path ?? null, // write: output file path
       schema: n.schema ?? null, // ai: structured-output schema (C4)
+      timeout: n.timeout ?? null, // ai/cmd: per-node subprocess timeout (seconds)
       // by-ID references the prompt makes ({{ $('id') }} / {{ $node["id"] }}),
       // from the engine's single source of truth (promptRefs). The canvas paints
       // these edges as reference wires (cool, dashed) vs data-flow wires. #33
@@ -477,10 +478,9 @@ async function streamRun(
     profileOverride: profile || undefined,
     fresh,
     input: coerceInput(flow, input),
-    // real `claude -p` calls can run long (reasoning, big inputs). Give the web
-    // UI a generous 5-min ceiling so a genuine model call isn't killed as a
-    // false "timed out" — the CLI default (120s) is too tight for the UI.
-    timeoutMs: 300_000,
+    // No web-specific timeout override: the ceiling now comes from the flow
+    // itself (node `timeout` → flow `defaults.timeout` → built-in 300s in
+    // proc.ts), so CLI and web kill a long node at the SAME point.
     signal: ac.signal, // ← Stop button aborts this
     // a node actually started → tell the UI to flip it from "queued" to "running"
     // (the spinner), so only the ONE executing node spins, not the whole cone.

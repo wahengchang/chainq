@@ -623,7 +623,8 @@ function renderTypeFields(n){
     const m=n.mode||"once";
     return '<label>mode — run the command…</label>'
       +'<select id="tfMode">'+opt(m,"once")+opt(m,"perItem")+'</select>'
-      +'<div class="dim" style="font-size:11px;margin-top:4px">once = whole input at once · perItem = once per input item</div>';
+      +'<div class="dim" style="font-size:11px;margin-top:4px">once = whole input at once · perItem = once per input item</div>'
+      +timeoutField(n);
   }
   if(n.type==="write"){
     const m=n.mode||"overwrite";
@@ -633,11 +634,20 @@ function renderTypeFields(n){
       +'<select id="tfMode">'+opt(m,"overwrite")+opt(m,"append")+'</select>'
       +'<div class="dim" style="font-size:11px;margin-top:4px">writes the upstream\'s text to the file when this node runs</div>';
   }
-  // ai output schema is NOT here — it describes the OUTPUT shape, so it lives in
-  // the OUTPUT column (renderSchemaEditor → #pnSchema), not the INPUT form.
+  // ai: only the per-node timeout lives here — the output schema describes the
+  // OUTPUT shape, so it lives in the OUTPUT column (renderSchemaEditor → #pnSchema).
+  if(n.type==="ai")return timeoutField(n);
   return "";
 }
 function onMergeMode(){const w=$("tfKeyWrap");if(w)w.classList.toggle("hidden",$("tfMode").value!=="byKey");}
+// ai/cmd spawn a subprocess, so they honour a per-node `timeout` (SECONDS). Blank =
+// fall back to the flow default (defaults.timeout) → the built-in 300s. Other node
+// types don't run a process, so the field is meaningless for them and not shown.
+function timeoutField(n){
+  const v=(n.timeout!=null)?n.timeout:"";
+  return '<label style="margin-top:10px">timeout — seconds before this step is killed (blank = flow default · 300)</label>'
+    +'<input id="tfTimeout" type="number" min="1" step="1" spellcheck="false" value="'+v+'" placeholder="e.g. 1200 for a long article">';
+}
 
 // ── ai OUTPUT SCHEMA editor ──────────────────────────────────────────────────
 // Lives in the OUTPUT column (schema = the shape this node must return). Two-level:
@@ -829,15 +839,24 @@ function closeNodeNow(){selected=null;panelDirty=false;updateDirty();$("modal").
 // not always prompt. (key before mode for merge: setting mode=byKey while key is
 // unset would be a NEW validate error, rejected, leaving mode unsaved.) A null
 // value = "remove this field" (e.g. a schema switched back to Text).
+// timeout field (ai/cmd only): a valid positive number sets it; empty or invalid
+// clears it (null → remove the key) so the node falls back to the flow default.
+function pushTimeout(n,sets){
+  const el=$("tfTimeout");if(!el)return;
+  const v=el.value.trim(),num=Number(v);
+  if(v!==""&&Number.isFinite(num)&&num>0)sets.push(["timeout",num]);
+  else if(n.timeout!=null)sets.push(["timeout",null]);
+}
 function panelFieldSets(n){
   const sets=[];
-  if(n.type==="cmd"){sets.push(["run",$("pnPrompt").value]);if($("tfMode"))sets.push(["mode",$("tfMode").value]);}
+  if(n.type==="cmd"){sets.push(["run",$("pnPrompt").value]);if($("tfMode"))sets.push(["mode",$("tfMode").value]);pushTimeout(n,sets);}
   else if(n.type==="assemble"){sets.push(["prompt",$("pnPrompt").value]);}
   else if(n.type==="ai"){
     sets.push(["prompt",$("pnPrompt").value]);
     const sc=collectSchema();   // reads the active OUTPUT FORMAT (text→null/json/list)
     if(sc)sets.push(["schema",sc]);
     else if(n.schema)sets.push(["schema",null]); // had a schema, now cleared → remove (parse drops null)
+    pushTimeout(n,sets);
   }
   else if(n.type==="splitOut"||n.type==="aggregate"){if($("tfField"))sets.push(["field",$("tfField").value]);}
   else if(n.type==="merge"){if($("tfKey"))sets.push(["key",$("tfKey").value]);if($("tfMode"))sets.push(["mode",$("tfMode").value]);}
