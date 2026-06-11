@@ -42,7 +42,10 @@ export interface SubprocessOptions {
   signal?: AbortSignal;
 }
 
-const DEFAULT_TIMEOUT = 120_000;
+// Built-in fallback when neither the node (FlowNode.timeout) nor the flow
+// (Flow.defaults.timeout) sets one. Unified across CLI and web — a real
+// `claude -p` call (reasoning, big inputs) needs more than the old 120s.
+const DEFAULT_TIMEOUT = 300_000;
 const DEFAULT_KILL_GRACE = 2_000;
 
 export async function runSubprocess(

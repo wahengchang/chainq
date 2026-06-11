@@ -30,7 +30,8 @@ model), `cmd` (a shell command), or a data op (`splitOut` · `aggregate` · `mer
   main input) and **reference wires** (`$('id')` cross-step value lookups, even several
   steps back) read distinctly — warm-solid vs cool-dashed, with a toggle to hide the
   reference wires. Edit a node and run it without saving — your edit is kept as a draft
-  (run executes it, the file is untouched) until you Save or ↩ Reset. Binds to `127.0.0.1` only.
+  (run executes it, the file is untouched) until you Save or ↩ Reset. Give a slow step more room with a per-node ◷ timeout (or a flow-wide default) so a long
+  `ai` run isn't killed mid-flight. Binds to `127.0.0.1` only.
 
 ## Docs
 

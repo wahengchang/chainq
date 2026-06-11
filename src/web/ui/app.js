@@ -169,10 +169,14 @@ async function loadLayout(){const{data}=await api("/api/layout?path="+encodeURIC
   layout=(data&&data.layout)||{};manual=Object.keys(layout).length>0;}
 function back(){closeNodeNow();$("editor").classList.add("hidden");$("create").classList.remove("hidden");listFlows();} // drafts kept in memory; reopening the same flow restores them
 
+// flow-wide defaults (currently just defaults.timeout) — drives the ◷ flow clock in
+// the bar. Refreshed from /api/parse on every load.
+let flowDefaults=null;
 async function loadNodes(){
   const{ok,data}=await api("/api/parse?path="+encodeURIComponent(current));
   if(!ok){setMsg("canvasMsg","err","could not parse — use { } raw to fix it");$("graph").innerHTML="";return;}
   setMsg("canvasMsg","","");nodes=data.nodes;
+  flowDefaults=data.defaults||null;renderFlowTimeout();
   await loadValidity();   // flag bad nodes (⚠) before the first paint
   renderGraph();
 }
@@ -579,7 +583,9 @@ function selectNode(id){
   // which keeps an unsaved schema edit from being wiped mid-run.)
   $("pnSchema").innerHTML=n.type==="ai"?renderSchemaEditor(eff):"";
   if(n.type==="ai")schemaPreview();
+  timeoutOpen=false;   // the timeout box starts collapsed every node — open it via the ◷ clock
   $("pnTypeFields").innerHTML=renderTypeFields(eff);   // P2-a: type-specific editor (draft-aware)
+  $("pnTimeoutCtl").innerHTML=timeoutCtl(eff);   // ◷ clock in the INPUT header (ai/cmd only)
   if(invalid[id])setMsg("pnMsg","err","⚠ "+invalid[id]);else setMsg("pnMsg","","");
   renderPreview();
   refreshSelectedOutput();   // the actual output/status/items — the ONLY part a run redraws
@@ -623,7 +629,8 @@ function renderTypeFields(n){
     const m=n.mode||"once";
     return '<label>mode — run the command…</label>'
       +'<select id="tfMode">'+opt(m,"once")+opt(m,"perItem")+'</select>'
-      +'<div class="dim" style="font-size:11px;margin-top:4px">once = whole input at once · perItem = once per input item</div>';
+      +'<div class="dim" style="font-size:11px;margin-top:4px">once = whole input at once · perItem = once per input item</div>'
+      +timeoutField(n);
   }
   if(n.type==="write"){
     const m=n.mode||"overwrite";
@@ -633,11 +640,83 @@ function renderTypeFields(n){
       +'<select id="tfMode">'+opt(m,"overwrite")+opt(m,"append")+'</select>'
       +'<div class="dim" style="font-size:11px;margin-top:4px">writes the upstream\'s text to the file when this node runs</div>';
   }
-  // ai output schema is NOT here — it describes the OUTPUT shape, so it lives in
-  // the OUTPUT column (renderSchemaEditor → #pnSchema), not the INPUT form.
+  // ai: only the per-node timeout lives here — the output schema describes the
+  // OUTPUT shape, so it lives in the OUTPUT column (renderSchemaEditor → #pnSchema).
+  if(n.type==="ai")return timeoutField(n);
   return "";
 }
 function onMergeMode(){const w=$("tfKeyWrap");if(w)w.classList.toggle("hidden",$("tfMode").value!=="byKey");}
+// ai/cmd spawn a subprocess, so they honour a per-node `timeout` (SECONDS). Blank =
+// fall back to the flow default (defaults.timeout) → the built-in 300s. Rarely
+// touched, so it hides behind the ◷ clock in the INPUT header and starts collapsed.
+let timeoutOpen=false;
+// the collapsible input box (lives in #pnTypeFields, hidden until the clock opens it).
+function timeoutField(n){
+  const v=(n.timeout!=null)?n.timeout:"";
+  return '<div id="pnTimeoutWrap" class="tobox'+(timeoutOpen?"":" hidden")+'">'
+    +'<div class="tohint">逾時 — 幾秒後強制中止這步 · 空白 = 用 flow 預設(300)</div>'
+    +'<input id="tfTimeout" type="number" min="1" step="1" spellcheck="false" oninput="onTimeoutInput()" value="'+v+'" placeholder="例如 1200(長文給多一點)">'
+    +'</div>';
+}
+// the ◷ clock button in the INPUT header — only ai/cmd; shows the current value when
+// set (accent), bare ◷ when not. Clicking toggles the box above.
+function timeoutCtl(n){
+  if(n.type!=="ai"&&n.type!=="cmd")return "";
+  const v=(n.timeout!=null)?n.timeout:"";
+  return '<button type="button" id="pnTimeoutBtn" class="toclock'+(v!==""?" on":"")
+    +'" onclick="toggleTimeout()" title="此步驟逾時上限(秒)· 很少需要改 · 空白 = 用 flow 預設 300">'
+    +'◷'+(v!==""?(" "+v+"s"):"")+'</button>';
+}
+function toggleTimeout(){
+  timeoutOpen=!timeoutOpen;
+  const w=$("pnTimeoutWrap");if(w)w.classList.toggle("hidden",!timeoutOpen);
+  if(timeoutOpen){const i=$("tfTimeout");if(i){i.focus();}}
+}
+// live-sync the clock label as you type (the box and the button live in different
+// containers, so update the button by hand). markDirty still fires via the modal listener.
+function onTimeoutInput(){
+  const i=$("tfTimeout"),b=$("pnTimeoutBtn");if(!i||!b)return;
+  const v=i.value.trim();
+  b.classList.toggle("on",v!=="");
+  b.textContent="◷"+(v!==""?(" "+v+"s"):"");
+}
+// ── flow-wide default timeout (the ◷ flow clock in the top bar) ───────────────
+// Same idea as the per-node clock, but writes flow.defaults.timeout — the default
+// every node falls back to. Bare "◷ flow" when unset, "◷ flow 600s" when set.
+function flowTimeoutVal(){return (flowDefaults&&flowDefaults.timeout!=null)?flowDefaults.timeout:"";}
+function renderFlowTimeout(){
+  const ctl=$("flowTimeoutCtl");if(!ctl)return;
+  const v=flowTimeoutVal();
+  ctl.innerHTML='<button type="button" id="flowTimeoutBtn" class="toclock'+(v!==""?" on":"")
+    +'" onclick="toggleFlowTimeout()" title="整條 flow 的預設逾時(秒)· 套用到沒自己設 timeout 的節點 · 空白用內建 300">'
+    +'◷ Timeout'+(v!==""?(" "+v+"s"):"")+'</button>';
+}
+function toggleFlowTimeout(){
+  const pop=$("flowTimeoutPop"),btn=$("flowTimeoutBtn");if(!pop||!btn)return;
+  if(!pop.classList.contains("hidden")){pop.classList.add("hidden");return;}
+  $("flowTimeoutInput").value=flowTimeoutVal();
+  const r=btn.getBoundingClientRect();                 // anchor under the button (fixed-positioned)
+  pop.style.top=(r.bottom+6)+"px";
+  pop.style.right=Math.max(8,window.innerWidth-r.right)+"px";
+  pop.classList.remove("hidden");
+  $("flowTimeoutInput").focus();
+}
+async function applyFlowTimeout(){
+  const raw=$("flowTimeoutInput").value.trim(),num=Number(raw);
+  const value=(raw!==""&&Number.isFinite(num)&&num>0)?num:null;   // empty/invalid = clear → fall back to 300
+  const r=await api("/api/set-default",{method:"POST",body:JSON.stringify({path:current,field:"timeout",value})});
+  if(!r.ok)return setMsg("canvasMsg","err",errs(r.data)||"set flow default failed");
+  $("flowTimeoutPop").classList.add("hidden");
+  await loadNodes();   // re-parse → flowDefaults refreshed → the ◷ flow clock relabels
+  setMsg("canvasMsg","","flow 預設逾時已"+(value?("設為 "+value+"s"):"清除（用內建 300）"));
+}
+// click outside the popover (and not on its clock) closes it
+document.addEventListener("click",e=>{
+  const pop=$("flowTimeoutPop");if(!pop||pop.classList.contains("hidden"))return;
+  const t=/** @type {any} */(e.target);
+  if(pop.contains(t)||(t&&t.id==="flowTimeoutBtn"))return;
+  pop.classList.add("hidden");
+});
 
 // ── ai OUTPUT SCHEMA editor ──────────────────────────────────────────────────
 // Lives in the OUTPUT column (schema = the shape this node must return). Two-level:
@@ -829,15 +908,24 @@ function closeNodeNow(){selected=null;panelDirty=false;updateDirty();$("modal").
 // not always prompt. (key before mode for merge: setting mode=byKey while key is
 // unset would be a NEW validate error, rejected, leaving mode unsaved.) A null
 // value = "remove this field" (e.g. a schema switched back to Text).
+// timeout field (ai/cmd only): a valid positive number sets it; empty or invalid
+// clears it (null → remove the key) so the node falls back to the flow default.
+function pushTimeout(n,sets){
+  const el=$("tfTimeout");if(!el)return;
+  const v=el.value.trim(),num=Number(v);
+  if(v!==""&&Number.isFinite(num)&&num>0)sets.push(["timeout",num]);
+  else if(n.timeout!=null)sets.push(["timeout",null]);
+}
 function panelFieldSets(n){
   const sets=[];
-  if(n.type==="cmd"){sets.push(["run",$("pnPrompt").value]);if($("tfMode"))sets.push(["mode",$("tfMode").value]);}
+  if(n.type==="cmd"){sets.push(["run",$("pnPrompt").value]);if($("tfMode"))sets.push(["mode",$("tfMode").value]);pushTimeout(n,sets);}
   else if(n.type==="assemble"){sets.push(["prompt",$("pnPrompt").value]);}
   else if(n.type==="ai"){
     sets.push(["prompt",$("pnPrompt").value]);
     const sc=collectSchema();   // reads the active OUTPUT FORMAT (text→null/json/list)
     if(sc)sets.push(["schema",sc]);
     else if(n.schema)sets.push(["schema",null]); // had a schema, now cleared → remove (parse drops null)
+    pushTimeout(n,sets);
   }
   else if(n.type==="splitOut"||n.type==="aggregate"){if($("tfField"))sets.push(["field",$("tfField").value]);}
   else if(n.type==="merge"){if($("tfKey"))sets.push(["key",$("tfKey").value]);if($("tfMode"))sets.push(["mode",$("tfMode").value]);}
@@ -1041,4 +1129,4 @@ boot();
 // Migration bridge: these handlers are still referenced by inline onclick= in
 // app.html (and in runtime-generated card markup), so a module must expose them
 // on window. Converting to addEventListener is the follow-up.
-Object.assign(window,{listFlows,createFlow,back,toggleRaw,runAll,runNode,saveNode,deleteNode,closeNode,addNode,saveRaw,renameSelected,schedulePreview,insertVar,insertEarlier,runTo,setInputVal,onMergeMode,addParamRow,addSchemaRow,onSchemaFormat,toggleSchema,schemaPreview,changeType,markDirty,resetNode,zoomBy,zoomReset,zoomFit,stopRun,toggleRefs});
+Object.assign(window,{listFlows,createFlow,back,toggleRaw,runAll,runNode,saveNode,deleteNode,closeNode,addNode,saveRaw,renameSelected,schedulePreview,insertVar,insertEarlier,runTo,setInputVal,onMergeMode,addParamRow,addSchemaRow,onSchemaFormat,toggleSchema,schemaPreview,changeType,markDirty,resetNode,zoomBy,zoomReset,zoomFit,stopRun,toggleRefs,toggleTimeout,onTimeoutInput,toggleFlowTimeout,applyFlowTimeout});

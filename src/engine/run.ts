@@ -16,7 +16,7 @@ import { renderPrompt, promptRefs } from "./render.js";
 import { runSubprocess } from "./proc.js";
 import { extractJson, schemaErrors, correctionNote } from "./schema.js";
 import { nodeDisposition, planRun, type PlanDeps, type RunPlan } from "./plan.js";
-import type { Flow, NodeResult, Item, MergeMode } from "./types.js";
+import type { Flow, FlowNode, NodeResult, Item, MergeMode } from "./types.js";
 import { textItem, itemsText } from "./types.js";
 
 /** Expand {{date}} (YYYY-MM-DD) and {{datetime}} (YYYY-MM-DD-HH-MM-SS) in a path. */
@@ -166,9 +166,14 @@ export class Runner {
     for (const n of cone) await this.ensure(n, false, ctx);
   }
 
-  /** Common subprocess options — folds in the run's cancel signal (UI Stop). */
-  private procOpts(): { timeoutMs?: number; cwd: string; signal?: AbortSignal } {
-    return { timeoutMs: this.opts.timeoutMs, cwd: this.baseDir, signal: this.opts.signal };
+  /** Common subprocess options — folds in the run's cancel signal (UI Stop).
+   * Timeout precedence (most specific wins): the node's own `timeout` → the flow
+   * default → the Runner's opts.timeoutMs (tests) → proc.ts's built-in 300s.
+   * YAML `timeout` is authored in SECONDS, so ×1000 → ms here. */
+  private procOpts(node?: FlowNode): { timeoutMs?: number; cwd: string; signal?: AbortSignal } {
+    const seconds = node?.timeout ?? this.flow.defaults?.timeout;
+    const timeoutMs = seconds !== undefined ? seconds * 1000 : this.opts.timeoutMs;
+    return { timeoutMs, cwd: this.baseDir, signal: this.opts.signal };
   }
 
   // Run a node if needed (or forced); otherwise serve cache. Memoized per OPERATION.
@@ -278,7 +283,7 @@ export class Runner {
           output = [];
           const items = primary ? itemsOf(primary) : [];
           for (let i = 0; i < items.length; i++) {
-            const res = await runSubprocess(cmdToArgv(node.run ?? ""), itemValue(items[i]!), this.procOpts());
+            const res = await runSubprocess(cmdToArgv(node.run ?? ""), itemValue(items[i]!), this.procOpts(node));
             if (res.aborted) return this.fail(id, "stopped");
             if (res.timedOut) return this.fail(id, "timed out");
             if (res.code !== 0) return this.fail(id, res.stderr || `exit ${res.code}`);
@@ -286,7 +291,7 @@ export class Runner {
           }
         } else {
           // mode: once (default) — run a single time, no stdin
-          const res = await runSubprocess(cmdToArgv(node.run ?? ""), "", this.procOpts());
+          const res = await runSubprocess(cmdToArgv(node.run ?? ""), "", this.procOpts(node));
           if (res.aborted) return this.fail(id, "stopped");
           if (res.timedOut) return this.fail(id, "timed out");
           if (res.code !== 0) return this.fail(id, res.stderr || `exit ${res.code}`);
@@ -332,7 +337,7 @@ export class Runner {
             output.push(textItem(rendered, i)); // pure data assembly, no external call
           } else {
             const profile = resolveProfile(this.flow, this.opts.profileOverride ?? node.profile);
-            const res = await runSubprocess(cmdToArgv(profile.cmd), rendered, this.procOpts());
+            const res = await runSubprocess(cmdToArgv(profile.cmd), rendered, this.procOpts(node));
             if (res.aborted) return this.fail(id, "stopped");
             if (res.timedOut) return this.fail(id, "timed out");
             if (res.code !== 0) {
@@ -349,7 +354,7 @@ export class Runner {
                 errs = [e instanceof Error ? e.message : String(e)];
               }
               if (errs.length) {
-                const retry = await runSubprocess(cmdToArgv(profile.cmd), rendered + correctionNote(errs), this.procOpts());
+                const retry = await runSubprocess(cmdToArgv(profile.cmd), rendered + correctionNote(errs), this.procOpts(node));
                 if (retry.aborted) return this.fail(id, "stopped");
                 if (retry.timedOut) return this.fail(id, "timed out");
                 if (retry.code !== 0) return this.fail(id, retry.stderr || `exit ${retry.code}`, isAuthError(retry.stderr));

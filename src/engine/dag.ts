@@ -15,6 +15,19 @@ import type { Flow, FlowNode, NodeType } from "./types.js";
 
 const NODE_TYPES: readonly NodeType[] = ["ai", "cmd", "assemble", "splitOut", "aggregate", "merge", "input", "write"];
 
+// `timeout:` (node or flow default) is authored in SECONDS. Reject anything that
+// isn't a positive finite number up front — a bad value here would otherwise be
+// silently dropped and the node would quietly fall back to the default ceiling.
+function parseTimeout(where: string, val: unknown): number | undefined {
+  // undefined = key absent; null = a bare `timeout:` key (how the editor clears it
+  // via setIn) — both mean "no per-node timeout", not an error.
+  if (val === undefined || val === null) return undefined;
+  if (typeof val !== "number" || !Number.isFinite(val) || val <= 0) {
+    throw new Error(`${where} timeout must be a positive number of seconds, got ${JSON.stringify(val)}`);
+  }
+  return val;
+}
+
 export function parseFlow(yamlText: string): Flow {
   const raw = parseYaml(yamlText) as Record<string, unknown> | null;
   if (!raw || typeof raw !== "object") throw new Error("flow YAML is empty or not a mapping");
@@ -53,10 +66,16 @@ export function parseFlow(yamlText: string): Flow {
     if (spec.schema && typeof spec.schema === "object") {
       node.schema = spec.schema as FlowNode["schema"];
     }
+    const t = parseTimeout(`step "${id}"`, spec.timeout);
+    if (t !== undefined) node.timeout = t;
     steps[id] = node;
   }
 
-  return { profiles, steps };
+  const defaultsRaw = (raw.defaults ?? {}) as Record<string, unknown>;
+  const defaultTimeout = parseTimeout("flow defaults", defaultsRaw.timeout);
+  const defaults = defaultTimeout !== undefined ? { timeout: defaultTimeout } : undefined;
+
+  return defaults ? { profiles, steps, defaults } : { profiles, steps };
 }
 
 /** Direct upstream ids of a node, normalized to a list. */

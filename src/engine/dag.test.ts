@@ -22,6 +22,48 @@ describe("parseFlow", () => {
   it("rejects an unknown node type", () => {
     expect(() => parseFlow(`steps:\n  x: { type: bogus }`)).toThrow(/invalid type/);
   });
+
+  it("parses a node `timeout` and a flow `defaults.timeout` (seconds)", () => {
+    const flow = parseFlow(
+      [
+        "profiles:",
+        "  default: { cmd: 'cat' }",
+        "defaults:",
+        "  timeout: 600",
+        "steps:",
+        "  a: { type: ai, prompt: 'x', timeout: 1200 }",
+        "",
+      ].join("\n"),
+    );
+    expect(flow.defaults?.timeout).toBe(600);
+    expect(flow.steps.a!.timeout).toBe(1200);
+  });
+
+  it("leaves timeout undefined when not set", () => {
+    const flow = parseFlow(`steps:\n  a: { type: ai, prompt: 'x' }`);
+    expect(flow.steps.a!.timeout).toBeUndefined();
+    expect(flow.defaults).toBeUndefined();
+  });
+
+  it("tolerates a bare/null timeout key (how the editor clears it via setIn)", () => {
+    const flow = parseFlow(`steps:\n  a: { type: ai, prompt: 'x', timeout: null }`);
+    expect(flow.steps.a!.timeout).toBeUndefined();
+  });
+
+  it("rejects a non-positive or non-number timeout (node and flow default)", () => {
+    expect(() => parseFlow(`steps:\n  a: { type: ai, prompt: 'x', timeout: 0 }`)).toThrow(
+      /positive number of seconds/,
+    );
+    expect(() => parseFlow(`steps:\n  a: { type: ai, prompt: 'x', timeout: -5 }`)).toThrow(
+      /positive number/,
+    );
+    expect(() => parseFlow(`steps:\n  a: { type: ai, prompt: 'x', timeout: soon }`)).toThrow(
+      /positive number/,
+    );
+    expect(() =>
+      parseFlow(`defaults:\n  timeout: 0\nsteps:\n  a: { type: ai, prompt: 'x' }`),
+    ).toThrow(/flow defaults timeout/);
+  });
 });
 
 describe("topoOrder", () => {
