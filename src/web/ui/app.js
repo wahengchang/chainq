@@ -229,8 +229,8 @@ function nodeCard(n){
     ? '<div class="npreview" style="color:var(--accent)">from ['+esc(n.from.join(", "))+']'+(multi?" ← 多輸入":"")+'</div>' : '';
   const warnLine=bad?'<div class="nwarn" title="'+esc(bad)+'">⚠ '+esc(bad)+'</div>':'';
   d.innerHTML='<div class="noderun-wrap">'
-      +'<button class="noderun" title="run to here (reuse cache)" onclick="event.stopPropagation();runTo(\''+n.id+'\')">▷</button>'
-      +'<button class="noderun" title="re-run fresh — really call the model" onclick="event.stopPropagation();runTo(\''+n.id+'\',true)">↻</button>'
+      +'<button class="noderun" title="Execute step — run this node + the upstream it needs, reusing cache" onclick="event.stopPropagation();runTo(\''+n.id+'\')">▷</button>'
+      +'<button class="noderun" title="Force execute — ignore cache, re-run fresh, really call the model" onclick="event.stopPropagation();runTo(\''+n.id+'\',true)">↻</button>'
     +'</div>'
     +'<div class="nh">'+typeBadge(n.type)+'<span class="nn">'+esc(n.id)+'</span>'+draftDot+xn+glyph+typeChip(n.type)+'</div>'
     +fromLine
@@ -885,7 +885,7 @@ async function renderPreview(){
   if(!ok)return;
   if(data.noUpstream){$("pnRendered").textContent=data.rendered||"(empty)";return;}
   $("pnRendered").className="mbody";$("pnRendered").style.color="var(--ran)";
-  $("pnRendered").innerHTML=esc(data.rendered)+(data.haveInputs?"":'<div class="dim" style="margin-top:6px;color:var(--dim)">↑ {{ }} stay literal until you ▷ Run to here (fills from real input)</div>');
+  $("pnRendered").innerHTML=esc(data.rendered)+(data.haveInputs?"":'<div class="dim" style="margin-top:6px;color:var(--dim)">↑ {{ }} stay literal until you ▷ Execute step (fills from real input)</div>');
 }
 // inline rename via /api/rename — the engine rewrites the key + every downstream
 // from: + every prompt $('id') ref, and moves the cached output, all atomically

@@ -69,7 +69,7 @@ test("editor keeps an unsaved draft across close/reopen, runs it, resets, saves"
 
   // RE-RUN (↻, fresh) — the draft is what runs (server applies it in memory, file
   // untouched), so echo prints the edited text; the edit survives the run.
-  await page.getByRole("button", { name: "↻ re-run" }).click();
+  await page.getByRole("button", { name: "↻ Force execute" }).click();
   await expect(out).toContainText("hello-DRAFT", { timeout: 30000 });
   await expect(prompt).toHaveValue("echo hello-DRAFT");
   await expect(dirty).toBeVisible();
