@@ -52,7 +52,7 @@ test("editor sets type-specific fields from the panel (splitOut field, merge mod
   await page.goto(baseURL);
 
   // splitOut: set `field` in the panel, Save → it round-trips through the YAML
-  await nodeByName(page, "fork").click();
+  await nodeByName(page, "fork").dblclick();
   await page.locator("#tfField").fill("items");
   await dwell(page, 500);
   await page.getByRole("button", { name: "Save" }).click();
@@ -62,7 +62,7 @@ test("editor sets type-specific fields from the panel (splitOut field, merge mod
   await dwell(page, 400);
 
   // merge: switch mode to byKey → the key field appears → set it → Save
-  await nodeByName(page, "mrg").click();
+  await nodeByName(page, "mrg").dblclick();
   await expect(page.locator("#tfKeyWrap")).toHaveClass(/hidden/); // append → key hidden
   await page.locator("#tfMode").selectOption("byKey");
   await expect(page.locator("#tfKeyWrap")).not.toHaveClass(/hidden/);

@@ -66,7 +66,7 @@ test("editor: every node type shows its own coloured icon badge (offline)", asyn
   await dwell(page, 1200);
 
   // the open-node panel header carries the same badge
-  await nodeByName(page, "gen").click();
+  await nodeByName(page, "gen").dblclick();
   await dwell(page, 500);
   await expect(page.locator("#pnType .tbadge")).toHaveCount(1);
   expect(await bg(page.locator("#pnType .tbadge"))).toBe("rgb(167, 139, 250)");

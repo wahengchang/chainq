@@ -61,7 +61,7 @@ test("editor force-deletes a depended-on node: it goes, the dependent turns red 
   await dwell(page, 700);
 
   // open `mid`'s panel and hit delete — previously this was REJECTED (tail depends on it)
-  await mid.click();
+  await mid.dblclick();
   await expect(page.locator("#pnId")).toHaveValue("mid");
   await dwell(page, 700);
   await page.getByRole("button", { name: /^delete$/ }).click();

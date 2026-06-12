@@ -94,7 +94,7 @@ test("editor: cache saves earlier nodes — 2nd run is instant, not a full re-ru
 
   // ── edit ONLY gamma, then ▷ Execute step: alpha+beta come from cache (instant),
   //    only gamma actually runs (~0.8s, not ~2.4s) ──────────────────────────────
-  await page.locator(".node", { has: page.locator(".nn", { hasText: /^gamma$/ }) }).click();
+  await page.locator(".node", { has: page.locator(".nn", { hasText: /^gamma$/ }) }).dblclick(); // double-click opens the editor (#40 v2)
   await expect(page.locator("#modal .modal")).toBeVisible();
   await page.locator("#pnPrompt").fill("gamma EDITED {{ $json }}");
   await expect(page.locator("#pnDirty")).toBeVisible(); // ● 未儲存草稿

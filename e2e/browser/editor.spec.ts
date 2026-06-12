@@ -109,7 +109,7 @@ test("editor renders the real flow graph from chain ui (offline)", async ({ page
 
   // inline rename: open the split node's panel, rename it → its key AND the
   // downstream describe.from both follow, via the real /api/rename (engine).
-  await split.click();
+  await split.dblclick();
   await page.locator("#pnId").fill("fork");
   await page.locator("#pnId").press("Enter");
   await page.keyboard.press("Escape"); // close the panel to read the canvas behind

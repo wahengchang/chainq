@@ -59,7 +59,7 @@ test("editor shows the items model per item after a fan-out run (offline)", asyn
 
   // open the splitOut node panel and run to here (offline) — the ×N badge + the
   // per-item breakdown appear from /api/items
-  await fan.click();
+  await fan.dblclick();
   await page.getByRole("button", { name: /Execute step/ }).click();
 
   const out = page.locator("#pnOut");

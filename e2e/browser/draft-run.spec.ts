@@ -54,7 +54,7 @@ test("editor keeps an unsaved draft across close/reopen, runs it, resets, saves"
   const canvasDot = page.locator(".node .ndirty");
 
   // open the node — clean: no indicator, Reset hidden, no ● on the canvas.
-  await nodeByName(page, "greet").click();
+  await nodeByName(page, "greet").dblclick();
   await expect(prompt).toHaveValue("echo hello-world");
   await expect(dirty).toBeHidden();
   await expect(reset).toBeHidden();
@@ -79,7 +79,7 @@ test("editor keeps an unsaved draft across close/reopen, runs it, resets, saves"
   await page.getByRole("button", { name: "✕ close" }).click();
   await expect(page.locator("#modal")).toBeHidden();
   await dwell(page, 500);
-  await nodeByName(page, "greet").click();
+  await nodeByName(page, "greet").dblclick();
   await expect(prompt).toHaveValue("echo hello-DRAFT");   // ← persisted across close/reopen
   await expect(dirty).toBeVisible();
   await dwell(page, 700);
@@ -100,7 +100,7 @@ test("editor keeps an unsaved draft across close/reopen, runs it, resets, saves"
   await expect(canvasDot).toHaveCount(0);
   await dwell(page, 500);
   await page.getByRole("button", { name: "✕ close" }).click();
-  await nodeByName(page, "greet").click();
+  await nodeByName(page, "greet").dblclick();
   await expect(prompt).toHaveValue("echo hello-SAVED");
   await expect(dirty).toBeHidden();
   await dwell(page, 800);
