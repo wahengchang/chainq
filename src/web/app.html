@@ -301,8 +301,8 @@
           <select id="pnTypeSel" title="change this node's type (resets type-specific fields, keeps wiring)" onchange="changeType(this.value)" style="font-size:11px;padding:2px 4px">
             <option value="ai">ai</option><option value="cmd">cmd</option><option value="assemble">assemble</option><option value="splitOut">splitOut</option><option value="aggregate">aggregate</option><option value="merge">merge</option><option value="input">input</option><option value="write">write</option>
           </select>
-          <button class="primary" onclick="runNode()">▷ Run to here</button>
-          <button onclick="runNode(true)" title="ignore cache, call the model again">↻ re-run</button>
+          <button class="primary" onclick="runNode()" title="run this node + the upstream it needs, reusing cache — only what changed runs (n8n: partial execution)">▷ Execute step</button>
+          <button onclick="runNode(true)" title="ignore cache — re-run this node and its upstream fresh, really calling the model">↻ Force execute</button>
           <button id="pnResetBtn" class="hidden" title="discard this node's unsaved edit — back to the saved value" onclick="resetNode()">↩ 重設</button>
           <button id="pnSaveBtn" onclick="saveNode()">Save</button>
           <button onclick="deleteNode()">delete</button>
@@ -325,7 +325,7 @@
             <div class="chead">prompt (template)</div>
             <textarea id="pnPrompt" spellcheck="false" oninput="schedulePreview()" placeholder="write the prompt for this step…" style="flex:1 1 58%"></textarea>
             <div class="chead" style="border-top:1px solid var(--line)">fx rendered — input filled in</div>
-            <div id="pnRendered" class="mbody" style="flex:0 0 42%;color:var(--ran);background:rgba(93,176,126,.05)">— run upstream (▷ Run to here) to fill {{ }} —</div>
+            <div id="pnRendered" class="mbody" style="flex:0 0 42%;color:var(--ran);background:rgba(93,176,126,.05)">— run upstream (▷ Execute step) to fill {{ }} —</div>
           </div>
           <div class="mcol">
             <div class="chead">output <span id="pnOutStatus" style="float:right;text-transform:none;letter-spacing:0"></span></div>

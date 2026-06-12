@@ -122,7 +122,7 @@ test("panel: a running node shows 'running', never the previous run's stale outp
   await expect(page.locator("#pnOut")).toContainText("beta alpha");
 
   // re-run fresh from the panel; it stays open + selected, so it updates live.
-  await page.getByRole("button", { name: "re-run" }).click();
+  await page.getByRole("button", { name: "Force execute" }).click();
 
   // THE FIX (Image #12): while it's queued/running the OUTPUT flips to a live
   // status — the stale "beta alpha" must NOT sit there looking like this result.

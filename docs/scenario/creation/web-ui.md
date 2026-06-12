@@ -83,9 +83,9 @@ macOS 會自動開預設瀏覽器;否則複製它印出的網址(`http://127.0.0
   > `ai` 的 **schema** 不在這裡 —— 它描述的是**輸出**形狀,所以放在 **output 欄**上方(見下)。
 
 - **prompt**:中欄是 prompt 範本(`ai` / `assemble` 用);下方 **fx rendered** 會在你
-  ▷ Run to here 之後,顯示 `{{ }}` 代入真實上游資料後的樣子(沒跑過則維持字面)。
+  ▷ Execute step 之後,顯示 `{{ }}` 代入真實上游資料後的樣子(沒跑過則維持字面)。
 - **不存檔就能跑(草稿)**:改了欄位**不必先按 Save**。你的編輯會被當成這個節點的
-  **草稿**留著 —— ▷ Run / ↻ re-run **跑的就是草稿**(後端在記憶體套用,`flow.yaml`
+  **草稿**留著 —— ▷ Execute step / ↻ Force execute **跑的就是草稿**(後端在記憶體套用,`flow.yaml`
   不動),切到別的節點、關掉面板都**不會丟**,回來編輯還在。畫布上有草稿的節點會標一顆
   **●**,面板左下也有「未儲存」提示。
   - 按 **Save** 把草稿寫進 `flow.yaml`(正式生效)。
@@ -139,7 +139,7 @@ steps:
 
 ## 7. 執行 / 看結果
 
-- 單一節點:面板的 **▷ Run to here**(跑它和它的上游;吃 cache)、**↻ re-run**(忽略 cache 重跑它)。
+- 單一節點:面板的 **▷ Execute step**(跑它和它需要的上游;吃 cache,對應 n8n 的 partial execution)、**↻ Force execute**(忽略 cache 重跑它)。
 - 整條:頂列 **▷ Run all** / **↻ fresh**。
 - **跑的是你眼前的版本**:有未存草稿時,執行跑的就是草稿(後端記憶體套用,`flow.yaml` 不動)。
   想看結果不必先 Save;滿意了再 Save、不要就 ↩ 重設。
@@ -162,7 +162,7 @@ steps:
 | 拖拉接線 / 斷線 | `POST /api/connect` |
 | 改名 | `POST /api/rename` |
 | Save raw YAML | `POST /api/save`(先驗證) |
-| ▷ Run all / Run to here | `POST /api/run` / `POST /api/run-node`(NDJSON 串流;未存草稿用 `overrides` 隨請求帶上,記憶體套用) |
+| ▷ Run all / Execute step | `POST /api/run` / `POST /api/run-node`(NDJSON 串流;未存草稿用 `overrides` 隨請求帶上,記憶體套用) |
 | delete | `POST /api/delete-node`(下游還在用會被擋) |
 
 ## 相關
