@@ -71,6 +71,7 @@ steps:
     await page.keyboard.press("Escape");
 
     await out.locator(".noderun").first().click();
+    await out.locator(".xn.tog").click(); // a finished node's output is collapsed by default → expand it (#40)
     await expect(out.locator(".nodeout")).toContainText("kyoto");
     await dwell(page, 1200);
   });
@@ -120,6 +121,7 @@ steps:
     await dwell(page, 500);
     await page.keyboard.press("Escape");
     await out.locator(".noderun").first().click();
+    await out.locator(".xn.tog").click(); // collapsed by default → expand to read the output (#40)
     await expect(out.locator(".nodeout")).toContainText("ada/tokyo/9");
     await dwell(page, 1200);
   });
