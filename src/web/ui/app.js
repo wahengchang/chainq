@@ -242,10 +242,17 @@ function nodeCard(n){
     +fromLine
     +'<div class="npreview">'+esc((n.prompt||n.run||"").slice(0,70))+'</div>'+out+warnLine
     +'<div class="port" title="drag onto another node to connect →"></div>';
+  // Figma/n8n model (#40 v2): a single click SELECTS the node (highlight, no panel);
+  // a DOUBLE click opens the editor. Shift+click toggles it in the selection group.
+  // Double-click is detected by hand (two clicks on the same node < 400ms) rather
+  // than the native dblclick event, which the drag listeners can swallow.
   d.onclick=(e)=>{
-    if(connecting||movingNode)return; // a drag (connect or reposition) must not also open the panel
-    if(e.shiftKey){toggleMultiSel(n.id);return;} // Shift+click = add/remove from the move-group, no panel
-    clearMultiSel();trySelect(n.id);             // a plain click drops the group + opens the panel (guards unsaved edits)
+    if(connecting||movingNode)return; // a drag (connect/reposition) must not also select
+    if(e.shiftKey){toggleMultiSel(n.id);return;}
+    const t=performance.now();
+    if(lastClickId===n.id&&t-lastClickT<400){lastClickId=null;selectNode(n.id);return;} // 2nd click → open editor
+    lastClickId=n.id;lastClickT=t;
+    selectOnly(n.id); // single-select this node (clears any group), no panel
   };
   return d;
 }
@@ -414,6 +421,8 @@ let manual=false,layout={},movingNode=false,layoutTimer=null;
 // whose finished output is shown on the card (hidden by default so a tall result
 // never buries its neighbours). #40
 let multiSel=new Set(),outExpanded=new Set();
+// manual double-click detection for the select-vs-open click model (#40 v2)
+let lastClickId=null,lastClickT=0;
 function nodeUnder(e){const el=document.elementFromPoint(e.clientX,e.clientY);return el?/** @type {HTMLElement|null} */(el.closest(".node")):null;}
 function startConnect(source,ev){
   ev.preventDefault();ev.stopPropagation();
@@ -522,10 +531,13 @@ document.addEventListener("pointerdown",e=>{
   // body drag → reposition (not on a run button; only inside the canvas)
   const card=/** @type {HTMLElement} */(tgt.closest(".node"));
   if(card&&!tgt.closest(".noderun")&&$("graph").contains(card)){startMove(card.dataset.id,e);return;}
-  // empty canvas → drag to pan; a plain press there also clears any multi-selection. #40
+  // empty canvas: Space held → pan; otherwise → rubber-band marquee select. Scrolling
+  // (wheel/trackpad) pans natively, so drag is free for selection. #40 v2
   if(!card&&!tgt.closest(".canvastools,#modal,button,select,input,textarea,a,label")){
     const stage=$("nodeView");
-    if(stage&&stage.contains(tgt)&&!$("editor").classList.contains("hidden")){clearMultiSel();startPan(e);}
+    if(stage&&stage.contains(tgt)&&!$("editor").classList.contains("hidden")){
+      if(spaceDown)startPan(e);else startMarquee(e);
+    }
   }
 });
 
@@ -566,7 +578,13 @@ function startMove(id,ev){
   document.addEventListener("pointermove",move);document.addEventListener("pointerup",up);
 }
 
-// ---- multi-select (Shift+click) + output collapse + drag-to-pan (#40) ----
+// ---- selection (single-click / Shift+click / marquee) + output collapse (#40) ----
+// set the selection to exactly `set`, syncing the .selsel ring on every card.
+function applyMultiSel(set){
+  multiSel=set;
+  $("graph").querySelectorAll(".node").forEach(c=>c.classList.toggle("selsel",set.has(c.dataset.id)));
+}
+function selectOnly(id){applyMultiSel(new Set([id]));} // single-click = select just this node
 function toggleMultiSel(id){
   if(multiSel.has(id))multiSel.delete(id);else multiSel.add(id);
   const c=$("graph").querySelector('.node[data-id="'+CSS.escape(id)+'"]');
@@ -579,8 +597,46 @@ function clearMultiSel(){
 }
 // show / hide a finished node's output on its card (the ×N badge fires this)
 function toggleOut(id){if(outExpanded.has(id))outExpanded.delete(id);else outExpanded.add(id);renderGraph();}
-// drag empty canvas → pan (native scroll). A 4px-free press still scrolls smoothly;
-// a plain press with no drag just clears the multi-selection (handled by the caller).
+// drag empty canvas → rubber-band marquee select. Nodes the box TOUCHES (AABB
+// intersect) are selected; Shift+drag adds to the current selection, plain drag
+// replaces it; a press with no drag clears it. Coords are screen-space (so it works
+// at any zoom). #40 v2
+function startMarquee(ev){
+  const stage=$("nodeView");if(!stage)return;
+  const addMode=ev.shiftKey,ox=ev.clientX,oy=ev.clientY;
+  let dragging=false,base=new Set();
+  const box=document.createElement("div");box.className="marquee";
+  const move=e=>{
+    if(!dragging){
+      if(Math.abs(e.clientX-ox)+Math.abs(e.clientY-oy)<4)return; // not a drag yet
+      dragging=true;base=addMode?new Set(multiSel):new Set();document.body.appendChild(box);
+    }
+    const x1=Math.min(ox,e.clientX),y1=Math.min(oy,e.clientY),x2=Math.max(ox,e.clientX),y2=Math.max(oy,e.clientY);
+    box.style.left=x1+"px";box.style.top=y1+"px";box.style.width=(x2-x1)+"px";box.style.height=(y2-y1)+"px";
+    const sel=new Set(base);
+    nodes.forEach(n=>{
+      const c=$("graph").querySelector('.node[data-id="'+CSS.escape(n.id)+'"]');if(!c)return;
+      const r=c.getBoundingClientRect();
+      if(r.left<x2&&r.right>x1&&r.top<y2&&r.bottom>y1)sel.add(n.id); // AABB intersect = touched
+    });
+    applyMultiSel(sel);
+  };
+  const up=()=>{
+    document.removeEventListener("pointermove",move);document.removeEventListener("pointerup",up);box.remove();
+    if(!dragging&&!addMode)clearMultiSel(); // a plain empty click clears the selection
+  };
+  document.addEventListener("pointermove",move);document.addEventListener("pointerup",up);
+}
+// Space held → pan instead of marquee (Figma convention). Tracked here; the ◷ guard
+// keeps Space typing normally when a field is focused. #40 v2
+let spaceDown=false;
+const isTyping=t=>{const el=/** @type {any} */(t);return el&&(el.tagName==="INPUT"||el.tagName==="TEXTAREA"||el.tagName==="SELECT"||el.isContentEditable);};
+window.addEventListener("keydown",e=>{
+  if(e.code!=="Space"||spaceDown||isTyping(e.target)||$("editor").classList.contains("hidden"))return;
+  spaceDown=true;$("nodeView").classList.add("spacegrab");e.preventDefault(); // don't page-scroll
+});
+window.addEventListener("keyup",e=>{if(e.code==="Space"){spaceDown=false;const s=$("nodeView");if(s)s.classList.remove("spacegrab");}});
+// drag empty canvas while Space is held → pan (native scroll).
 function startPan(ev){
   const stage=$("nodeView");if(!stage)return;
   const sx=stage.scrollLeft,sy=stage.scrollTop,ox=ev.clientX,oy=ev.clientY;

@@ -55,7 +55,7 @@ test("editor sets a per-node timeout via the ◷ clock — round-trips through Y
   const box = page.locator("#tfTimeout");
 
   // ai node `gen`: the ◷ clock shows in the INPUT header; the box is collapsed.
-  await nodeByName(page, "gen").click();
+  await nodeByName(page, "gen").dblclick();
   await expect(clock).toBeVisible();
   await expect(box).toBeHidden();
   await dwell(page, 400);
@@ -79,7 +79,7 @@ test("editor sets a per-node timeout via the ◷ clock — round-trips through Y
   // cmd node `shell` carries the clock too (it also spawns a subprocess).
   await page.keyboard.press("Escape"); // close gen's panel before switching nodes
   await dwell(page, 300);
-  await nodeByName(page, "shell").click();
+  await nodeByName(page, "shell").dblclick();
   await expect(clock).toBeVisible();
   await clock.click();
   await box.fill("45");
@@ -90,7 +90,7 @@ test("editor sets a per-node timeout via the ◷ clock — round-trips through Y
   // clear `gen`'s timeout → it falls back to the flow default; the clock goes bare.
   await page.keyboard.press("Escape"); // close shell's panel before switching nodes
   await dwell(page, 300);
-  await nodeByName(page, "gen").click();
+  await nodeByName(page, "gen").dblclick();
   await expect(clock).toHaveText(/1200s/);
   await clock.click();
   await box.fill("");

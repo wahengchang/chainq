@@ -57,7 +57,7 @@ test("editor runs a write node: panel shows path/mode, output is the written con
   await expect(out.locator(".ntype")).toContainText("write"); // ⤓ write chip
 
   // panel shows the write type editor (path + mode)
-  await out.click();
+  await out.dblclick();
   await expect(page.locator("#tfPath")).toHaveValue("result.txt");
   await expect(page.locator("#tfMode")).toBeVisible();
   await dwell(page, 700);

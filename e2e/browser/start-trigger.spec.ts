@@ -51,7 +51,7 @@ test("editor: a new chain opens with a start trigger (input) feeding the first n
   // the start node is an `input` trigger — open it. A trigger has no prompt and no
   // upstream, so both columns are hidden; the designed default ships a `topic`
   // input field, defined right here in the panel (no raw YAML needed).
-  await nodeByName(page, "start").click();
+  await nodeByName(page, "start").dblclick();
   await dwell(page, 600);
   await expect(page.locator("#pnPromptCol")).toHaveClass(/hidden/); // trigger → no prompt
   await expect(page.locator("#pnFromWrap")).toHaveClass(/hidden/);  // trigger → no `from`

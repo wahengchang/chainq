@@ -71,7 +71,7 @@ test("clicking an earlier output inserts a cross-step reference, leaving from: u
 
   // open `describe` — its prompt already references {{ $json }} (the primary, split)
   const describe = page.locator(".node", { has: page.locator(".nn", { hasText: /^describe$/ }) });
-  await describe.click();
+  await describe.dblclick();
   await expect(page.locator("#modal .modal")).toBeVisible();
   await page.waitForTimeout(slow);
 
@@ -109,7 +109,7 @@ test("clicking an earlier output inserts a cross-step reference, leaving from: u
   await page.waitForTimeout(slow);
   await page.reload();
   await expect(describe).not.toHaveClass(/invalid/); // ancestor ref validates clean
-  await describe.click();
+  await describe.dblclick();
   await expect(page.locator("#pnPrompt")).toHaveValue('describe {{ $json }}{{ $node["cities"] }}');
   await expect(page.locator("#pnWire .chip", { hasText: "cities" })).toHaveCount(0); // from still untouched
   await expect(page.locator("#pnEarlier .infield", { hasText: "cities" })).toHaveCount(1);
