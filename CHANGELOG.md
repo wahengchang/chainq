@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.1.14
+
+- **Editor: pan, multi-select move, and collapsible output — three canvas-readability wins so a
+  big graph stays usable.**
+  - **Drag the empty canvas to pan** the view (cursor grab/grabbing). Drags on nodes (move) and
+    on ports (connect) are untouched.
+  - **Shift+click nodes to build a selection group** (accent ring, no panel opens); dragging any
+    member moves the whole group by the same delta and saves once via `/api/layout`. A plain
+    click drops the group and opens the panel.
+  - **A finished node's output is hidden by default** so a tall result no longer buries its
+    neighbours. The ×N items badge doubles as a show/hide toggle (▸/▾ when there's no count) —
+    click to reveal, click again to hide.
+
+  Covered by `e2e/browser/canvas-interactions.spec.ts`.
+
 ## 0.1.13
 
 - **Editor: run buttons renamed to match n8n — "Execute step" / "Force execute".** The node
