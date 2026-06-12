@@ -92,15 +92,15 @@ test("editor: cache saves earlier nodes — 2nd run is instant, not a full re-ru
   expect(warm).toBeLessThan(cold / 2);
   console.log(`\n  cold run (all 3 ran):   ${cold.toFixed(0)}ms\n  warm run (all cached):  ${warm.toFixed(0)}ms\n`);
 
-  // ── edit ONLY gamma, then ▷ Run to here: alpha+beta come from cache (instant),
-  //    only gamma actually runs (~1.2s, not ~3.6s) ──────────────────────────────
+  // ── edit ONLY gamma, then ▷ Execute step: alpha+beta come from cache (instant),
+  //    only gamma actually runs (~0.8s, not ~2.4s) ──────────────────────────────
   await page.locator(".node", { has: page.locator(".nn", { hasText: /^gamma$/ }) }).click();
   await expect(page.locator("#modal .modal")).toBeVisible();
   await page.locator("#pnPrompt").fill("gamma EDITED {{ $json }}");
   await expect(page.locator("#pnDirty")).toBeVisible(); // ● 未儲存草稿
 
   const partialStart = await page.evaluate(() => performance.now());
-  await page.getByRole("button", { name: "Run to here" }).click();
+  await page.getByRole("button", { name: "Execute step" }).click();
   // gamma settles as freshly ran; alpha+beta were never re-run (still cached).
   await expect(page.locator("#pnOutStatus")).toContainText("ran", { timeout: 8000 });
   const partial = (await page.evaluate(() => performance.now())) - partialStart;
