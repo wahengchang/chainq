@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.13
+
+- **Editor: run buttons renamed to match n8n — "Execute step" / "Force execute".** The node
+  panel's `▷ Run to here` / `↻ re-run` (and the `▷` / `↻` icons on each canvas card) are now
+  **▷ Execute step** / **↻ Force execute**, with tooltips that spell out the cache behavior:
+  Execute step runs the node plus the upstream it needs and reuses cache (only what changed
+  runs — n8n's partial execution); Force execute ignores cache and really calls the model.
+  Wording only — the partial-execution behavior is unchanged.
+
 ## 0.1.12
 
 - **Timeout is now yours to set — a long `ai` step no longer dies at a hardcoded limit.** An `ai`
