@@ -63,8 +63,10 @@ test("editor runs a write node: panel shows path/mode, output is the written con
   await dwell(page, 700);
   await page.keyboard.press("Escape");
 
-  // run the chain → the write node writes the content and shows it as output
+  // run the chain → the write node writes the content; its output is collapsed by
+  // default (#40), so expand it via the ×N badge before reading the card output.
   await page.getByRole("button", { name: /Run all/ }).click();
+  await out.locator(".xn.tog").click();
   await expect(out.locator(".nodeout")).toContainText("hello-from-write");
   await dwell(page, 1200);
 });

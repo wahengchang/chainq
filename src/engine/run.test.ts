@@ -2,7 +2,7 @@
 // echoes the rendered prompt back as output). No API key, no network.
 
 import { describe, it, expect } from "vitest";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, existsSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Runner } from "./run.js";
@@ -155,6 +155,30 @@ describe("Runner — G2 fake model", () => {
     const res = await new Runner(flow, { chainDir: d, timeoutMs: 100 }).runChain();
     expect(res[0]!.status).toBe("failed");
     expect(res[0]!.error).toMatch(/timed out/);
+  });
+
+  it("an aborted run stops the chain — the queued downstream node never runs", async () => {
+    const d = dir();
+    const ac = new AbortController();
+    // slow sleeps; `after` would `touch marker` once slow finishes. Abort mid-sleep →
+    // the runner kills slow's child and never starts `after`, so the marker stays absent.
+    // (This is the engine-level guarantee behind the UI Stop button; the web wiring
+    // res.on("close") → ac.abort() is exercised by e2e/browser/stop-run.spec.ts.)
+    const flow: Flow = {
+      profiles: cat,
+      steps: {
+        slow: { id: "slow", type: "cmd", run: "sleep 1" },
+        after: { id: "after", type: "cmd", from: "slow", run: "touch marker.txt" },
+      },
+    };
+    // control: without the abort, `after` DOES run and creates the marker (not vacuous).
+    await new Runner({ ...flow, steps: { after: { id: "after", type: "cmd", run: "touch marker.txt" } } }, { chainDir: dir(), baseDir: d }).runChain();
+    expect(existsSync(join(d, "marker.txt"))).toBe(true);
+    rmSync(join(d, "marker.txt"));
+    // abort 150ms into slow's 1s sleep → `after` must never run.
+    setTimeout(() => ac.abort(), 150);
+    await new Runner(flow, { chainDir: d, baseDir: d, signal: ac.signal }).runChain().catch(() => {});
+    expect(existsSync(join(d, "marker.txt"))).toBe(false);
   });
 
   it("a node's own `timeout` (seconds) caps it — exceeding fails as timed out", async () => {

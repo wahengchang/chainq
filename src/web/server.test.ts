@@ -6,6 +6,7 @@ import { existsSync, mkdtempSync, writeFileSync, readFileSync, mkdirSync, rmSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AddressInfo } from "node:net";
+import { request as httpRequest } from "node:http";
 import { buildServer } from "./server.js";
 
 function listen(dir: string): Promise<{ base: string; close: () => void }> {
@@ -412,7 +413,14 @@ describe("web server", () => {
   // slow `cmd` (sleep) followed by a `write` whose marker file is the witness. If
   // the abort were ignored, `write` would run when `sleep` finishes and the marker
   // would appear; it must not.
-  it("aborting /api/run mid-flight stops the chain — queued downstream never runs (offline)", async () => {
+  //
+  // skipIf(bun): this exercises the HTTP wiring (client disconnect → res.on("close")
+  // → ac.abort()). Under Bun's node:http shim a peer disconnect does NOT emit the
+  // server-side "close" event, so the cancel never fires and the test can't run there;
+  // it passes under Node (which CI uses). The engine guarantee — an aborted run never
+  // starts the queued downstream — is covered runtime-agnostically by run.test.ts
+  // ("an aborted run stops the chain"); the real browser Stop path by stop-run.spec.ts.
+  it.skipIf(!!process.versions.bun)("aborting /api/run mid-flight stops the chain — queued downstream never runs (offline)", async () => {
     const dir = mkdtempSync(join(tmpdir(), "chain-web-stop-"));
     const { base, close } = await listen(dir);
     const flow = join(dir, "stop.yaml");
@@ -435,16 +443,23 @@ describe("web server", () => {
       expect(existsSync(marker)).toBe(true);
       rmSync(marker);
 
-      // stop: abort while `slow` is still sleeping → `after` must never run.
-      const ctrl = new AbortController();
-      const run = fetch(base + "/api/run", {
-        method: "POST",
-        body: JSON.stringify({ path: flow }),
-        signal: ctrl.signal,
-      }).then((r) => r.text()).catch(() => "");
-      await delay(300); // inside slow's 1s sleep
-      ctrl.abort();
-      await run; // request settles (aborted)
+      // stop: DESTROY the socket while `slow` is still sleeping → `after` must never run.
+      // We use a raw http.request + req.destroy() (not fetch + AbortController): under
+      // Node/undici, aborting a fetch whose body is read via .text() just stops the
+      // client read and DRAINS the socket in the background, so the server's
+      // res.on("close") only fires at the normal end (writableFinished=true) and the
+      // run is never cancelled. Destroying the socket is what a browser's Stop does —
+      // it drops the connection, so res "close" fires mid-flight (writableFinished=false).
+      const u = new URL(base + "/api/run");
+      await new Promise<void>((resolve) => {
+        const req = httpRequest(
+          { hostname: u.hostname, port: u.port, path: u.pathname, method: "POST", headers: { "content-type": "application/json" }, agent: false },
+          (resp) => { resp.on("data", () => {}); resp.on("error", () => {}); }, // consume the stream so the socket is live
+        );
+        req.on("error", () => {}); // socket destroy → ECONNRESET on the client; expected
+        req.end(JSON.stringify({ path: flow }));
+        setTimeout(() => { req.socket?.destroy(); resolve(); }, 300); // hard-drop the TCP socket inside slow's 1s sleep
+      });
       await delay(1200); // past when `after` WOULD have written had we not stopped
       expect(existsSync(marker)).toBe(false);
 
