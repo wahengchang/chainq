@@ -72,7 +72,7 @@ test("editor force-deletes a fan-out middle node: it goes, BOTH downstream leave
   await dwell(page, 800);
 
   // delete the middle node — it feeds BOTH leaves
-  await mid.click();
+  await mid.dblclick();
   await expect(page.locator("#pnId")).toHaveValue("mid");
   await dwell(page, 700);
   await page.getByRole("button", { name: /^delete$/ }).click();

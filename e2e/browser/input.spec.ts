@@ -62,7 +62,7 @@ steps:
     const out = page.locator(".node", { has: page.locator(".nn", { hasText: /^out$/ }) });
     await expect(seed.locator(".ntype")).toContainText("input");
 
-    await seed.click();
+    await seed.dblclick();
     const field = page.locator('.paramin[data-param="topic"]');
     await expect(field).toBeVisible();
     await dwell(page, 600);
@@ -102,7 +102,7 @@ steps:
     const out = page.locator(".node", { has: page.locator(".nn", { hasText: /^out$/ }) });
 
     // the form draws a typed widget per param: number → number input
-    await seed.click();
+    await seed.dblclick();
     await expect(page.locator('.paramin[data-param="count"]')).toHaveAttribute("type", "number");
     await expect(page.locator("#pnInput")).toContainText("*"); // required marker on `name`
     await dwell(page, 800);
@@ -115,7 +115,7 @@ steps:
     await dwell(page, 900);
 
     // fill required name + a typed number, run → output reflects, number coerced
-    await seed.click();
+    await seed.dblclick();
     await page.locator('.paramin[data-param="name"]').fill("ada");
     await page.locator('.paramin[data-param="count"]').fill("9");
     await dwell(page, 500);

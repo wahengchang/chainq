@@ -78,7 +78,7 @@ test("editor Shift+click multi-selects and drags the group together", async ({ p
   await c.click({ modifiers: ["Shift"] });
   await expect(b).toHaveClass(/selsel/);
   await expect(c).toHaveClass(/selsel/);
-  await expect(page.locator("#modal")).toBeHidden();
+  await expect(page.locator(".modal")).toBeHidden();
   await dwell(page, 400);
 
   const b0 = (await b.boundingBox())!;
@@ -97,25 +97,64 @@ test("editor Shift+click multi-selects and drags the group together", async ({ p
   expect(c1.y - c0.y).toBeGreaterThan(50);
 });
 
-test("editor drag on the empty canvas pans (scrolls) the view", async ({ page }) => {
+test("editor single-click selects a node; double-click opens the editor", async ({ page }) => {
+  await page.goto(baseURL);
+  const b = nodeByName(page, "b");
+
+  // single click = SELECT (ring), the editor panel does NOT open (.modal is the card)
+  await b.click();
+  await expect(b).toHaveClass(/selsel/);
+  await expect(page.locator(".modal")).toBeHidden();
+  await dwell(page, 400);
+
+  // double click = open the editor panel for that node
+  await b.dblclick();
+  await expect(page.locator(".modal")).toBeVisible();
+  await expect(page.locator("#pnId")).toHaveValue("b");
+});
+
+test("editor drag on the empty canvas marquee-selects the nodes it touches", async ({ page }) => {
+  await page.goto(baseURL);
+  const a = nodeByName(page, "a"), b = nodeByName(page, "b");
+  const ab = (await a.boundingBox())!, bb = (await b.boundingBox())!;
+
+  // start in the empty band BELOW the chain row, drag a box up across a and b.
+  const sx = Math.min(ab.x, bb.x) + 6, sy = ab.y + ab.height + 50;
+  const ex = Math.max(ab.x + ab.width, bb.x + bb.width) - 6, ey = ab.y - 8;
+  await page.mouse.move(sx, sy);
+  await page.mouse.down();
+  await page.mouse.move((sx + ex) / 2, (sy + ey) / 2, { steps: 4 });
+  await page.mouse.move(ex, ey, { steps: 6 });
+  await page.mouse.up();
+  await dwell(page, 400);
+
+  await expect(a).toHaveClass(/selsel/);
+  await expect(b).toHaveClass(/selsel/);
+  await expect(page.locator(".modal")).toBeHidden(); // marquee never opens the panel
+});
+
+test("editor Space+drag pans (scrolls) the view; plain drag does not", async ({ page }) => {
   await page.goto(baseURL);
   const stage = page.locator("#nodeView");
 
   // zoom in so the graph overflows the viewport (something to scroll to).
   const zin = page.locator('.zoomctl button[title="zoom in (⌘ +)"]');
   for (let i = 0; i < 6; i++) await zin.click();
-  await dwell(page, 400);
+  await dwell(page, 300);
 
   const box = (await stage.boundingBox())!;
-  const before = await stage.evaluate((el) => el.scrollLeft);
-  // drag from the empty band BELOW the chain (it sits at the top of the graph), leftward.
   const px = box.x + box.width * 0.4, py = box.y + box.height * 0.7;
+  const before = await stage.evaluate((el) => el.scrollLeft);
+
+  // hold Space → the empty-canvas drag pans instead of marquee-selecting.
   await page.mouse.move(px, py);
+  await page.keyboard.down("Space");
   await page.mouse.down();
   await page.mouse.move(px - 240, py, { steps: 8 });
   await page.mouse.up();
-  await dwell(page, 400);
+  await page.keyboard.up("Space");
+  await dwell(page, 300);
 
   const after = await stage.evaluate((el) => el.scrollLeft);
-  expect(after).toBeGreaterThan(before); // empty-canvas drag scrolled the view
+  expect(after).toBeGreaterThan(before);
 });

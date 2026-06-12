@@ -114,11 +114,12 @@
   .xn.tog{cursor:pointer}
   .xn.tog:hover{background:color-mix(in srgb,var(--accent) 14%,transparent)}
   .xn.tog.on{background:color-mix(in srgb,var(--accent) 22%,transparent)}
-  /* Shift+click multi-selection ring (move several nodes together) */
+  /* selection ring (single-click / Shift+click / marquee) */
   .node.selsel{outline:2px solid var(--accent);outline-offset:2px}
-  /* drag empty canvas to pan */
-  .stage{cursor:grab}
+  /* drag empty canvas = marquee select; hold Space to pan instead */
+  .stage.spacegrab{cursor:grab}
   .stage.panning{cursor:grabbing}
+  .marquee{position:fixed;z-index:40;pointer-events:none;border:1px solid var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent)}
   .glyph{width:14px;text-align:center}
   .g-ran{color:var(--ran)} .g-cached{color:var(--cached)} .g-failed{color:var(--bad)} .g-skipped{color:var(--dim)} .g-pending{color:var(--dim)}
   .npreview{color:var(--dim);font-size:11px;margin-top:6px;max-height:32px;overflow:hidden}

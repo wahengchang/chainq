@@ -116,7 +116,7 @@ test("panel: a running node shows 'running', never the previous run's stale outp
   await expect(page.locator(".node.ran, .node.cached")).toHaveCount(3, { timeout: 12000 });
 
   const beta = page.locator(".node", { has: page.locator(".nn", { hasText: /^beta$/ }) });
-  await beta.click();
+  await beta.dblclick();
   await expect(page.locator("#modal .modal")).toBeVisible();
   // pre-condition: the panel shows beta's PREVIOUS output (the stale result)
   await expect(page.locator("#pnOut")).toContainText("beta alpha");

@@ -44,7 +44,7 @@ test.afterAll(() => proc?.kill());
 
 test("editor: define an input node's fields from the panel, no raw YAML", async ({ page }) => {
   await page.goto(baseURL);
-  await nodeByName(page, "start").click();
+  await nodeByName(page, "start").dblclick();
   await dwell(page, 600);
 
   // empty state: no field rows yet, but a clear "+ add field" affordance
@@ -68,7 +68,7 @@ test("editor: define an input node's fields from the panel, no raw YAML", async 
   // (proving the saved definition drives the run form).
   await page.getByRole("button", { name: /close/ }).click();
   await dwell(page, 400);
-  await nodeByName(page, "start").click();
+  await nodeByName(page, "start").dblclick();
   await dwell(page, 400);
   await expect(page.locator("#pnParams .paramrow .pf-name")).toHaveValue("topic");
   await expect(page.locator("#pnParams .paramrow .pf-def")).toHaveValue("chains");

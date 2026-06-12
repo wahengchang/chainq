@@ -43,7 +43,7 @@ test.afterAll(() => proc?.kill());
 
 test("editor sets an ai node's output schema via the two-level format selector (offline)", async ({ page }) => {
   await page.goto(baseURL);
-  await nodeByName(page, "gen").click();
+  await nodeByName(page, "gen").dblclick();
   // schema describes the OUTPUT shape → it lives in the output column as a two-level
   // editor: pick an OUTPUT FORMAT first (Text/JSON/List), only JSON exposes fields.
   const editor = page.locator("#pnSchema");
