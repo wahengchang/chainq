@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.1.15
+
+- **Editor: canvas interaction v2 — marquee select, Space-to-pan, click-selects / double-click-edits.**
+  Reworks the canvas gestures toward the Figma/n8n model so a big graph is easy to select and
+  navigate (supersedes the 0.1.14 drag-to-pan + Shift+click model):
+  - **Drag the empty canvas = rubber-band marquee select** — every node the box touches joins the
+    selection; **Shift+drag** adds to it; a plain press clears it. Multi-select is now grab-a-box,
+    not one Shift+click at a time.
+  - **Pan moved off plain-drag: hold Space then drag to pan** (cursor grab/grabbing); mouse/trackpad
+    scroll still pans natively. Space is ignored while a field is focused, so it still types in the
+    prompt editor.
+  - **A single click selects a node** (ring, no panel); a **double click opens the editor**.
+
+  Covered by `e2e/browser/canvas-interactions.spec.ts` (marquee + Space-pan + single/double-click).
+
 ## 0.1.14
 
 - **Editor: pan, multi-select move, and collapsible output — three canvas-readability wins so a

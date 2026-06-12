@@ -1,6 +1,6 @@
 {
   "name": "@wahengchang2023/chainq",
-  "version": "0.1.14",
+  "version": "0.1.15",
   "type": "module",
   "description": "Run multi-step prompt chains on local CLI models, defined in one YAML file.",
   "keywords": [
