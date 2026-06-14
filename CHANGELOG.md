@@ -15,6 +15,13 @@
 
   Covered by `e2e/browser/canvas-interactions.spec.ts` (marquee + Space-pan + single/double-click).
 
+- **New `examples/generate-json.yaml` — a copy-paste recipe for producing a JSON file.** input →
+  three fields → an `ai` step with `schema` assembles them into a validated JSON object → a `write`
+  node lands it as `out/result.json`. Shows the reliable way to emit JSON: let `schema` parse and
+  validate the object instead of hand-building a `{ }` string (which breaks on quotes/newlines).
+  How-to in `docs/scenario/creation/create-write.md` (產生 JSON 檔); covered by
+  `e2e/browser/generate-json.spec.ts`.
+
 ## 0.1.14
 
 - **Editor: pan, multi-select move, and collapsible output — three canvas-readability wins so a
