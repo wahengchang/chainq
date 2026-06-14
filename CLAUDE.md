@@ -1,3 +1,49 @@
+## 專案是什麼
+
+**chainq** — 在「一個 YAML 檔」裡定義多步驟 prompt chain,跑在本機 CLI 模型上(`claude -p`、`codex -m`),不用 API key、不走 HTTP。可從終端機跑,也可開視覺編輯器拖拉。一個 flow 就是一張由 step(node)組成的小型 DAG。
+
+## 指令(本機是 bun-only,node/npm/npx/tsc/gh 都不在非互動 shell 的 PATH)
+
+> ⚠️ 不要照 `package.json` 直接打 `npm run …`——腳本內部會再呼叫 npm 而失敗。一律用 bun。詳見 memory `toolchain-quirks`。
+
+```bash
+bun run dev <args>          # 跑 CLI(= tsx src/cli/index.ts),例:bun run dev run flow.yaml
+bun run ui flow.yaml        # 開視覺編輯器(127.0.0.1 隨機埠)
+bun run test                # 單元測試(vitest)
+bun run e2e                 # CLI e2e(vitest.e2e.config.ts)
+bun run build               # 編譯到 dist/(含複製 app.html / ui/*.js)
+bunx tsc --noEmit                          # typecheck(主程式)
+bunx tsc -p src/web/ui/tsconfig.json       # typecheck(UI)
+
+# Playwright UI e2e:spawn 出的 tsx 需要 node,先補 PATH 再跑
+export PATH="$HOME/.nvm/versions/node/v24.13.1/bin:$PATH"
+SLOWMO=850 node_modules/.bin/playwright test e2e/browser/<spec>.spec.ts --headed
+
+# 開 PR(gh 不在 PATH)
+/opt/homebrew/bin/gh pr create …
+```
+
+## 架構
+
+```
+src/engine/   ← 唯一真相來源:純引擎(parse / validate / DAG / cache / run)。
+              公開介面只走 engine/index.ts;CLI 與 UI 都從這裡 import,
+              絕不碰內部模組、絕不另寫一套(「永不寫兩套」)。
+src/cli/      ← 薄殼:run · validate · ls · init · new · ui。無引擎邏輯。
+src/web/      ← 本機 web server(Node 內建 http,零依賴,綁 127.0.0.1)
+              + 單頁編輯器:server.ts、app.html、ui/app.js。
+```
+
+- **Flow = 一個 YAML 檔**:具名 steps + model profiles。**node 的 id 就是 YAML key**。畫布座標不進 flow,另存 `.chain/layout.json`。
+- **Step 種類**:`ai` · `cmd` · `assemble`(逐 item)· `splitOut` · `aggregate` · `merge`(整批 collection 運算)· `input`(觸發源)· `write`。沿用 n8n 的 items 模型。**刻意不做 `loop` 容器**(splitOut→鏈→aggregate 已可表達,見 idea-gap.md)。
+
+## 眉角(Gotchas)
+
+- **改了 `app.html` / `ui/*.js` 一定要重啟 server**:server 啟動時只讀一次 `APP_HTML`,不重啟就是演舊版。
+- **`cmd` node 預設不可快取**(VOLATILE,每次重跑);要可快取必須宣告 `inputs:`(內容雜湊折進 cache key)。
+- **`run` 預設整條重跑**;`--cache` 才重用未變動的 node 輸出。
+- **UI e2e 慣例**:每個 spec 自己 spawn `tsx CLI ui flow.yaml`(帶 `CHAIN_NO_OPEN=1`)→ 永遠讀最新 app.html;切換 node 面板前先 `page.keyboard.press("Escape")`,否則開著的 modal 會攔截點擊。
+
 ## 工作原則
 
 0. **你只說繁體中文。**
