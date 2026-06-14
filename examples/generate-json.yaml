@@ -1,0 +1,74 @@
+# 產生 JSON 檔 範例：把多條結果組成一個 JSON 物件，寫成 .json 檔。
+#
+# 重點是「怎麼穩定產出合法 JSON 檔」這個能力 —— 下面的翻譯只是拿來填欄位的示範內容，
+# 你可以換成任何要組進 JSON 的資料（摘要、分類、抽取結果……）。
+#
+#   trigger(input) ─┬─→ field_a (assemble，原樣帶值)─┐
+#                   ├─→ field_b (ai，產一個值)────────┤
+#                   └─→ field_c (ai，產一個值)────────┤
+#                                                     └─→ to_json(ai+schema，組成 JSON 物件)─→ result(write 寫成 .json)
+#
+# 產生合法 JSON 的兩個關鍵：
+#   1) 用 ai + schema：to_json 宣告 {original, zh_tw, japanese} 三個字串欄位，
+#      模型輸出會被解析成「真正的 JSON 物件」並驗證（壞掉自動重試一次）。
+#      ——直接把文字拼進 { } 會因引號/換行壞掉，schema 這條路才穩。
+#   2) 用 write 節點落地：上游已是 JSON 物件，path 設成 .json，寫出來就是合法 JSON 檔。
+#
+# 跑（field_b/field_c/to_json 會呼叫真實模型，需先 claude login）：
+#   chainq run examples/generate-json.yaml
+# 或在編輯器裡開：
+#   chainq ui examples/generate-json.yaml
+#
+# 跑完會在 out/result.json 看到：
+#   {"original":"...","zh_tw":"...","japanese":"..."}
+profiles:
+  default: { cmd: 'claude -p' }
+
+steps:
+  # 觸發點：要組進 JSON 的原始資料（執行時可用 --input text=... 覆蓋）
+  trigger:
+    type: input
+    params:
+      text:
+        type: string
+        default: 'The early bird catches the worm.'
+
+  # 欄位 A（original）：assemble 不呼叫模型，純粹把原值原樣帶下去
+  field_a:
+    type: assemble
+    from: trigger
+    prompt: '{{ $json.text }}'
+
+  # 欄位 B（zh_tw）：呼叫模型產一個值（這裡示範翻成繁中）
+  field_b:
+    type: ai
+    from: trigger
+    prompt: 'Translate the following text to Traditional Chinese (zh-TW). Output ONLY the translation, no quotes, no explanation: {{ $json.text }}'
+
+  # 欄位 C（japanese）：呼叫模型產另一個值（這裡示範翻成日文）
+  field_c:
+    type: ai
+    from: trigger
+    prompt: 'Translate the following text to Japanese. Output ONLY the translation, no quotes, no explanation: {{ $json.text }}'
+
+  # 核心：把三條結果組成一個 JSON 物件。schema 保證輸出是合法 JSON。
+  to_json:
+    type: ai
+    from: [field_a, field_b, field_c]
+    schema:
+      original: string
+      zh_tw: string
+      japanese: string
+    prompt: |
+      Build a JSON object with EXACTLY these three string fields, copying each value verbatim (do NOT re-translate or modify):
+        original: {{ $('field_a') }}
+        zh_tw: {{ $('field_b') }}
+        japanese: {{ $('field_c') }}
+      Return ONLY the JSON object, no prose, no code fences.
+
+  # 產出：上游已是 JSON 物件，write 直接寫成合法 JSON 檔
+  result:
+    type: write
+    from: to_json
+    path: out/result.json
+    mode: overwrite

@@ -1,5 +1,5 @@
-// Browser E2E demo — examples/translate-json.yaml.
-//   trigger → original / zh_tw / japanese → combine(ai+schema) → result(write .json)
+// Browser E2E demo — examples/generate-json.yaml.
+//   trigger → field_a / field_b / field_c → to_json(ai+schema) → result(write .json)
 // Drives the REAL editor: opens the shipped example, runs the whole chain with the
 // real model, and proves the `write` node produced a valid JSON file on disk.
 // Title carries "editor" so `npm run e2e:ui:demo` (-g editor) picks it up.
@@ -16,13 +16,13 @@ const here = dirname(fileURLToPath(import.meta.url));
 const REPO = join(here, "..", "..");
 const TSX = join(REPO, "node_modules", ".bin", "tsx");
 const CLI = join(REPO, "src", "cli", "index.ts");
-const EXAMPLE = join(REPO, "examples", "translate-json.yaml");
+const EXAMPLE = join(REPO, "examples", "generate-json.yaml");
 
 const haveClaude = spawnSync("which", ["claude"]).status === 0;
 
 let dir: string;
 function startServer(): Promise<{ url: string; proc: ChildProcess }> {
-  dir = mkdtempSync(join(tmpdir(), "chain-tjson-"));
+  dir = mkdtempSync(join(tmpdir(), "chain-genjson-"));
   copyFileSync(EXAMPLE, join(dir, "flow.yaml")); // run the SHIPPED example verbatim
   return new Promise((resolve, reject) => {
     const proc = spawn(TSX, [CLI, "ui", "flow.yaml"], { cwd: dir, env: { ...process.env, CHAIN_NO_OPEN: "1" } });
@@ -43,23 +43,23 @@ test.beforeAll(async () => {
 });
 test.afterAll(() => proc?.kill());
 
-test("editor runs translate→json: write node emits a valid JSON file (real model)", async ({ page }) => {
+test("editor generates a JSON file: write node emits valid JSON to disk (real model)", async ({ page }) => {
   test.skip(!haveClaude, "`claude` CLI not found on PATH");
   test.setTimeout(180000); // three real model calls
 
   await page.goto(baseURL);
   await expect(page.locator(".node").first()).toBeVisible();
 
-  // the three parallel branches + the write 成品 are all on the canvas
-  await expect(nodeByName(page, "original")).toBeVisible();
-  await expect(nodeByName(page, "zh_tw")).toBeVisible();
-  await expect(nodeByName(page, "japanese")).toBeVisible();
+  // the three field branches + the write 成品 are all on the canvas
+  await expect(nodeByName(page, "field_a")).toBeVisible();
+  await expect(nodeByName(page, "field_b")).toBeVisible();
+  await expect(nodeByName(page, "field_c")).toBeVisible();
   const result = nodeByName(page, "result");
   await expect(result.locator(".ntype")).toContainText("write");
 
   // open the write node → it targets a .json file
   await result.dblclick();
-  await expect(page.locator("#tfPath")).toHaveValue("out/translations.json");
+  await expect(page.locator("#tfPath")).toHaveValue("out/result.json");
   await dwell(page, 800);
   await page.keyboard.press("Escape");
 
@@ -78,7 +78,7 @@ test("editor runs translate→json: write node emits a valid JSON file (real mod
   await dwell(page, 1500);
 
   // prove it on disk: the written file parses as JSON with the three fields
-  const file = join(dir, "out", "translations.json");
+  const file = join(dir, "out", "result.json");
   expect(existsSync(file), `${file} should exist`).toBe(true);
   const parsed = JSON.parse(readFileSync(file, "utf8"));
   expect(parsed).toHaveProperty("original");
