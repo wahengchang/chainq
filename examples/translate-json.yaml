@@ -1,0 +1,73 @@
+# 翻譯 → 產生 JSON 檔 範例：
+#
+#   trigger ──┬─→ original（原文，不翻譯）─┐
+#             ├─→ zh_tw（翻成繁中）────────┤
+#             └─→ japanese（翻成日文）─────┤
+#                                          └─→ combine（ai+schema，組成 JSON 物件）─→ result（write 寫成 .json 檔）
+#
+# 重點：
+#   • trigger 是 input 節點，帶一個 text 參數（可在執行時覆蓋）。
+#   • original 用 assemble（純資料、不呼叫模型），把原文原樣帶下去。
+#   • zh_tw / japanese 各自呼叫模型翻譯。
+#   • combine 用 ai + schema：宣告 {original, zh_tw, japanese} 三個字串欄位，
+#     模型輸出會被解析成「真正的 JSON 物件」並驗證（壞掉會自動重試一次）。
+#   • result 是 write 節點：上游已是 JSON 物件，寫出來就是合法 JSON 檔。
+#
+# 跑（zh_tw/japanese/combine 會呼叫真實模型，需先 claude login）：
+#   chainq run examples/translate-json.yaml
+# 或在編輯器裡開：
+#   chainq ui examples/translate-json.yaml
+#
+# 跑完會在 out/translations.json 看到：
+#   {"original":"...","zh_tw":"...","japanese":"..."}
+profiles:
+  default: { cmd: 'claude -p' }
+
+steps:
+  # 觸發點：要翻譯的原文（執行時可用 --input text=... 覆蓋）
+  trigger:
+    type: input
+    params:
+      text:
+        type: string
+        default: 'The early bird catches the worm.'
+
+  # 2.1 原文：assemble 不呼叫模型，純粹把原文原樣帶下去
+  original:
+    type: assemble
+    from: trigger
+    prompt: '{{ $json.text }}'
+
+  # 2.2 繁體中文翻譯
+  zh_tw:
+    type: ai
+    from: trigger
+    prompt: 'Translate the following text to Traditional Chinese (zh-TW). Output ONLY the translation, no quotes, no explanation: {{ $json.text }}'
+
+  # 2.3 日文翻譯
+  japanese:
+    type: ai
+    from: trigger
+    prompt: 'Translate the following text to Japanese. Output ONLY the translation, no quotes, no explanation: {{ $json.text }}'
+
+  # 3 合流：把三條結果組成一個 JSON 物件（schema 保證輸出是合法 JSON）
+  combine:
+    type: ai
+    from: [original, zh_tw, japanese]
+    schema:
+      original: string
+      zh_tw: string
+      japanese: string
+    prompt: |
+      Build a JSON object with EXACTLY these three string fields, copying each value verbatim (do NOT re-translate or modify):
+        original: {{ $('original') }}
+        zh_tw: {{ $('zh_tw') }}
+        japanese: {{ $('japanese') }}
+      Return ONLY the JSON object, no prose, no code fences.
+
+  # 產出：上游已是 JSON 物件，write 直接寫成合法 JSON 檔
+  result:
+    type: write
+    from: combine
+    path: out/translations.json
+    mode: overwrite
