@@ -37,6 +37,7 @@ import {
   validateRunInput,
   type Item,
   type NodeType,
+  type Flow,
 } from "../engine/index.js";
 import { NEW_FLOW_TEMPLATE } from "../cli/new.js";
 
@@ -399,11 +400,20 @@ async function handle(req: IncomingMessage, res: ServerResponse, opts: WebOption
       force?: boolean;
     };
     const list = Array.isArray(from) ? from.filter((x) => typeof x === "string" && x) : [];
-    // `force` is for REMOVAL from the canvas (the wire ×): drop the edge even when a
-    // downstream prompt still references the now-orphaned node — it comes back as a
-    // `warnings` ⚠ to rewire, same as delete-node. Adding a wire never sets force, so
-    // drag-to-connect still rejects cycles / new breakage (壞不落地).
-    return editFlow(res, resolve(String(file)), (doc) => setFrom(doc, String(node), list), { force: !!force });
+    // `force` is for REMOVAL from the canvas (the wire ×): drop an edge even when a
+    // downstream prompt still references the now-orphaned node — it returns as a
+    // `warnings` ⚠ to rewire, same as delete-node. Honor force ONLY when the new list
+    // ADDS no edge (every id was already an upstream) → a pure removal/reorder can't
+    // introduce a cycle. Adding an edge always stays strict, so neither drag-to-connect
+    // nor a hand-crafted {force:true} POST can write a cycle past 壞不落地.
+    const removalOnly = (before: Flow) => {
+      const cur = before.steps[String(node)];
+      const ups = cur ? upstreamsOf(cur) : [];
+      return list.every((u) => ups.includes(u));
+    };
+    return editFlow(res, resolve(String(file)), (doc) => setFrom(doc, String(node), list), {
+      force: force ? removalOnly : false,
+    });
   }
 
   // Delete a node (comment-preserving). Always succeeds (force): if a downstream
@@ -595,21 +605,31 @@ function introducedErrors(originalYaml: string, mutatedYaml: string): FlowError[
 // introduces validation errors — they come back as `warnings` for the editor to
 // surface (red ⚠ nodes) — but a mutation that breaks YAML *parsing* is always
 // rejected (壞不落地 still holds for corruption).
+// `force` may be a predicate evaluated against the PRE-edit flow (inside the lock),
+// so a caller can gate force on the edit's SHAPE (e.g. removal-only) rather than
+// blanket-allowing every introduced error. An unparseable original gives no basis to
+// judge the shape → fall back to strict (no force).
 function editFlow(
   res: ServerResponse,
   fp: string,
   mutate: (doc: Document) => void,
-  opts: { force?: boolean } = {},
+  opts: { force?: boolean | ((before: Flow) => boolean) } = {},
 ): Promise<void> {
   return withFlow(fp, () => {
     const original = readFileSync(fp, "utf8");
     const doc = parseDocument(original);
+    let force = false;
+    if (typeof opts.force === "function") {
+      try { force = opts.force(parseFlow(original)); } catch { force = false; }
+    } else {
+      force = !!opts.force;
+    }
     mutate(doc);
     const introduced = introducedErrors(original, String(doc));
     if (introduced === "parse") {
       return json(res, 400, { errors: [{ node: "(parse)", message: "edit would break the YAML" }] });
     }
-    if (introduced.length && !opts.force) return json(res, 400, { errors: introduced });
+    if (introduced.length && !force) return json(res, 400, { errors: introduced });
     atomicWrite(fp, String(doc));
     return json(res, 200, introduced.length ? { ok: true, warnings: introduced } : { ok: true });
   });
