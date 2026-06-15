@@ -22,5 +22,12 @@ reports/
 # local dev workspace for chain ui
 playground/
 
+# generated example output (write nodes land here, e.g. examples/generate-json.yaml)
+examples/out/
+out/
+
+# local scratch flow dir
+/test/
+
 # Claude Code 個人設定
 .claude/settings.local.json
