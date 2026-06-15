@@ -1,0 +1,62 @@
+# 兩路結果合併（merge）範例 —— 把兩個並行分支的物件「並排合成一個物件」。
+#
+#   trigger(input) ─┬─→ headline(ai+schema，產 {headline}) ─┐
+#                   └─→ summary (ai+schema，產 {summary})  ─┴─→ combine(merge，byPosition) ─→ result(write)
+#
+# 重點是 merge 這個「整批 collection 運算」：它把兩條輸入流合起來。
+#   • append      = 兩串接在一起（A 的 item 後面接 B 的 item）。
+#   • byPosition  = 依位置配對，逐項把兩邊的物件淺合成一個（這裡用這個）。
+#   • byKey       = 依某個共同欄位 join（像 SQL join），需在面板填 key。
+#
+# 在編輯器裡點開 combine 看看：merge 是 collection 運算，「沒有 prompt」——
+# 面板只給 mode（與 byKey 時的 key），中間欄不會再演一個沒人理的 prompt 輸入框。
+# 左欄會列出兩路輸入（headline / summary）供你檢視，但因為沒有 prompt，chip 是唯讀的。
+#
+# 跑（headline/summary 會呼叫真實模型，需先 claude login）：
+#   chainq run examples/merge-join.yaml
+# 或在編輯器裡開：
+#   chainq ui examples/merge-join.yaml
+profiles:
+  default: { cmd: 'claude -p' }
+
+steps:
+  # 觸發點：給一篇文章主題
+  trigger:
+    type: input
+    params:
+      topic:
+        type: string
+        default: '在家煮一杯好咖啡'
+
+  # 分支 A：產一個標題物件 {headline: "..."}
+  headline:
+    type: ai
+    from: trigger
+    schema:
+      headline: string
+    prompt: |
+      針對主題「{{ $json.topic }}」想一個吸睛標題。
+      只回傳這個 JSON 物件:{"headline": "你的標題"}
+
+  # 分支 B：產一個摘要物件 {summary: "..."}
+  summary:
+    type: ai
+    from: trigger
+    schema:
+      summary: string
+    prompt: |
+      針對主題「{{ $json.topic }}」寫一句話摘要。
+      只回傳這個 JSON 物件:{"summary": "你的摘要"}
+
+  # merge：byPosition 依位置把兩邊物件淺合 → {headline, summary}
+  combine:
+    type: merge
+    from: [headline, summary]
+    mode: byPosition
+
+  # 落地：合好的物件寫成檔
+  result:
+    type: write
+    from: combine
+    path: out/card.md
+    mode: overwrite

@@ -1,0 +1,34 @@
+# 跑本機指令（cmd）範例 —— 把 shell 指令的輸出餵進後面的 ai。
+#
+#   list(cmd，跑 `ls -1`) ─→ describe(ai，根據檔案清單寫說明)
+#
+# 重點是 cmd 這個節點：它在本機跑一條指令、拿 stdout 當輸出。
+#   • mode: once    = 把整批輸入一次跑完（這裡沒有上游，就是單純跑一次）。
+#   • mode: perItem = 每個輸入 item 各跑一次，並把該 item 的值送進 stdin。
+#
+# 在編輯器裡點開 list 看看:cmd 借用中間欄,但欄位標題是「command」、placeholder 是
+# 「shell 指令…」——它裝的是要跑的指令(這裡是 `ls -1`),不是給模型的 prompt。
+#
+# 注意:cmd 預設「不可快取」(每次重跑);要可快取得宣告 inputs:（見 CLAUDE.md 眉角）。
+#
+# 跑（describe 會呼叫真實模型,需先 claude login;list 只是跑 ls）：
+#   chainq run examples/shell-command.yaml
+# 或在編輯器裡開：
+#   chainq ui examples/shell-command.yaml
+profiles:
+  default: { cmd: 'claude -p' }
+
+steps:
+  # cmd：在本機跑一條指令,拿 stdout 當輸出（這裡列出目前資料夾的檔案）
+  list:
+    type: cmd
+    run: 'ls -1'
+    mode: once
+
+  # ai：根據上一步的檔案清單,用繁中寫一段簡短說明
+  describe:
+    type: ai
+    from: list
+    prompt: |
+      下面是一個資料夾裡的檔案清單。用繁體中文寫 2-3 句話,猜這個資料夾大概在做什麼:
+      {{ $json }}
