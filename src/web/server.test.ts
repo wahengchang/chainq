@@ -161,6 +161,49 @@ describe("web server", () => {
     }
   });
 
+  // /api/connect force is for canvas edge REMOVAL only: it lands a delete that orphans
+  // a downstream ref (returns warnings), but it must NOT become a way to ADD an edge
+  // that breaks the flow — a hand-crafted {force:true} POST cannot write a cycle.
+  it("connect force only relaxes pure removals — it cannot force-add a cycle", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "chain-connect-force-"));
+    const { base, close } = await listen(dir);
+    const flow = join(dir, "f.yaml");
+    const enc = encodeURIComponent(flow);
+    const fromOf = async (id: string) =>
+      (await getJson(base, `/api/parse?path=${enc}`)).nodes.find((n: any) => n.id === id)?.from ?? [];
+    writeFileSync(
+      flow,
+      `profiles:
+  default: { cmd: 'claude -p' }
+steps:
+  a:
+    type: ai
+    prompt: 'A'
+  b:
+    type: ai
+    from: a
+    prompt: 'B {{ $json }}'
+`,
+    );
+    try {
+      // adding a→b's reverse (b→a) makes a cycle. Rejected without force (baseline)…
+      expect((await post(base, "/api/connect", { path: flow, node: "a", from: ["b"] })).status).toBe(400);
+      // …and STILL rejected WITH force — force must not relax an edge ADD into a cycle.
+      expect((await post(base, "/api/connect", { path: flow, node: "a", from: ["b"], force: true })).status).toBe(400);
+      // the cycle never landed: a still has no upstream.
+      expect(await fromOf("a")).toEqual([]);
+
+      // a genuine REMOVAL with force still lands even though it orphans b's {{ $json }}:
+      // b loses its only input → the introduced error returns as a warning, not a block.
+      const rm = await post(base, "/api/connect", { path: flow, node: "b", from: [], force: true });
+      expect(rm.status).toBe(200);
+      expect(((await rm.json()) as any).warnings?.length).toBeGreaterThan(0);
+      expect(await fromOf("b")).toEqual([]);
+    } finally {
+      close();
+    }
+  });
+
   // The Lane A fix: /api/parse exposes an input node's params, and /api/run-node
   // threads the form's runtime values through to the Runner — so the output
   // reflects what was supplied (no more "✓ ran 卻跑空"). Offline: input→assemble

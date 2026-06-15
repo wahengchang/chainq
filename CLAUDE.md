@@ -7,7 +7,7 @@
 > ⚠️ 不要照 `package.json` 直接打 `npm run …`——腳本內部會再呼叫 npm 而失敗。一律用 bun。詳見 memory `toolchain-quirks`。
 
 ```bash
-bun run dev <args>          # 跑 CLI(= tsx src/cli/index.ts),例:bun run dev run flow.yaml
+bun run dev <args>          # 跑 CLI(= bun src/cli/index.ts,bun 原生跑 TS),例:bun run dev run flow.yaml
 bun run ui flow.yaml        # 開視覺編輯器(127.0.0.1 隨機埠)
 bun run test                # 單元測試(vitest)
 bun run e2e                 # CLI e2e(vitest.e2e.config.ts)
