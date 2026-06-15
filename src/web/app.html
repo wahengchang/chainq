@@ -182,8 +182,11 @@
   #canvasMsg{max-width:340px;text-align:right;pointer-events:none}
   #canvasMsg:empty{display:none}
   /* n8n-style floating node panel */
-  .backdrop{position:absolute;inset:0;background:rgba(0,0,0,.5);z-index:4}
-  .modal{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:5;
+  /* fixed (not absolute): the panel anchors to the VIEWPORT, so it stays centered no
+     matter how far the canvas (#nodeView) is scrolled/panned. absolute anchored to the
+     stage's un-scrolled origin → the panel drifted off-screen once you scrolled. */
+  .backdrop{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:4}
+  .modal{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:5;
     width:min(1080px,95vw);height:min(560px,86vh);background:var(--panel);border:1px solid var(--line);
     box-shadow:0 24px 70px rgba(0,0,0,.6);display:grid;grid-template-rows:auto 1fr auto}
   .mhead{display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid var(--line)}
