@@ -392,13 +392,18 @@ async function handle(req: IncomingMessage, res: ServerResponse, opts: WebOption
   // $json primary) so it is preserved as-is; ids with odd chars survive (unlike
   // the comma-string form). [] clears the wiring.
   if (method === "POST" && path === "/api/connect") {
-    const { path: file = "", node = "", from = [] } = (await body(req)) as {
+    const { path: file = "", node = "", from = [], force } = (await body(req)) as {
       path?: string;
       node?: string;
       from?: string[];
+      force?: boolean;
     };
     const list = Array.isArray(from) ? from.filter((x) => typeof x === "string" && x) : [];
-    return editFlow(res, resolve(String(file)), (doc) => setFrom(doc, String(node), list));
+    // `force` is for REMOVAL from the canvas (the wire ×): drop the edge even when a
+    // downstream prompt still references the now-orphaned node — it comes back as a
+    // `warnings` ⚠ to rewire, same as delete-node. Adding a wire never sets force, so
+    // drag-to-connect still rejects cycles / new breakage (壞不落地).
+    return editFlow(res, resolve(String(file)), (doc) => setFrom(doc, String(node), list), { force: !!force });
   }
 
   // Delete a node (comment-preserving). Always succeeds (force): if a downstream
