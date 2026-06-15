@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.17
+
+- **Editor: the node panel stays centered no matter how far you've scrolled the canvas.** The
+  floating node panel was positioned `absolute` inside the scrollable canvas, so it anchored to the
+  canvas's un-scrolled origin — pan or scroll over to a node on the right or bottom, open it, and the
+  panel drifted off-screen (showing only a sliver, or nothing at all). It now uses `position: fixed`,
+  anchoring to the viewport, so it opens dead-center every time. Covered by
+  `e2e/browser/modal-position.spec.ts` (wide chain → scroll to the far corner → open the last node →
+  assert the panel is centered and fully on-screen).
+
 ## 0.1.16
 
 - **Editor: delete a connection straight from the canvas.** Every data-flow wire now floats two
