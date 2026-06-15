@@ -670,6 +670,22 @@ function startPan(ev){
   document.addEventListener("pointermove",move);document.addEventListener("pointerup",up);
 }
 
+// Only these kinds use the middle column: ai/assemble render a {{ }} prompt
+// template; cmd's textarea is the shell command (label says "command", not
+// "prompt"). The rest (input/splitOut/aggregate/merge/write) are deterministic
+// collection / IO ops with NO prompt — so the panel hides the whole column and
+// their INPUT chips are read-only info, not "insert into the prompt" targets.
+const PROMPT_KINDS=new Set(["ai","assemble","cmd"]);
+const hasPromptCol=t=>PROMPT_KINDS.has(t);
+// One INPUT-column chip. canInsert → clickable "↵ insert" (prompt nodes);
+// otherwise the same chip read-only (just shows the upstream's value).
+function inChip(u,i,valHtml,canInsert){
+  const tag=i===0?'$json':('$node["'+u+'"]');
+  if(!canInsert)return '<div class="infield ro"><span class="intag">'+tag+'</span> ← '+u+'<div class="inval">'+valHtml+'</div></div>';
+  return '<div class="infield" onclick="insertVar(\''+u+'\','+(i===0)+')" title="click to insert into the prompt">'
+    +'<span class="ins">↵ insert</span><span class="intag">'+tag+'</span> ← '+u
+    +'<div class="inval">'+valHtml+'</div></div>';
+}
 function selectNode(id){
   selected=id;const n=nodes.find(x=>x.id===id);if(!n)return;
   // a kept draft for this node overrides the saved values in the EDITABLE fields, so
@@ -680,20 +696,23 @@ function selectNode(id){
   $("pnId").value=n.id;$("pnType").innerHTML=typeBadge(n.type)+'<span style="margin-left:6px">'+esc(TYPE_GLYPH[n.type]||n.type)+'</span>';
   setTypeOptions(n);
   const isCmd=n.type==="cmd";
+  const hasPrompt=hasPromptCol(n.type);
   $("pnPrompt").value=isCmd?(eff.run||""):(eff.prompt||"");
+  if(hasPrompt){ // cmd's textarea is the shell command, not a prompt — relabel so it's not misleading
+    $("pnPromptLab").textContent=isCmd?"command":"prompt (template)";
+    $("pnPrompt").placeholder=isCmd?"shell 指令…例如 cat {{file}}":"write the prompt for this step…";
+  }
   renderWire(n);   // current input as chips (× to disconnect) — wiring is on the canvas, not typed
   $("pnFromWrap").classList.toggle("hidden",n.type==="input"); // input is a trigger — no `from`
-  $("pnPromptCol").classList.toggle("hidden",n.type==="input"); // a trigger has no prompt — hide the whole prompt column
-  $("pnCols").classList.toggle("trigger",n.type==="input");     // …and collapse the grid to 2 columns so there's no empty gap
+  $("pnPromptCol").classList.toggle("hidden",!hasPrompt); // no prompt/command → hide the whole middle column
+  $("pnCols").classList.toggle("trigger",!hasPrompt);     // …and collapse the grid to 2 columns so there's no empty gap
   // INPUT: an `input` trigger shows its params form (runtime values); any other
   // node shows its direct inputs' outputs (click to insert) + the outputs of
   // EARLIER upstream steps (read-only — wire one in to reference it).
   const ups=n.from||[];
-  const inField=(u,i)=>{const r=results[u];const tag=i===0?'$json':('$node["'+u+'"]');
+  const inField=(u,i)=>{const r=results[u];
     const val=r?esc(r.output||r.error||"(empty)"):'<span class="dim">(run to see)</span>';
-    return '<div class="infield" onclick="insertVar(\''+u+'\','+(i===0)+')" title="click to insert into the prompt">'
-      +'<span class="ins">↵ insert</span><span class="intag">'+tag+'</span> ← '+u
-      +'<div class="inval">'+val+'</div></div>';};
+    return inChip(u,i,val,hasPrompt);};
   if(n.type==="input"){$("pnInput").innerHTML=renderParamsForm(n);$("pnEarlier").innerHTML="";}
   else{
     $("pnInput").innerHTML=ups.length?ups.map(inField).join(""):"";  // no-upstream note already shown by the chips area above
@@ -1040,10 +1059,8 @@ async function loadItems(id){
   const n=nodes.find(x=>x.id===id);if(!n)return;
   const ups=n.from||[];
   if(ups.length&&data.inputs){
-    $("pnInput").innerHTML=ups.map((u,i)=>{const tag=i===0?'$json':('$node["'+u+'"]');
-      return '<div class="infield" onclick="insertVar(\''+u+'\','+(i===0)+')" title="click to insert into the prompt">'
-        +'<span class="ins">↵ insert</span><span class="intag">'+tag+'</span> ← '+u
-        +'<div class="inval">'+renderItems(data.inputs[u]||null)+'</div></div>';}).join("");
+    const canInsert=hasPromptCol(n.type);
+    $("pnInput").innerHTML=ups.map((u,i)=>inChip(u,i,renderItems(data.inputs[u]||null),canInsert)).join("");
   }
 }
 function schedulePreview(){clearTimeout(previewTimer);previewTimer=setTimeout(renderPreview,350);}
