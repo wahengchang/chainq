@@ -75,6 +75,40 @@ describe("web server", () => {
     }
   });
 
+  it("exposes profiles in /api/parse and edits the default profile's cmd (comment-preserving)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "chain-web-profile-"));
+    const { base, close } = await listen(dir);
+    const flow = join(dir, "blog.yaml");
+    const enc = encodeURIComponent(flow);
+    try {
+      await post(base, "/api/create", { dir, name: "blog" });
+
+      // the create template ships a `default: { cmd: 'claude -p' }` profile, and
+      // /api/parse now surfaces it so the toolbar pill can show + edit the cmd.
+      const parsed: any = await getJson(base, `/api/parse?path=${enc}`);
+      expect(parsed.profiles.default.cmd).toBe("claude -p");
+
+      // edit the default profile's cmd → lands in the YAML, round-trips through parse.
+      const set = await post(base, "/api/set-profile", {
+        path: flow,
+        name: "default",
+        cmd: "claude -p --model claude-sonnet-4-6",
+      });
+      expect(set.status).toBe(200);
+      expect((await getJson(base, `/api/parse?path=${enc}`)).profiles.default.cmd).toBe(
+        "claude -p --model claude-sonnet-4-6",
+      );
+      // the other YAML (a comment + the steps) survives the surgical edit.
+      expect(readFileSync(flow, "utf8")).toContain("steps:");
+
+      // an empty cmd is rejected (a profile with no command can't run).
+      const empty = await post(base, "/api/set-profile", { path: flow, name: "default", cmd: "   " });
+      expect(empty.status).toBe(400);
+    } finally {
+      close();
+    }
+  });
+
   it("add-node / connect / rename / layout / items — the editor's structural edits", async () => {
     const dir = mkdtempSync(join(tmpdir(), "chain-web2-"));
     const { base, close } = await listen(dir);

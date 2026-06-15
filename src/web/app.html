@@ -252,13 +252,23 @@
     <button onclick="back()">← projects</button>
     <span class="path" id="path"></span>
     <button onclick="toggleRaw()" id="rawBtn">{ } raw</button>
-    <!-- profile is always the real local model (claude -p); every run calls the model. -->
+    <!-- run-time profile override (empty = each node uses the default profile). -->
     <input type="hidden" id="profile" value="">
-    <span class="profilepill" title="every run calls the real local model (claude -p)">● claude -p · real</span>
+    <!-- editable: the default profile's command — the CLI every ai node shells out to. -->
+    <span id="profileCtl"></span>
     <span id="flowTimeoutCtl"></span>
     <button class="primary" onclick="runAll()">▷ Run all</button>
     <button onclick="runAll(true)" title="ignore cache — really call the model for every node">↻ fresh</button>
   </div>
+  <!-- default-profile command editor, anchored under the profile pill (positioned in JS) -->
+  <div id="profilePop" class="fpop hidden">
+    <div class="tohint">default profile 的指令 · 每個 ai 節點呼叫的本機 CLI · prompt 走 stdin 自動帶入,不用寫在這裡 · 例如 <code>claude -p --model claude-sonnet-4-6</code></div>
+    <div class="frow">
+      <input id="profileInput" spellcheck="false" placeholder="claude -p" onkeydown="if(event.key==='Enter')applyProfile()">
+      <button onclick="applyProfile()">套用</button>
+    </div>
+  </div>
+
   <!-- flow-wide default timeout popover, anchored under the ◷ flow clock (positioned in JS) -->
   <div id="flowTimeoutPop" class="fpop hidden">
     <div class="tohint">整條 flow 的預設逾時(秒)· 各節點沒自己設時用這個 · 空白 = 內建 300</div>
