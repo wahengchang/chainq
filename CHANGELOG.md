@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.1.16
+
+- **Editor: delete a connection straight from the canvas.** Every data-flow wire now floats two
+  buttons at its midpoint — **+** (insert a node, as before) and **×** (delete the connection;
+  hover turns it red). Deleting a wire used to be impossible: it goes through `/api/connect`, and
+  if removing it left a downstream prompt's `{{ $node["x"] }}` reference no longer upstream,
+  `editFlow` treated that as a newly-introduced error and refused to write the whole flow — the
+  wire simply wouldn't delete. Edge-delete now carries `force` (like node-delete): the removal
+  lands, any step left with a dead reference comes back as a warning and is flagged red (⚠) on the
+  canvas to fix, while *adding* a wire stays strict (cycles / bad wiring still rejected). Covered by
+  `e2e/browser/delete-edge.spec.ts`, `delete-edge-fanin.spec.ts`, and `delete-edge-fanout.spec.ts`.
+- **Editor: edit the default profile's command from the toolbar pill.** The `● claude -p · real`
+  pill in the top bar was a fixed label; click it to edit the default profile's launch command
+  (e.g. `claude -p --model claude-sonnet-4-6`) — the local CLI each `ai` step shells out to. Prompts
+  always arrive on stdin, so the pill only holds the launch command. New `/api/set-profile`
+  (comment-preserving; an empty command is rejected). Covered by `e2e/browser/profile-field.spec.ts`.
+
 ## 0.1.15
 
 - **Editor: canvas interaction v2 — marquee select, Space-to-pan, click-selects / double-click-edits.**
