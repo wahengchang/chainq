@@ -164,6 +164,8 @@
     line-height:1;border-radius:50%;border:1px solid var(--line);background:var(--panel);color:var(--accent);
     font-size:14px;opacity:0;pointer-events:none;transition:opacity .12s}
   .gwrap:hover .wins{opacity:.5;pointer-events:auto} .wins:hover{opacity:1;border-color:var(--accent)}
+  /* the "×" twin → delete the connection; warns in red on hover (matches chip × / --bad) */
+  .wins.wdel{color:var(--bad)} .wins.wdel:hover{color:var(--bad);border-color:var(--bad)}
   .node.multi{box-shadow:0 0 0 1px rgba(224,166,77,.35)}
   /* add-step control: part of the bottom-right toolbar cluster (same panel look as
      zoom), sits just above the zoom bar so the two read as one toolbar. */

@@ -342,11 +342,18 @@ function drawWires(svg,wrap){
       // so bring the (unscaled) midpoint back to screen space (×zoom) to compare.
       const cx=base.left+mx*zoom,cy=base.top+my*zoom;
       if(rects.some(r=>cx>=r.left-2&&cx<=r.right+2&&cy>=r.top-2&&cy<=r.bottom+2))return;
+      // two midpoint controls, side by side around the center: "+" inserts a step,
+      // "×" deletes this connection. Both share .wins so the canvas-hover reveal applies.
       const b=document.createElement("button");
       b.className="wins";b.textContent="+";b.title="insert a step between "+f+" and "+n.id;
-      b.style.left=mx+"px";b.style.top=my+"px";
+      b.style.left=(mx-11)+"px";b.style.top=my+"px";
       b.onclick=ev=>{ev.stopPropagation();insertBetween(f,n.id);};
       wrap.appendChild(b);
+      const d=document.createElement("button");
+      d.className="wins wdel";d.textContent="×";d.title="delete the connection "+f+" → "+n.id;
+      d.style.left=(mx+11)+"px";d.style.top=my+"px";
+      d.onclick=ev=>{ev.stopPropagation();deleteEdge(f,n.id);};
+      wrap.appendChild(d);
     });
   });
   svg.innerHTML=paths;
@@ -495,6 +502,22 @@ async function disconnect(id){
   const{ok,data}=await api("/api/connect",{method:"POST",body:JSON.stringify({path:current,node:selected,from})});
   if(!ok)return setMsg("pnMsg","err",errs(data)||"disconnect failed");
   await loadNodes();selectNode(selected);
+}
+// Delete the data-flow edge source→target straight from the canvas (the "×" on the
+// wire midpoint): drop `source` from target's `from`. force:true so it lands like
+// delete-node even when a downstream prompt still references `source` via
+// {{ $node["source"] }} — that step comes back red ⚠ to rewire, instead of the whole
+// delete being refused with a raw "not upstream" error.
+async function deleteEdge(source,target){
+  const t=nodes.find(n=>n.id===target);if(!t)return;
+  const from=(t.from||[]).filter(x=>x!==source);
+  const{ok,data}=await api("/api/connect",{method:"POST",body:JSON.stringify({path:current,node:target,from,force:true})});
+  if(!ok)return setMsg("canvasMsg","err",errs(data)||"delete connection failed");
+  await loadNodes();   // re-validates → orphaned-ref steps get flagged red (⚠)
+  // name what broke so the deletion isn't silently lossy (loadNodes clears canvasMsg).
+  const dep=[...new Set(((data&&data.warnings)||[]).map(e=>e.node))];
+  if(dep.length)setMsg("canvasMsg","err","⚠ 已刪除連線 "+source+" → "+target+" — "+dep.length+" 個步驟的引用失效:"+dep.join("、")+"(已標紅,點進去修正)");
+  else setMsg("canvasMsg","ok","已刪除連線 "+source+" → "+target);
 }
 // transitive upstream ids of `id` (for the "earlier outputs" view).
 function ancestorIds(id){
