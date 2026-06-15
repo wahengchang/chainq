@@ -144,8 +144,9 @@ async function handle(req: IncomingMessage, res: ServerResponse, opts: WebOption
       refs: n.prompt ? promptRefs(n.prompt).nodes : [],
     }));
     // flow-level defaults (e.g. defaults.timeout) so the editor can show + edit the
-    // global default that applies to every node without its own value.
-    return json(res, 200, { nodes, defaults: flow.defaults ?? null });
+    // global default that applies to every node without its own value. profiles is
+    // the name→cmd map every ai node shells out through (editable in the toolbar).
+    return json(res, 200, { nodes, defaults: flow.defaults ?? null, profiles: flow.profiles ?? null });
   }
 
   // Per-node validation errors for the canvas to surface (dim/⚠ the bad nodes).
@@ -203,6 +204,18 @@ async function handle(req: IncomingMessage, res: ServerResponse, opts: WebOption
         doc.setIn(["defaults", field], value);
       }
     });
+  }
+
+  // Edit a profile's command — the local CLI every ai node on that profile shells
+  // out to (`claude -p` → `claude -p --model …`). Comment-preserving. The prompt
+  // rides in via STDIN, never the cmd, so this is only the launch command. Empty
+  // cmd is rejected (a profile with no command can't run). Defaults to "default".
+  if (method === "POST" && path === "/api/set-profile") {
+    const { path: file = "", name = "default", cmd = "" } = await body(req);
+    const profile = String(name) || "default";
+    const trimmed = String(cmd).trim();
+    if (!trimmed) return json(res, 400, { errors: [{ node: "(profile)", message: "profile 指令不可為空" }] });
+    return editFlow(res, resolve(file), (doc) => doc.setIn(["profiles", profile, "cmd"], trimmed));
   }
 
   // Per-item data for a node's panel: each upstream's cached items (inputs) and

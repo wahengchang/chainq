@@ -171,12 +171,13 @@ function back(){closeNodeNow();$("editor").classList.add("hidden");$("create").c
 
 // flow-wide defaults (currently just defaults.timeout) — drives the ◷ flow clock in
 // the bar. Refreshed from /api/parse on every load.
-let flowDefaults=null;
+let flowDefaults=null,flowProfiles=null;
 async function loadNodes(){
   const{ok,data}=await api("/api/parse?path="+encodeURIComponent(current));
   if(!ok){setMsg("canvasMsg","err","could not parse — use { } raw to fix it");$("graph").innerHTML="";return;}
   setMsg("canvasMsg","","");nodes=data.nodes;
   flowDefaults=data.defaults||null;renderFlowTimeout();
+  flowProfiles=data.profiles||null;renderProfile();
   await loadValidity();   // flag bad nodes (⚠) before the first paint
   renderGraph();
 }
@@ -824,6 +825,46 @@ document.addEventListener("click",e=>{
   pop.classList.add("hidden");
 });
 
+// ── default-profile command editor ───────────────────────────────────────────
+// The toolbar pill shows the `default` profile's cmd — the local CLI every ai node
+// shells out to. Click to edit it; saves to profiles.default.cmd (comment-preserving,
+// /api/set-profile). The prompt always rides in via STDIN, so the cmd is launch-only.
+function defaultProfileCmd(){return (flowProfiles&&flowProfiles.default&&flowProfiles.default.cmd)?String(flowProfiles.default.cmd):"";}
+function renderProfile(){
+  const ctl=$("profileCtl");if(!ctl)return;
+  const cmd=defaultProfileCmd();
+  ctl.innerHTML='<button type="button" id="profileBtn" class="profilepill" title="default profile 的指令 — 點擊編輯 · 每個 ai 節點都呼叫這條 CLI"></button>';
+  const btn=$("profileBtn");
+  btn.textContent="● "+(cmd||"(未設定指令)")+" · real";   // textContent — never inject cmd into innerHTML
+  btn.onclick=toggleProfile;
+}
+function toggleProfile(){
+  const pop=$("profilePop"),btn=$("profileBtn");if(!pop||!btn)return;
+  if(!pop.classList.contains("hidden")){pop.classList.add("hidden");return;}
+  $("profileInput").value=defaultProfileCmd();
+  const r=btn.getBoundingClientRect();                 // anchor under the pill (fixed-positioned)
+  pop.style.top=(r.bottom+6)+"px";
+  pop.style.right=Math.max(8,window.innerWidth-r.right)+"px";
+  pop.classList.remove("hidden");
+  $("profileInput").focus();$("profileInput").select();
+}
+async function applyProfile(){
+  const cmd=$("profileInput").value.trim();
+  if(!cmd)return setMsg("canvasMsg","err","指令不可為空");
+  const r=await api("/api/set-profile",{method:"POST",body:JSON.stringify({path:current,name:"default",cmd})});
+  if(!r.ok)return setMsg("canvasMsg","err",errs(r.data)||"set profile failed");
+  $("profilePop").classList.add("hidden");
+  await loadNodes();   // re-parse → flowProfiles refreshed → the pill relabels
+  setMsg("canvasMsg","","default profile 指令已設為「"+cmd+"」");
+}
+// click outside the profile popover (and not on its pill) closes it
+document.addEventListener("click",e=>{
+  const pop=$("profilePop");if(!pop||pop.classList.contains("hidden"))return;
+  const t=/** @type {any} */(e.target);
+  if(pop.contains(t)||(t&&t.id==="profileBtn"))return;
+  pop.classList.add("hidden");
+});
+
 // ── ai OUTPUT SCHEMA editor ──────────────────────────────────────────────────
 // Lives in the OUTPUT column (schema = the shape this node must return). Two-level:
 // pick an OUTPUT FORMAT first, then only JSON exposes fields. Maps to what the
@@ -1235,4 +1276,4 @@ boot();
 // Migration bridge: these handlers are still referenced by inline onclick= in
 // app.html (and in runtime-generated card markup), so a module must expose them
 // on window. Converting to addEventListener is the follow-up.
-Object.assign(window,{listFlows,createFlow,back,toggleRaw,runAll,runNode,saveNode,deleteNode,closeNode,addNode,saveRaw,renameSelected,schedulePreview,insertVar,insertEarlier,runTo,setInputVal,onMergeMode,addParamRow,addSchemaRow,onSchemaFormat,toggleSchema,schemaPreview,changeType,markDirty,resetNode,zoomBy,zoomReset,zoomFit,stopRun,toggleRefs,toggleTimeout,onTimeoutInput,toggleFlowTimeout,applyFlowTimeout,toggleOut});
+Object.assign(window,{listFlows,createFlow,back,toggleRaw,runAll,runNode,saveNode,deleteNode,closeNode,addNode,saveRaw,renameSelected,schedulePreview,insertVar,insertEarlier,runTo,setInputVal,onMergeMode,addParamRow,addSchemaRow,onSchemaFormat,toggleSchema,schemaPreview,changeType,markDirty,resetNode,zoomBy,zoomReset,zoomFit,stopRun,toggleRefs,toggleTimeout,onTimeoutInput,toggleFlowTimeout,applyFlowTimeout,applyProfile,toggleOut});
