@@ -11,6 +11,7 @@
 4. [網頁編輯器跟 CLI 指令的邏輯有對應上嗎?](#q4-網頁編輯器跟-cli-指令的邏輯有對應上嗎)
 5. [各種節點類型在畫布上怎麼分辨?](#q5-各種節點類型在畫布上怎麼分辨)
 6. [我在哪裡設定「輸入欄位」?觸發節點怎麼用?](#q6-我在哪裡設定輸入欄位觸發節點怎麼用)
+7. [模型回的是字串,底層怎麼「強制」變成 JSON?](#q7-模型回的是字串底層怎麼強制變成-json)
 
 ---
 
@@ -178,3 +179,46 @@ combine:
 
 > 預設模板現在就附一個示範 `topic` 欄位,讓新手一眼看懂「觸發節點定義欄位 → 下游用 `{{ $json.topic }}` 取用」。空的觸發節點也合法(只是單純起頭整條 chain)。
 > 對應錨點:`src/web/ui/app.js` 的 `renderParamsEditor` / `collectParams`;預設模板 `src/cli/new.ts` 的 `NEW_FLOW_TEMPLATE`。
+
+---
+
+## Q7. 模型回的是字串,底層怎麼「強制」變成 JSON?
+
+**情境**:ai 節點面板選了 `JSON` 格式、填了 `headline: string`,prompt 也寫「只回傳 `{"headline": "…"}`」。想知道引擎底層到底對模型那串文字做了什麼,才讓下游能用 `{{ $json.headline }}`。([Q2](#q2-我想讓節點輸出結構化資料該怎麼做) 講「怎麼用」,這題講「底層怎麼跑」。)
+
+**答**:**模型回的永遠是純文字字串**。`schema` 不是叫模型改用 JSON 模式,而是引擎在拿到字串後,套一道 **extract → validate → 重試一次 → 失敗** 的閘門,把字串「強制」解析+驗證成結構化物件。沒有 `schema` 就原文字串原封不動往下流。
+
+**完整資料流**(對照 `src/engine/run.ts:346-369`):
+
+```
+   rendered prompt ─(STDIN)→ proc.ts runSubprocess(claude -p / codex)
+                                      │
+                                      ▼  res.stdout = 字串(一律)
+                         ┌─ node.schema 存在? ─┐
+                      NO │                      │ YES
+                         ▼                      ▼
+                {json: stdout}          extractJson()  ← 去 ``` 圍欄 + parse + 切最外層 {…}/[…]
+                字串原封不動                    │ parsed
+                                               ▼
+                                        schemaErrors()  ← 頂層須 object + 逐欄位型別(淺檢查)
+                                        errs=[] │ │ errs≠[]
+                                                ▼ ▼
+                                  {json: parsed}   retry once → 仍錯則 fail
+                                  pairedItem: i
+```
+
+**三個關鍵函式**(全在 `src/engine/schema.ts`):
+
+| 函式 | 行 | 做什麼 | 容錯 / 邊界 |
+|---|---|---|---|
+| `extractJson` | `9-21` | 去掉 ` ```json ` 圍欄 → `JSON.parse` → 失敗就切出最外層 `{}`/`[]` 再 parse | ✅ 容忍圍欄、JSON 前後散文;❌ 不救 JSON 內部壞引號 / 多個獨立物件 |
+| `schemaErrors` | `29-45` | 頂層必須是 object,逐欄位查「存在 + 型別」 | 多餘欄位允許;`array`/`object` 只看容器(淺);`number` 用 `Number.isFinite`(NaN/Infinity 算錯) |
+| `correctionNote` | `48-54` | 重試時追加的糾正句:「上次無效,只回合法 JSON,不要散文不要圍欄」 | — |
+
+**重試規則(最多兩次模型呼叫,不迴圈)**:第一次 parse 失敗或驗證不符 → 帶 `correctionNote` 重跑一次 → 第二次仍錯就 `fail("schema mismatch after retry: …")`(`run.ts:367`),不會無限重試。
+
+**⚠️ 最常踩的點:引擎不會自動 wrap 純文字**。即使 schema 只有一個 `headline: string` 欄位,模型還是**必須**回 `{"headline":"…"}` 這個物件;它若只回一句純標題,`extractJson` 會 throw `no JSON found` → 觸發那次糾正重試。這就是為什麼 prompt 一定要明寫「只回傳 `{"headline": "你的標題"}`」——**光填 schema 不會改變模型怎麼答**(同 [Q2](#q2-我想讓節點輸出結構化資料該怎麼做) 的陷阱)。唯一會自動 wrap 的是 UI 的 **List** 格式(存成 `{_list: array}`),裸陣列不能當頂層才需要它。
+
+**旁支**:`splitOut` / `merge` 路徑用 `coerceJson`(`run.ts:438`)做容錯——它共用同一個 `extractJson`,但**轉不動就原樣回字串、不報錯**;跟 schema 路徑「驗證失敗會 retry / fail」的嚴格度不同。
+
+> 一句話:`schema` = 拿到字串後的「解析+驗證閘門」,不是模型端的輸出模式;成功才把 item 從字串換成解析後的物件,下游 `{{ $json.欄位 }}` 才取得到。
