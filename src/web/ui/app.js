@@ -39,7 +39,7 @@ const typeBadge=t=>{const m=typeMeta(t);return '<span class="tbadge" style="--tc
 const typeChip=t=>'<span class="ntype" style="--tc:'+typeMeta(t).c+'">'+esc(TYPE_GLYPH[t]||t)+'</span>';
 let current=null,nodes=[],selected=null,results={},previewTimer=null;
 // the open panel has UNSAVED edits. Drives three things: the draft sent on a run
-// (draftOverride), the "● 未儲存" indicator, and the save-or-discard guard on any
+// (draftOverride), the "● Unsaved draft" indicator, and the save-or-discard guard on any
 // exit (close / Esc / switch node / back / raw). Only ONE node can be dirty at a
 // time — the open one — because that's the only editable panel. Set by markDirty on
 // any edit; cleared by a fresh render from saved (selectNode) or a successful save.
@@ -213,7 +213,7 @@ function nodeCard(n){
   const d=document.createElement("div");d.className="node "+(r?r.status:"")+(multi?" multi":"")+(col?" col":"")+(bad?" invalid":"")+(drafts[n.id]?" dirty":"")+(multiSel.has(n.id)?" selsel":"");
   d.dataset.id=n.id;
   // ● unsaved-draft marker — this node has edits kept but not Saved (runs as draft).
-  const draftDot=drafts[n.id]?'<span class="ndirty" title="未儲存的草稿 — 執行會跑這個版本">●</span>':'';
+  const draftDot=drafts[n.id]?'<span class="ndirty" title="unsaved draft — running will use this version">●</span>':'';
   // The ×N badge doubles as the OUTPUT toggle. A finished step's output is HIDDEN by
   // default (so a tall result never buries the nodes around it); click the badge to
   // show it, click again to hide. Multi-item shows the count (×3); a single-output
@@ -233,7 +233,7 @@ function nodeCard(n){
     out='<div class="nodeout'+(r.status==="failed"?" bad":"")+'">'+badge+esc(r.error||r.output)+'</div>';
   }
   const fromLine=(n.from||[]).length
-    ? '<div class="npreview" style="color:var(--accent)">from ['+esc(n.from.join(", "))+']'+(multi?" ← 多輸入":"")+'</div>' : '';
+    ? '<div class="npreview" style="color:var(--accent)">from ['+esc(n.from.join(", "))+']'+(multi?" ← multi-input":"")+'</div>' : '';
   const warnLine=bad?'<div class="nwarn" title="'+esc(bad)+'">⚠ '+esc(bad)+'</div>':'';
   d.innerHTML='<div class="noderun-wrap">'
       +'<button class="noderun" title="Execute step — run this node + the upstream it needs, reusing cache" onclick="event.stopPropagation();runTo(\''+n.id+'\')">▷</button>'
@@ -419,7 +419,7 @@ window.addEventListener("keydown",e=>{
 
 // ---- P2-b drag-to-connect ----
 // Drag a node's output port onto another node → add the source to that node's
-// `from` via /api/connect (the backend keeps order + validates壞不落地). `connecting`
+// `from` via /api/connect (the backend keeps order + validates; invalid edits never land). `connecting`
 // suppresses the trailing card click so a drag never also opens the panel.
 let connecting=false;
 // P3 node positions: `layout` = id→{x,y} (persisted in .chain/layout via /api/layout);
@@ -516,8 +516,8 @@ async function deleteEdge(source,target){
   await loadNodes();   // re-validates → orphaned-ref steps get flagged red (⚠)
   // name what broke so the deletion isn't silently lossy (loadNodes clears canvasMsg).
   const dep=[...new Set(((data&&data.warnings)||[]).map(e=>e.node))];
-  if(dep.length)setMsg("canvasMsg","err","⚠ 已刪除連線 "+source+" → "+target+" — "+dep.length+" 個步驟的引用失效:"+dep.join("、")+"(已標紅,點進去修正)");
-  else setMsg("canvasMsg","ok","已刪除連線 "+source+" → "+target);
+  if(dep.length)setMsg("canvasMsg","err","⚠ Removed link "+source+" → "+target+" — references broke in "+dep.length+" step(s): "+dep.join(", ")+" (flagged red, click in to fix)");
+  else setMsg("canvasMsg","ok","Removed link "+source+" → "+target);
 }
 // transitive upstream ids of `id` (for the "earlier outputs" view).
 function ancestorIds(id){
@@ -534,7 +534,7 @@ document.addEventListener("click",e=>{
 });
 // Insert a brand-new step ON an edge source→target: create it, wire source→new,
 // then repoint target from `source` to `new`. Composes the same endpoints the
-// editor already uses, so each step is validated壞不落地.
+// editor already uses, so each step is validated; invalid edits never land.
 async function insertBetween(source,target){
   let base="step",i=1,id=base;while(nodes.find(n=>n.id===id))id=base+(++i);
   let r=await api("/api/add-node",{method:"POST",body:JSON.stringify({path:current,id,type:"ai"})});
@@ -700,7 +700,7 @@ function selectNode(id){
   $("pnPrompt").value=isCmd?(eff.run||""):(eff.prompt||"");
   if(hasPrompt){ // cmd's textarea is the shell command, not a prompt — relabel so it's not misleading
     $("pnPromptLab").textContent=isCmd?"command":"prompt (template)";
-    $("pnPrompt").placeholder=isCmd?"shell 指令…例如 cat {{file}}":"write the prompt for this step…";
+    $("pnPrompt").placeholder=isCmd?"shell command… e.g. cat {{file}}":"write the prompt for this step…";
   }
   renderWire(n);   // current input as chips (× to disconnect) — wiring is on the canvas, not typed
   $("pnFromWrap").classList.toggle("hidden",n.type==="input"); // input is a trigger — no `from`
@@ -721,7 +721,7 @@ function selectNode(id){
     // #pnInput after a run) never clobbers it. Click → insert a cross-step reference
     // {{ $node["id"] }} WITHOUT wiring it into from: (the engine resolves ancestor refs).
     const earlier=[...ancestorIds(n.id)].filter(u=>!ups.includes(u));
-    $("pnEarlier").innerHTML=earlier.length?'<div class="dim" style="margin-top:4px">earlier outputs (click to reference — 跨步取值)</div>'
+    $("pnEarlier").innerHTML=earlier.length?'<div class="dim" style="margin-top:4px">earlier outputs (click to reference across steps)</div>'
       +earlier.map(u=>{const r=results[u];const val=r?esc(r.output||r.error||"(empty)"):'<span class="dim">(run to see)</span>';
         return '<div class="infield" onclick="insertEarlier(\''+u+'\')" title="insert {{ $node[&quot;'+esc(u)+'&quot;] }} at the cursor — a cross-step reference, does not change from:">'
           +'<span class="ins">↵ insert ref</span><span class="intag">'+esc(u)+'</span><div class="inval">'+val+'</div></div>';}).join(""):"";
@@ -803,8 +803,8 @@ let timeoutOpen=false;
 function timeoutField(n){
   const v=(n.timeout!=null)?n.timeout:"";
   return '<div id="pnTimeoutWrap" class="tobox'+(timeoutOpen?"":" hidden")+'">'
-    +'<div class="tohint">逾時 — 幾秒後強制中止這步 · 空白 = 用 flow 預設(300)</div>'
-    +'<input id="tfTimeout" type="number" min="1" step="1" spellcheck="false" oninput="onTimeoutInput()" value="'+v+'" placeholder="例如 1200(長文給多一點)">'
+    +'<div class="tohint">Timeout — force-abort this step after N seconds · blank = use the flow default (300)</div>'
+    +'<input id="tfTimeout" type="number" min="1" step="1" spellcheck="false" oninput="onTimeoutInput()" value="'+v+'" placeholder="e.g. 1200 (give long jobs more)">'
     +'</div>';
 }
 // the ◷ clock button in the INPUT header — only ai/cmd; shows the current value when
@@ -813,7 +813,7 @@ function timeoutCtl(n){
   if(n.type!=="ai"&&n.type!=="cmd")return "";
   const v=(n.timeout!=null)?n.timeout:"";
   return '<button type="button" id="pnTimeoutBtn" class="toclock'+(v!==""?" on":"")
-    +'" onclick="toggleTimeout()" title="此步驟逾時上限(秒)· 很少需要改 · 空白 = 用 flow 預設 300">'
+    +'" onclick="toggleTimeout()" title="Timeout limit for this step (seconds) · rarely needs changing · blank = use the flow default 300">'
     +'◷'+(v!==""?(" "+v+"s"):"")+'</button>';
 }
 function toggleTimeout(){
@@ -837,7 +837,7 @@ function renderFlowTimeout(){
   const ctl=$("flowTimeoutCtl");if(!ctl)return;
   const v=flowTimeoutVal();
   ctl.innerHTML='<button type="button" id="flowTimeoutBtn" class="toclock'+(v!==""?" on":"")
-    +'" onclick="toggleFlowTimeout()" title="整條 flow 的預設逾時(秒)· 套用到沒自己設 timeout 的節點 · 空白用內建 300">'
+    +'" onclick="toggleFlowTimeout()" title="Default timeout for the whole flow (seconds) · applies to nodes without their own · blank uses the built-in 300">'
     +'◷ Timeout'+(v!==""?(" "+v+"s"):"")+'</button>';
 }
 function toggleFlowTimeout(){
@@ -857,7 +857,7 @@ async function applyFlowTimeout(){
   if(!r.ok)return setMsg("canvasMsg","err",errs(r.data)||"set flow default failed");
   $("flowTimeoutPop").classList.add("hidden");
   await loadNodes();   // re-parse → flowDefaults refreshed → the ◷ flow clock relabels
-  setMsg("canvasMsg","","flow 預設逾時已"+(value?("設為 "+value+"s"):"清除（用內建 300）"));
+  setMsg("canvasMsg","","Flow default timeout "+(value?("set to "+value+"s"):"cleared (using built-in 300)"));
 }
 // click outside the popover (and not on its clock) closes it
 document.addEventListener("click",e=>{
@@ -875,9 +875,9 @@ function defaultProfileCmd(){return (flowProfiles&&flowProfiles.default&&flowPro
 function renderProfile(){
   const ctl=$("profileCtl");if(!ctl)return;
   const cmd=defaultProfileCmd();
-  ctl.innerHTML='<button type="button" id="profileBtn" class="profilepill" title="default profile 的指令 — 點擊編輯 · 每個 ai 節點都呼叫這條 CLI"></button>';
+  ctl.innerHTML='<button type="button" id="profileBtn" class="profilepill" title="Default profile command — click to edit · every ai node calls this CLI"></button>';
   const btn=$("profileBtn");
-  btn.textContent="● "+(cmd||"(未設定指令)")+" · real";   // textContent — never inject cmd into innerHTML
+  btn.textContent="● "+(cmd||"(no command set)")+" · real";   // textContent — never inject cmd into innerHTML
   btn.onclick=toggleProfile;
 }
 function toggleProfile(){
@@ -892,12 +892,12 @@ function toggleProfile(){
 }
 async function applyProfile(){
   const cmd=$("profileInput").value.trim();
-  if(!cmd)return setMsg("canvasMsg","err","指令不可為空");
+  if(!cmd)return setMsg("canvasMsg","err","Command cannot be empty");
   const r=await api("/api/set-profile",{method:"POST",body:JSON.stringify({path:current,name:"default",cmd})});
   if(!r.ok)return setMsg("canvasMsg","err",errs(r.data)||"set profile failed");
   $("profilePop").classList.add("hidden");
   await loadNodes();   // re-parse → flowProfiles refreshed → the pill relabels
-  setMsg("canvasMsg","","default profile 指令已設為「"+cmd+"」");
+  setMsg("canvasMsg","","Default profile command set to “"+cmd+"”");
 }
 // click outside the profile popover (and not on its pill) closes it
 document.addEventListener("click",e=>{
@@ -954,7 +954,7 @@ function renderSchemaEditor(n){
   const fields=mode==="json"?(n.schema||{}):{};
   const rows=Object.entries(fields).map(([nm,t])=>schemaRow(nm,t)).join("");
   return '<div id="pnSchemaWrap" class="schemawrap '+(schemaOpen?"":"collapsed ")+'fmt-'+mode+'" data-fmt="'+mode+'">'
-    +'<div class="schemahdr" onclick="toggleSchema()" title="展開設定輸出格式">'
+    +'<div class="schemahdr" onclick="toggleSchema()" title="Expand to configure the output format">'
       +'<span class="caret"></span>'
       +'<label style="margin:0">output format</label>'
       +'<span id="pnFmtNow" class="fmtnow">'+FMT_LABELS[mode]+'</span>'
@@ -1076,7 +1076,7 @@ async function renderPreview(){
 }
 // inline rename via /api/rename — the engine rewrites the key + every downstream
 // from: + every prompt $('id') ref, and moves the cached output, all atomically
-// (壞不落地). No-op if unchanged; reverts the field on failure.
+// (invalid edits never land). No-op if unchanged; reverts the field on failure.
 let renaming=false;
 async function renameSelected(){
   if(!selected||renaming)return;
@@ -1173,7 +1173,7 @@ async function streamRun(url,bodyObj){
     if(signal.aborted){   // Stop, not a failure — tidy the canvas back to a stable state
       clearRunning(nodes.map(n=>n.id));renderGraph();
       if(selected)refreshSelectedOutput();
-      setMsg("canvasMsg","","■ 已中止 · 停在已完成的節點");
+      setMsg("canvasMsg","","■ Aborted · stopped at completed nodes");
       return{ok:true,stopped:true};
     }
     throw e;
@@ -1237,7 +1237,7 @@ async function deleteNode(){
   // canvas). Name them in the canvas msg so the breakage isn't silent. loadNodes
   // clears canvasMsg first, so set it AFTER.
   const dep=[...new Set(((data&&data.warnings)||[]).map(e=>e.node))];
-  if(dep.length)setMsg("canvasMsg","err","⚠ 已刪除「"+gone+"」— "+dep.length+" 個下游步驟的引用失效:"+dep.join("、")+"(已標紅,點進去修正)");
+  if(dep.length)setMsg("canvasMsg","err","⚠ Deleted “"+gone+"” — references broke in "+dep.length+" downstream step(s): "+dep.join(", ")+" (flagged red, click in to fix)");
 }
 // Add a step via the engine's nodeStarter (server-side, single source of truth
 // for each type's minimal fields). The node is unwired — drag/edit `from` next.
@@ -1286,7 +1286,7 @@ function markDirty(){
 function isFlowEdit(t){return t&&t.id!=="pnId"&&!(t.classList&&t.classList.contains("paramin"));}
 $("modal").addEventListener("input",e=>{if(isFlowEdit(/** @type {any} */(e.target)))markDirty();});
 $("modal").addEventListener("change",e=>{if(isFlowEdit(/** @type {any} */(e.target)))markDirty();});
-// reflect dirty state: the footer "● 未儲存" chip + Save/Reset button emphasis. Optional
+// reflect dirty state: the footer "● Unsaved draft" chip + Save/Reset button emphasis. Optional
 // ($ guards null), so it's safe to call before the elements exist.
 function updateDirty(){
   const chip=$("pnDirty");if(chip)chip.classList.toggle("hidden",!panelDirty);

@@ -77,7 +77,7 @@ test("fan-in: the × deletes one of several inputs, leaving the other two wired"
   // 1) one wire gone, the other two remain.
   await expect(wires).toHaveCount(2);
   // 2) clean delete — confirmed, no ⚠ (removing one of several inputs breaks nothing).
-  await expect(page.locator("#canvasMsg")).toContainText("已刪除連線 b → hub");
+  await expect(page.locator("#canvasMsg")).toContainText("Removed link b → hub");
   // 3) hub is still valid (it still has a and c as inputs).
   await expect(nodeByName(page, "hub")).not.toHaveClass(/invalid/);
 

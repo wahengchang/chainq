@@ -90,7 +90,7 @@ test("the × on a wire midpoint deletes a connection even when a downstream stil
   // 1) the field_b→mid wire is gone (the delete actually landed) — one solid wire left.
   await expect(wires).toHaveCount(1);
   // 2) canvas names the breakage rather than swallowing it — to_json's ref went stale.
-  await expect(page.locator("#canvasMsg")).toContainText("已刪除連線");
+  await expect(page.locator("#canvasMsg")).toContainText("Removed link");
   await expect(page.locator("#canvasMsg")).toContainText("to_json");
   // 3) to_json is flagged broken (red ⚠) so the dangling reference is visible to fix.
   const toJson = page.locator(".node", { has: page.locator(".nn", { hasText: /^to_json$/ }) });
