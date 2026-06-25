@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.1.18
+
+- **CLI: `chainq run` now shows you the result.** It used to print only per-node status
+  (`✓ greet`) to stderr — to see what a node actually produced you had to `cat
+  .chain/outputs/<id>.out`. Now the chain **result goes to stdout** (every leaf node;
+  multiple leaves each under a `— <node> —` header) while progress stays on stderr, so
+  `chainq run flow.yaml | jq` pipes only the result. Two new flags follow the usual
+  convention: `-q`/`--quiet` hides progress but keeps the result (and still shows
+  failures), `-s`/`--silent` prints nothing at all (exit code only). Reads from the
+  in-memory run result, not the cache file, so a `cmd` leaf prints too. Covered by
+  `e2eCli/scenarios/output.e2e.ts` (default split / `-q` / `-s` / multiple leaves / long forms).
+- **Editor: the middle column only appears for nodes that use it.** It no longer shows a
+  fake prompt field for the 5-of-8 node types that have no prompt (`cmd`, `splitOut`,
+  `aggregate`, `merge`, `input`).
+- **Editor: forcing a connection no longer lets a cycle through.** `/api/connect`'s force
+  path only relaxes pure edge removals, never an edge add that would create a cycle.
+- **UI text is now English** across the editor (e.g. lineage wires read "refs").
+- New example flows: `merge-join`, `split-aggregate`, `shell-command`.
+
 ## 0.1.17
 
 - **Editor: the node panel stays centered no matter how far you've scrolled the canvas.** The
