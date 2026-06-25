@@ -32,9 +32,19 @@ For *why* it works this way, see [explanation.md](./explanation.md).
 | `--steps <n>` | Run only the first `n` nodes in topological order. |
 | `--pin <node>=<file>` | Treat `<file>` as `<node>`'s output (a fixed sample). The run goes to `.chain/scratch/` and never touches real outputs. |
 | `--profile <name>` | Override every `ai` node's profile with `<name>` for this run (must be defined in `profiles:`). |
+| `-q`, `--quiet` | Hide progress (the `flow:`/`plan:`/per-node lines on stderr). Still prints the result on stdout and still shows failures. The pipe-friendly mode. |
+| `-s`, `--silent` | Print nothing at all — progress **and** result. Only the exit code is left (`0` ok, `1` failed). |
 
-Before a run, chainq prints a preflight: `plan: N ai call(s) · M reused · K skipped`.
-Per-node status as it settles: `✓` ran · `⊘` cached · `✗` failed · `–` skipped,
+### Output streams
+
+The chain **result goes to stdout; progress goes to stderr.** So `chainq run flow.yaml | jq`
+pipes only the result, while you still watch progress in the terminal. The result is the
+output of every **leaf** node (a node with no downstream — the chain's terminal output);
+with more than one leaf, each is printed under a `— <node> —` header. A partial run
+(`--to`/`--steps`/`--from`) that never reaches a leaf prints the last node that ran.
+
+Before a run, chainq prints a preflight on stderr: `plan: N ai call(s) · M reused · K skipped`.
+Per-node status as it settles (stderr): `✓` ran · `⊘` cached · `✗` failed · `–` skipped,
 followed by the item count, e.g. `✓ summarize (3 items)`.
 
 ## Flow YAML

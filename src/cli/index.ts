@@ -10,6 +10,8 @@
 //           --steps <n>             run the first N nodes
 //           --pin <node>=<file>     pin a sample as <node>'s output; writes scratch
 //           --profile <name>        override every ai node's profile
+//           -q, --quiet              hide progress (stderr); still print the result (stdout)
+//           -s, --silent             print nothing — progress AND result; exit code only
 //   chainq validate <flow.yaml>       static pre-run checks only
 //   chainq ls [dir]                   list flow YAMLs under dir (default cwd)
 
@@ -22,7 +24,10 @@ import {
   FlowLock,
   parseVal,
   validateRunInput,
+  itemsText,
+  upstreamsOf,
   type NodeResult,
+  type Flow,
 } from "../engine/index.js";
 import { runInit } from "./init.js";
 import { runNew } from "./new.js";
@@ -35,6 +40,28 @@ const PREFIX: Record<NodeResult["status"], string> = {
   skipped: "\x1b[90m–\x1b[0m",
 };
 
+// Print the chain's RESULT to stdout (process status goes to stderr) so that
+// `chainq run flow.yaml | jq` pipes only the result. Prints every leaf node
+// (no downstream — the chain's terminal outputs); a partial run (--to/--steps/
+// --from) that never reaches a leaf falls back to the last node that ran.
+// Reads from the in-memory NodeResult.output, NOT the cache file, so a VOLATILE
+// `cmd` leaf prints fine too. Multiple leaves are each prefixed with their id.
+function printLeafResults(flow: Flow, results: NodeResult[]): void {
+  if (results.length === 0) return;
+  const referenced = new Set<string>();
+  for (const id of Object.keys(flow.steps)) {
+    for (const up of upstreamsOf(flow.steps[id]!)) referenced.add(up);
+  }
+  const leafIds = new Set(Object.keys(flow.steps).filter((id) => !referenced.has(id)));
+  let targets = results.filter((r) => leafIds.has(r.id));
+  if (targets.length === 0) targets = [results[results.length - 1]!];
+  const multi = targets.length > 1;
+  for (const r of targets) {
+    if (multi) console.log(`— ${r.id} —`);
+    console.log(itemsText(r.output));
+  }
+}
+
 interface Flags {
   fresh: boolean;
   cache: boolean; // opt BACK INTO cache reuse for a full run (default re-runs all)
@@ -42,6 +69,8 @@ interface Flags {
   to?: string;
   steps?: number;
   profile?: string;
+  quiet: boolean; // hide progress (stderr); still print the leaf result (stdout)
+  silent: boolean; // print nothing at all — progress AND result; exit code only
   pins: Record<string, string>;
   input?: Record<string, unknown>[];
 }
@@ -78,13 +107,15 @@ function parseInputFile(path: string): Record<string, unknown>[] {
 }
 
 function parseFlags(rest: string[], baseDir: string): Flags {
-  const flags: Flags = { fresh: false, cache: false, pins: {} };
+  const flags: Flags = { fresh: false, cache: false, quiet: false, silent: false, pins: {} };
   const inputKv: Record<string, unknown> = {};
   let inputSets: Record<string, unknown>[] | undefined;
   for (let i = 0; i < rest.length; i++) {
     const a = rest[i]!;
     if (a === "--fresh") flags.fresh = true;
     else if (a === "--cache" || a === "--reuse") flags.cache = true;
+    else if (a === "--quiet" || a === "-q") flags.quiet = true;
+    else if (a === "--silent" || a === "-s") flags.silent = true;
     else if (a === "--from") flags.from = rest[++i];
     else if (a === "--to") flags.to = rest[++i];
     else if (a === "--steps") flags.steps = Number(rest[++i]);
@@ -176,31 +207,43 @@ async function main(argv: string[]): Promise<number> {
     Object.keys(flags.pins).length > 0;
   if (cmd === "run" && !partialMode && !flags.cache) flags.fresh = true;
 
-  console.error(`flow: ${flowPath}`);
-  console.error(`cwd:  ${baseDir}`);
+  // -q/--quiet hides progress (stderr) but keeps the result + errors; -s/--silent
+  // hides everything (silent implies quiet). Result always goes to stdout.
+  const hideProgress = flags.quiet || flags.silent;
+  const printResult = !flags.silent;
+
+  if (!hideProgress) {
+    console.error(`flow: ${flowPath}`);
+    console.error(`cwd:  ${baseDir}`);
+  }
 
   const errors = validate(flow);
   if (errors.length > 0) {
-    console.error(`\n${errors.length} validation error(s) — nothing ran:`);
-    for (const e of errors) console.error(`  ✗ ${e.node}: ${e.message}`);
+    if (!flags.silent) {
+      console.error(`\n${errors.length} validation error(s) — nothing ran:`);
+      for (const e of errors) console.error(`  ✗ ${e.node}: ${e.message}`);
+    }
     return 1;
   }
   if (cmd === "validate") {
-    console.error("\n✓ valid");
+    if (!hideProgress) console.error("\n✓ valid");
     return 0;
   }
 
   // runtime input contract (required / declared type) — same gate the web uses.
   const inputErrors = validateRunInput(flow, flags.input);
   if (inputErrors.length > 0) {
-    console.error(`\n${inputErrors.length} input error(s) — nothing ran:`);
-    for (const e of inputErrors) console.error(`  ✗ ${e.node}: ${e.message}`);
+    if (!flags.silent) {
+      console.error(`\n${inputErrors.length} input error(s) — nothing ran:`);
+      for (const e of inputErrors) console.error(`  ✗ ${e.node}: ${e.message}`);
+    }
     return 1;
   }
 
   const chainDir = join(baseDir, ".chain");
   const usingPins = Object.keys(flags.pins).length > 0;
   let failed = false;
+  let results: NodeResult[] = [];
 
   const lock = new FlowLock(chainDir);
   lock.acquire();
@@ -214,6 +257,10 @@ async function main(argv: string[]): Promise<number> {
       pins: flags.pins,
       input: flags.input,
       onResult: (r) => {
+        if (r.status === "failed") failed = true;
+        if (flags.silent) return; // -s: not even failures
+        // A failure is an error, not progress — show it even under -q/--quiet.
+        if (r.status !== "failed" && hideProgress) return;
         const n = r.output.length;
         // show item count for ran/cached (items model) — makes fan-out visible
         const count =
@@ -223,27 +270,29 @@ async function main(argv: string[]): Promise<number> {
             ? `  ${r.authExpired ? "[login expired] " : ""}${r.error}`
             : "";
         console.error(`${PREFIX[r.status]} ${r.id}${count}${tail}`);
-        if (r.status === "failed") failed = true;
       },
     });
 
     // Preflight: show what WILL run before burning any quota (n8n-style).
-    if (!flags.from && flags.steps === undefined) {
+    if (!hideProgress && !flags.from && flags.steps === undefined) {
       const p = runner.plan(flags.to ?? null);
       console.error(
         `plan: ${p.aiCallCount} ai call(s) · ${p.toReuse.length} reused · ${p.toSkip.length} skipped\n`,
       );
     }
 
-    if (flags.from) await runner.runFrom(flags.from);
-    else if (flags.to) await runner.runToNode(flags.to);
-    else if (flags.steps !== undefined) await runner.runSteps(flags.steps);
-    else await runner.runChain();
+    if (flags.from) results = await runner.runFrom(flags.from);
+    else if (flags.to) results = await runner.runToNode(flags.to);
+    else if (flags.steps !== undefined) results = await runner.runSteps(flags.steps);
+    else results = await runner.runChain();
 
-    if (usingPins) console.error("\n(scratch run — real outputs untouched)");
+    if (!hideProgress && usingPins) console.error("\n(scratch run — real outputs untouched)");
   } finally {
     lock.release();
   }
+
+  // Result → stdout (process status went to stderr), so `... | jq` is clean.
+  if (printResult) printLeafResults(flow, results);
 
   return failed ? 1 : 0;
 }
