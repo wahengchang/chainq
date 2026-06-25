@@ -68,10 +68,10 @@ test("editor stops a running flow mid-flight — the queued downstream never run
   await expect(after).toHaveClass(/pending/); // queued behind it
   await dwell(page, 1000);
 
-  // hit Stop — the run aborts: button hides, a "中止" notice shows.
+  // hit Stop — the run aborts: button hides, an "Aborted" notice shows.
   await stop.click();
   await expect(stop).toBeHidden();
-  await expect(page.locator("#canvasMsg")).toContainText("中止");
+  await expect(page.locator("#canvasMsg")).toContainText("Aborted");
   await dwell(page, 800);
 
   // PROOF it really stopped: wait well past when `slow` (sleep 4) would have
