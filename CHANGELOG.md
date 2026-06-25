@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.2.0
+
+- **Breaking: removed the collection operators `splitOut`, `aggregate`, and `merge`.**
+  Array fan-out/fan-in inside a flow added more mental overhead than it earned, so the
+  node model is now just `ai` · `cmd` · `assemble` · `input` · `write`. Combining two
+  upstream streams ("fan-in") is expressed with a multi-input `assemble`/`ai` node
+  (`from: [a, b]`) that references both in its prompt — see `examples/fan-in-merge.yaml`.
+  A flow that still uses a removed type no longer parses-and-throws: it loads, `validate`
+  reports `unknown node type "merge"`, `run` aborts before any model call, and the visual
+  editor paints the node as a red ⚠ error node you can retype or delete. Covered by
+  `e2eCli/scenarios/validate.e2e.ts` (unknown-type validate/run gate), `src/engine/run.test.ts`
+  (runtime guard), and `e2e/browser/node-types.spec.ts` (error-node rendering).
+- **Fix: a `write` node's output path is now part of its cache key.** Changing a write
+  node's `path` and re-running with `--cache` used to serve the old cached output and never
+  write the new file; the path is now folded into the Merkle key. Covered by `src/engine/cache.test.ts`.
+
 ## 0.1.18
 
 - **CLI: `chainq run` now shows you the result.** It used to print only per-node status
