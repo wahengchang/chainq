@@ -89,4 +89,4 @@ curl -s http://127.0.0.1:<PORT>/api/connect \
 ## 相關
 
 - 總覽:[create.md](create.md) · 索引:[README.md](README.md)
-- 多上游接線:[create-merge.md](create-merge.md)、`examples/fan-in.yaml`
+- 多上游接線(fan-in):[create-assemble.md](create-assemble.md)、`examples/fan-in.yaml`

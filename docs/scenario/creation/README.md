@@ -12,10 +12,7 @@
 | [create.md](create.md) | 五大建立動作總覽:專案 / 工作流 / 節點 / 連線 / 輸入欄位 |
 | [create-ai.md](create-ai.md) | 建立 `ai` 節點(呼叫模型) |
 | [create-cmd.md](create-cmd.md) | 建立 `cmd` 節點(跑 shell 指令) |
-| [create-assemble.md](create-assemble.md) | 建立 `assemble` 節點(純資料組裝,不呼叫模型) |
-| [create-splitout.md](create-splitout.md) | 建立 `splitOut` 節點(一筆拆多筆 / fan-out) |
-| [create-aggregate.md](create-aggregate.md) | 建立 `aggregate` 節點(多筆併一筆 / fan-in) |
-| [create-merge.md](create-merge.md) | 建立 `merge` 節點(合併兩條上游) |
+| [create-assemble.md](create-assemble.md) | 建立 `assemble` 節點(純資料組裝,不呼叫模型;合併多條上游) |
 | [create-input.md](create-input.md) | 建立 `input` 節點(執行期輸入欄位 / 觸發點) |
 | [create-write.md](create-write.md) | 建立 `write` 節點(把結果寫到檔案) |
 | [web-ui.md](web-ui.md) | **用瀏覽器介面**(非 curl)建立的完整操作走法 |
@@ -29,18 +26,15 @@
 |---|---|---|---|---|---|
 | `ai` | 呼叫本機模型 | 每筆(per-item) | 0+ | `prompt` | `from`、`profile` |
 | `cmd` | 跑 shell 指令 | 每筆 / 一次 | 0+ | `run` | `from`、`inputs`、`mode` |
-| `assemble` | 純資料組裝,不呼叫模型 | 每筆 | 0+ | `prompt` | `from` |
-| `splitOut` | 一筆拆多筆(fan-out) | 集合運算 | **恰 1** | — | `field` |
-| `aggregate` | 多筆併成一筆陣列(fan-in) | 集合運算 | **恰 1** | — | `field` |
-| `merge` | 合併兩條上游 | 集合運算 | **恰 2** | `from: [a,b]` | `mode`、`key` |
+| `assemble` | 純資料組裝,不呼叫模型(`from: [a,b]` 可合併多條上游) | 每筆 | 0+ | `prompt` | `from` |
 | `input` | 執行期輸入欄位(觸發點) | 觸發 | **0(禁止 from)** | — | `params` |
 | `write` | 把結果寫到檔案(成品) | 落地 | **1+** | `path` | `mode` |
 
 > `ai` 另有選填的 `schema`(JSON `欄位→型別`):設了就把輸出解析+驗證成結構化物件,
 > 不符自動重試一次再 fail。見 [create-ai.md](create-ai.md)。
 
-> 「集合運算」(collection operator)= 一次看到整個上游 items 陣列,不是一筆一筆過。
-> `ai`/`cmd`/`assemble` 則是每筆輸入跑一次。
+> `ai`/`cmd`/`assemble` 都是每筆輸入跑一次。要合併兩條上游時,讓 `assemble`
+> (或 `ai`)節點吃 `from: [a, b]`,在 prompt 裡分別引用兩邊。
 
 ## URL 語法的共通前提
 

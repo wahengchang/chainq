@@ -15,10 +15,8 @@ const api=(u,o)=>fetch(u,o).then(async r=>({ok:r.ok,status:r.status,data:await r
 const esc=s=>(s==null?"":String(s)).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 const errs=d=>(d.errors||[]).map(e=>"✗ "+e.node+": "+e.message).join("\n");
 const G={ran:"✓",cached:"⊘",failed:"✗",skipped:"–",pending:"○",running:"◌"};
-// node-type display — collection operators (see the items model) get a symbol +
-// accent so split/aggregate/merge read differently from per-item ai/cmd steps.
-const TYPE_GLYPH={ai:"✦ ai",cmd:"$ cmd",assemble:"⊕ assemble",splitOut:"⤙ split out",aggregate:"⤚ aggregate",merge:"⋈ merge",input:"▶ input",write:"⤓ write"};
-const COLLECTION=new Set(["splitOut","aggregate","merge"]);
+// node-type display — one glyph per node type for the chip/badge.
+const TYPE_GLYPH={ai:"✦ ai",cmd:"$ cmd",assemble:"⊕ assemble",input:"▶ input",write:"⤓ write"};
 // Per-type visual identity (n8n-style): a distinct colour + icon per node type, so
 // you can scan node types at a glance. The icon badge is the primary signal (always
 // visible, independent of run status, which owns the left border). `c` = the type
@@ -28,12 +26,13 @@ const TYPE_META={
   ai:       {c:"#a78bfa", i:"✦"},  // calls the model — violet
   cmd:      {c:"#f59e0b", i:"$"},  // shell command — amber
   assemble: {c:"#60a5fa", i:"⊕"},  // template assemble — blue
-  splitOut: {c:"#22d3ee", i:"⤙"},  // fan-out — cyan
-  aggregate:{c:"#818cf8", i:"⤚"},  // fan-in — indigo
-  merge:    {c:"#f472b6", i:"⋈"},  // join two inputs — pink
   write:    {c:"#2dd4bf", i:"⤓"},  // write to file — teal
 };
-const typeMeta=t=>TYPE_META[t]||{c:"#7f868d",i:"●"};
+// An unknown type (e.g. a flow authored against a removed splitOut/aggregate/merge,
+// or a typo) renders RED with a ⚠ so it reads as an error node on the canvas; the
+// validator also flags it and the panel shows a "remove or retype" hint.
+const isKnownType=t=>Object.prototype.hasOwnProperty.call(TYPE_META,t);
+const typeMeta=t=>TYPE_META[t]||{c:"#ef4444",i:"⚠"};
 // the coloured icon badge — the "logo" that identifies a node's type at a glance.
 const typeBadge=t=>{const m=typeMeta(t);return '<span class="tbadge" style="--tc:'+m.c+'" title="'+esc(t)+'">'+esc(m.i)+'</span>';};
 const typeChip=t=>'<span class="ntype" style="--tc:'+typeMeta(t).c+'">'+esc(TYPE_GLYPH[t]||t)+'</span>';
@@ -208,9 +207,9 @@ function nodeDepths(){
 function nodeCard(n){
   const r=results[n.id];
   const multi=(n.from||[]).length>1;
-  const col=COLLECTION.has(n.type);
-  const bad=invalid[n.id];
-  const d=document.createElement("div");d.className="node "+(r?r.status:"")+(multi?" multi":"")+(col?" col":"")+(bad?" invalid":"")+(drafts[n.id]?" dirty":"")+(multiSel.has(n.id)?" selsel":"");
+  const unknown=!isKnownType(n.type);
+  const bad=invalid[n.id]||unknown;
+  const d=document.createElement("div");d.className="node "+(r?r.status:"")+(multi?" multi":"")+(unknown?" unknown":"")+(bad?" invalid":"")+(drafts[n.id]?" dirty":"")+(multiSel.has(n.id)?" selsel":"");
   d.dataset.id=n.id;
   // ● unsaved-draft marker — this node has edits kept but not Saved (runs as draft).
   const draftDot=drafts[n.id]?'<span class="ndirty" title="unsaved draft — running will use this version">●</span>':'';
@@ -483,7 +482,7 @@ function renderWire(n){
 // The node's current type is always kept selectable so nothing vanishes.
 function setTypeOptions(n){
   const hasUp=(n.from||[]).length>0;
-  const allowed=hasUp?["ai","cmd","assemble","splitOut","aggregate","merge"]:["input","ai","cmd"];
+  const allowed=hasUp?["ai","cmd","assemble"]:["input","ai","cmd"];
   if(!allowed.includes(n.type))allowed.unshift(n.type);
   $("pnTypeSel").innerHTML=allowed.map(t=>'<option value="'+t+'">'+t+'</option>').join("");
   $("pnTypeSel").value=n.type;
@@ -672,9 +671,9 @@ function startPan(ev){
 
 // Only these kinds use the middle column: ai/assemble render a {{ }} prompt
 // template; cmd's textarea is the shell command (label says "command", not
-// "prompt"). The rest (input/splitOut/aggregate/merge/write) are deterministic
-// collection / IO ops with NO prompt — so the panel hides the whole column and
-// their INPUT chips are read-only info, not "insert into the prompt" targets.
+// "prompt"). The rest (input/write) are deterministic IO ops with NO prompt — so
+// the panel hides the whole column and their INPUT chips are read-only info, not
+// "insert into the prompt" targets.
 const PROMPT_KINDS=new Set(["ai","assemble","cmd"]);
 const hasPromptCol=t=>PROMPT_KINDS.has(t);
 // One INPUT-column chip. canInsert → clickable "↵ insert" (prompt nodes);
@@ -758,22 +757,14 @@ function refreshSelectedOutput(){
   if(n.type!=="input")loadItems(selected);   // P1-b: per-item content (items model)
 }
 // P2-a: type-specific config the panel can set without dropping to raw YAML —
-// splitOut/aggregate `field`, merge `mode`/`key`, cmd `mode`, input `params`.
+// cmd `mode`, write `path`/`mode`, input `params`.
 // (assemble/ai edit `prompt` in the middle column.)
 function renderTypeFields(n){
   const opt=(cur,v)=>'<option value="'+v+'"'+(cur===v?" selected":"")+'>'+v+'</option>';
+  if(!isKnownType(n.type))
+    return '<div class="dim" style="color:#ef4444;font-size:12px">⚠ unknown node type "'+esc(n.type)+'" — '
+      +'splitOut / aggregate / merge were removed. Change the type above, or delete this node.</div>';
   if(n.type==="input")return renderParamsEditor(n);   // the field-definition editor
-  if(n.type==="splitOut"||n.type==="aggregate")
-    return '<label>field — property to '+(n.type==="splitOut"?"split out":"aggregate")+' (blank = whole item)</label>'
-      +'<input id="tfField" spellcheck="false" value="'+esc(n.field||"")+'" placeholder="e.g. items">';
-  if(n.type==="merge"){
-    const m=n.mode||"append";
-    return '<label>mode — how to combine the two inputs</label>'
-      +'<select id="tfMode" onchange="onMergeMode()">'+opt(m,"append")+opt(m,"byPosition")+opt(m,"byKey")+'</select>'
-      +'<div id="tfKeyWrap"'+(m==="byKey"?"":' class="hidden"')+' style="margin-top:8px">'
-      +'<label>key — property both sides join on</label>'
-      +'<input id="tfKey" spellcheck="false" value="'+esc(n.key||"")+'" placeholder="e.g. id"></div>';
-  }
   if(n.type==="cmd"){
     const m=n.mode||"once";
     return '<label>mode — run the command…</label>'
@@ -794,7 +785,6 @@ function renderTypeFields(n){
   if(n.type==="ai")return timeoutField(n);
   return "";
 }
-function onMergeMode(){const w=$("tfKeyWrap");if(w)w.classList.toggle("hidden",$("tfMode").value!=="byKey");}
 // ai/cmd spawn a subprocess, so they honour a per-node `timeout` (SECONDS). Blank =
 // fall back to the flow default (defaults.timeout) → the built-in 300s. Rarely
 // touched, so it hides behind the ◷ clock in the INPUT header and starts collapsed.
@@ -919,7 +909,7 @@ document.addEventListener("click",e=>{
 //                          {{ $json._list }}. `_list` is pure UI sugar — zero
 //                          engine changes. `_` prefix dodges the `$`-eaten tokenizer
 //                          and collides with nothing, verified across render/items/
-//                          splitOut/aggregate/merge/schema.)
+//                          schema.)
 //
 //   detect on load          render (one wrap, format toggles VISIBILITY only)
 //   ─────────────           ──────────────────────────────────────────────────
@@ -1092,9 +1082,8 @@ function closeNodeNow(){selected=null;panelDirty=false;updateDirty();$("modal").
 // The node's OWN editable fields, read live from the panel → [[field,value],…].
 // SINGLE SOURCE for both saveNode (POSTs each to /api/set) and the draft sent on a
 // run (draftOverride). Each node type owns different fields — write exactly those,
-// not always prompt. (key before mode for merge: setting mode=byKey while key is
-// unset would be a NEW validate error, rejected, leaving mode unsaved.) A null
-// value = "remove this field" (e.g. a schema switched back to Text).
+// not always prompt. A null value = "remove this field" (e.g. a schema switched
+// back to Text).
 // timeout field (ai/cmd only): a valid positive number sets it; empty or invalid
 // clears it (null → remove the key) so the node falls back to the flow default.
 function pushTimeout(n,sets){
@@ -1114,8 +1103,6 @@ function panelFieldSets(n){
     else if(n.schema)sets.push(["schema",null]); // had a schema, now cleared → remove (parse drops null)
     pushTimeout(n,sets);
   }
-  else if(n.type==="splitOut"||n.type==="aggregate"){if($("tfField"))sets.push(["field",$("tfField").value]);}
-  else if(n.type==="merge"){if($("tfKey"))sets.push(["key",$("tfKey").value]);if($("tfMode"))sets.push(["mode",$("tfMode").value]);}
   else if(n.type==="write"){if($("tfPath"))sets.push(["path",$("tfPath").value]);if($("tfMode"))sets.push(["mode",$("tfMode").value]);}
   else if(n.type==="input"){if($("pnParams"))sets.push(["params",collectParams()]);}
   return sets;
@@ -1316,4 +1303,4 @@ boot();
 // Migration bridge: these handlers are still referenced by inline onclick= in
 // app.html (and in runtime-generated card markup), so a module must expose them
 // on window. Converting to addEventListener is the follow-up.
-Object.assign(window,{listFlows,createFlow,back,toggleRaw,runAll,runNode,saveNode,deleteNode,closeNode,addNode,saveRaw,renameSelected,schedulePreview,insertVar,insertEarlier,runTo,setInputVal,onMergeMode,addParamRow,addSchemaRow,onSchemaFormat,toggleSchema,schemaPreview,changeType,markDirty,resetNode,zoomBy,zoomReset,zoomFit,stopRun,toggleRefs,toggleTimeout,onTimeoutInput,toggleFlowTimeout,applyFlowTimeout,applyProfile,toggleOut});
+Object.assign(window,{listFlows,createFlow,back,toggleRaw,runAll,runNode,saveNode,deleteNode,closeNode,addNode,saveRaw,renameSelected,schedulePreview,insertVar,insertEarlier,runTo,setInputVal,addParamRow,addSchemaRow,onSchemaFormat,toggleSchema,schemaPreview,changeType,markDirty,resetNode,zoomBy,zoomReset,zoomFit,stopRun,toggleRefs,toggleTimeout,onTimeoutInput,toggleFlowTimeout,applyFlowTimeout,applyProfile,toggleOut});

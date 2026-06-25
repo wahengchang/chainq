@@ -35,7 +35,7 @@ src/web/      ← 本機 web server(Node 內建 http,零依賴,綁 127.0.0.1)
 ```
 
 - **Flow = 一個 YAML 檔**:具名 steps + model profiles。**node 的 id 就是 YAML key**。畫布座標不進 flow,另存 `.chain/layout.json`。
-- **Step 種類**:`ai` · `cmd` · `assemble`(逐 item)· `splitOut` · `aggregate` · `merge`(整批 collection 運算)· `input`(觸發源)· `write`。沿用 n8n 的 items 模型。**刻意不做 `loop` 容器**(splitOut→鏈→aggregate 已可表達,見 idea-gap.md)。
+- **Step 種類**:`ai` · `cmd` · `assemble`(逐 item)· `input`(觸發源)· `write`。沿用 n8n 的 items 模型。**刻意不做 `loop` 容器**。
 
 ## 眉角(Gotchas)
 

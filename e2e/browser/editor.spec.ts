@@ -17,24 +17,26 @@ const REPO = join(here, "..", "..");
 const TSX = join(REPO, "node_modules", ".bin", "tsx");
 const CLI = join(REPO, "src", "cli", "index.ts");
 
-// A flow that exercises the items-model node types (ai + splitOut + aggregate) so
-// the editor has shapes to draw — rendering it is fully offline.
+// A small linear flow (ai → ai → ai → assemble) so the editor has shapes to draw —
+// rendering it is fully offline.
 const FLOW = `profiles:
   default: { cmd: 'claude -p' }
 steps:
   cities:
     type: ai
     prompt: 'list 3 cities as a JSON array'
-  split:
-    type: splitOut
+  step:
+    type: ai
     from: cities
+    prompt: 'pick one: {{ $json }}'
   describe:
     type: ai
-    from: split
+    from: step
     prompt: 'describe {{ $json }}'
   gather:
-    type: aggregate
+    type: assemble
     from: describe
+    prompt: '{{ $json }}'
 `;
 
 function startServer(dir: string): Promise<{ url: string; proc: ChildProcess }> {
@@ -72,15 +74,13 @@ test("editor renders the real flow graph from chain ui (offline)", async ({ page
   await expect(page.locator(".node")).toHaveCount(4);
 
   const names = await page.locator(".node .nn").allInnerTexts();
-  expect(names.map((s) => s.trim()).sort()).toEqual(["cities", "describe", "gather", "split"]);
+  expect(names.map((s) => s.trim()).sort()).toEqual(["cities", "describe", "gather", "step"]);
 
-  // the items-model collection operators (split / aggregate) read distinctly from
-  // the per-item ai steps: an accent type chip + the `.col` class.
-  await expect(page.locator(".node.col")).toHaveCount(2); // split + gather
-  const split = page.locator(".node", { has: page.locator(".nn", { hasText: /^split$/ }) });
+  // each node carries a type chip naming its kind
+  const step = page.locator(".node", { has: page.locator(".nn", { hasText: /^step$/ }) });
   const gather = page.locator(".node", { has: page.locator(".nn", { hasText: /^gather$/ }) });
-  await expect(split.locator(".ntype")).toContainText("split out");
-  await expect(gather.locator(".ntype")).toContainText("aggregate");
+  await expect(step.locator(".ntype")).toContainText("ai");
+  await expect(gather.locator(".ntype")).toContainText("assemble");
 
   // PLACEMENT: the add-step control is a floating toolbar grouped with the zoom
   // control in the bottom-right corner (one canvas toolbar cluster), stacked just
@@ -97,24 +97,23 @@ test("editor renders the real flow graph from chain ui (offline)", async ({ page
   expect(addBox.y + addBox.height).toBeLessThanOrEqual(zoomBox.y + 1);
 
   // add a new node from the canvas, choosing its type — goes through the real
-  // /api/add-node (engine nodeStarter), so a brand-new merge node appears with
-  // its own accent chip. The old editor could only ever add an `ai` step.
-  await page.selectOption("#addType", "merge");
+  // /api/add-node (engine nodeStarter), so a brand-new cmd node appears with its own
+  // accent chip. The old editor could only ever add an `ai` step.
+  await page.selectOption("#addType", "cmd");
   await page.getByRole("button", { name: "+ add step" }).click();
   await expect(page.locator(".node")).toHaveCount(5);
-  await expect(page.locator(".node.col")).toHaveCount(3); // split + gather + new merge
-  const merge = page.locator(".node", { has: page.locator(".ntype", { hasText: "merge" }) });
-  await expect(merge).toHaveCount(1);
+  const added = page.locator(".node", { has: page.locator(".ntype", { hasText: "cmd" }) });
+  await expect(added).toHaveCount(1);
   await page.keyboard.press("Escape"); // add-node opened the new node's panel — close it
 
-  // inline rename: open the split node's panel, rename it → its key AND the
+  // inline rename: open the `step` node's panel, rename it → its key AND the
   // downstream describe.from both follow, via the real /api/rename (engine).
-  await split.dblclick();
+  await step.dblclick();
   await page.locator("#pnId").fill("fork");
   await page.locator("#pnId").press("Enter");
   await page.keyboard.press("Escape"); // close the panel to read the canvas behind
   await expect(page.locator(".node", { has: page.locator(".nn", { hasText: /^fork$/ }) })).toHaveCount(1);
-  await expect(page.locator(".node", { has: page.locator(".nn", { hasText: /^split$/ }) })).toHaveCount(0);
+  await expect(page.locator(".node", { has: page.locator(".nn", { hasText: /^step$/ }) })).toHaveCount(0);
   const describe = page.locator(".node", { has: page.locator(".nn", { hasText: /^describe$/ }) });
   await expect(describe).toContainText("from [fork]"); // downstream wiring followed the rename
 

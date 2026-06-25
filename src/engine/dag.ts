@@ -13,7 +13,7 @@
 import { parse as parseYaml } from "yaml";
 import type { Flow, FlowNode, NodeType } from "./types.js";
 
-const NODE_TYPES: readonly NodeType[] = ["ai", "cmd", "assemble", "splitOut", "aggregate", "merge", "input", "write"];
+export const NODE_TYPES: readonly NodeType[] = ["ai", "cmd", "assemble", "input", "write"];
 
 // `timeout:` (node or flow default) is authored in SECONDS. Reject anything that
 // isn't a positive finite number up front — a bad value here would otherwise be
@@ -44,21 +44,20 @@ export function parseFlow(yamlText: string): Flow {
   const stepsRaw = (raw.steps ?? {}) as Record<string, Record<string, unknown>>;
   const steps: Flow["steps"] = {};
   for (const [id, spec] of Object.entries(stepsRaw)) {
-    const type = spec.type as NodeType;
-    if (!NODE_TYPES.includes(type)) {
-      throw new Error(
-        `step "${id}" has invalid type "${String(spec.type)}" (expected ${NODE_TYPES.join("|")})`,
-      );
+    if (typeof spec.type !== "string" || spec.type.length === 0) {
+      throw new Error(`step "${id}" has no type (expected ${NODE_TYPES.join("|")})`);
     }
+    // An unknown type (a typo, or a removed splitOut/aggregate/merge) is NOT
+    // thrown here: it parses through so the editor can still open the flow and
+    // paint it as an error node. validate() reports it and the runner refuses it.
+    const type = spec.type as NodeType;
     const node: FlowNode = { id, type };
     if (spec.from !== undefined) node.from = spec.from as string | string[];
     if (typeof spec.prompt === "string") node.prompt = spec.prompt;
     if (typeof spec.run === "string") node.run = spec.run;
     if (typeof spec.profile === "string") node.profile = spec.profile;
     if (Array.isArray(spec.inputs)) node.inputs = spec.inputs as string[];
-    if (typeof spec.field === "string") node.field = spec.field;
     if (typeof spec.mode === "string") node.mode = spec.mode as FlowNode["mode"];
-    if (typeof spec.key === "string") node.key = spec.key;
     if (typeof spec.path === "string") node.path = spec.path;
     if (spec.params && typeof spec.params === "object") {
       node.params = spec.params as FlowNode["params"];

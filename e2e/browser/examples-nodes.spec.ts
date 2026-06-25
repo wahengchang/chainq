@@ -1,8 +1,8 @@
-// Browser E2E — the shipped example flows open in the editor and the collection /
-// shell nodes they showcase render the cleaned panel (no dead prompt column; cmd
-// labeled "command"). Doubles as a smoke test that examples/*.yaml stay valid +
-// openable. Drives the REAL example files (not a synthetic flow). Title carries
-// "editor" for the demo filter.
+// Browser E2E — the shipped example flows open in the editor and the IO / shell
+// nodes they showcase render the cleaned panel (no dead prompt column; cmd labeled
+// "command"). Doubles as a smoke test that examples/*.yaml stay valid + openable.
+// Drives the REAL example files (not a synthetic flow). Title carries "editor" for
+// the demo filter.
 
 import { test, expect, type Page, type Locator } from "@playwright/test";
 import { spawn, type ChildProcess } from "node:child_process";
@@ -34,7 +34,7 @@ async function open(page: Page, name: string) {
   await dwell(page, 700);
 }
 
-test.describe.serial("editor: example flows showcase the collection/shell nodes", () => {
+test.describe.serial("editor: example flows showcase the IO/shell nodes", () => {
   let proc: ChildProcess | undefined;
   const boot = async (flow: string, page: Page) => {
     proc?.kill();
@@ -45,23 +45,13 @@ test.describe.serial("editor: example flows showcase the collection/shell nodes"
   };
   test.afterAll(() => proc?.kill());
 
-  test("editor: merge-join — combine (merge) has no prompt, read-only inputs", async ({ page }) => {
-    await boot("examples/merge-join.yaml", page);
-    await open(page, "combine");
-    await expect(page.locator("#pnPromptCol")).toBeHidden();           // merge has no prompt
-    await expect(page.locator("#pnInput .infield.ro")).toHaveCount(2); // headline + summary, read-only
-    await open(page, "headline");                                      // a real ai branch still has its prompt
-    await expect(page.locator("#pnPromptCol")).toBeVisible();
-    await dwell(page, 800);
-  });
-
-  test("editor: split-aggregate — splitOut & aggregate hide the prompt column", async ({ page }) => {
-    await boot("examples/split-aggregate.yaml", page);
-    for (const name of ["each", "collect"]) {           // splitOut, aggregate
-      await open(page, name);
-      await expect(page.locator("#pnPromptCol")).toBeHidden();
-    }
-    await open(page, "expand");                          // the per-item ai keeps its template
+  test("editor: generate-json — result (write) has no prompt, read-only input", async ({ page }) => {
+    await boot("examples/generate-json.yaml", page);
+    await open(page, "result");                                        // write node
+    await expect(page.locator("#pnPromptCol")).toBeHidden();           // write has no prompt
+    await expect(page.locator("#pnInput .infield.ro")).toHaveCount(1); // to_json, read-only
+    await expect(page.locator("#pnInput .infield .ins")).toHaveCount(0); // no "↵ insert"
+    await open(page, "field_b");                                       // a real ai branch keeps its template
     await expect(page.locator("#pnPromptCol")).toBeVisible();
     await expect(page.locator("#pnPromptLab")).toHaveText("prompt (template)");
     await dwell(page, 800);

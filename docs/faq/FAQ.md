@@ -87,18 +87,19 @@ topic_in:
 ```
 一組值 → 1 個種子 item;多組值 → 批次(batch)。
 
-> **目前 UI 缺口(誠實標註)**:input 節點面板只**顯示**參數表單,沒有「+ 新增參數」按鈕;要新增參數目前得切到 `{ }` raw 手動編 YAML(面板本身的提示也寫 `Add params in { } raw`)。而且畫布上的 `+ add step` 下拉**目前不含 `input` 選項**(`src/web/app.html` 只列了 ai/cmd/assemble/splitOut/aggregate/merge/write)——所以要新增 input 節點,同樣得走 `{ }` raw。引擎是支援 input 的,只是 UI 還沒接上這兩個入口。
+> **目前 UI 缺口(誠實標註)**:input 節點面板只**顯示**參數表單,沒有「+ 新增參數」按鈕;要新增參數目前得切到 `{ }` raw 手動編 YAML(面板本身的提示也寫 `Add params in { } raw`)。而且畫布上的 `+ add step` 下拉**目前不含 `input` 選項**(`src/web/app.html` 只列了 ai/cmd/assemble/write)——所以要新增 input 節點,同樣得走 `{ }` raw。引擎是支援 input 的,只是 UI 還沒接上這兩個入口。
 
 ### B) 一個節點吃多個「上游」(fan-in / 多重 `from`)
 `from` 可以是單一名稱,**也可以是清單**:
 ```yaml
 combine:
-  type: merge
+  type: assemble
   from: [draftA, draftB]   # 多重上游
-  mode: append             # append / byPosition / byKey
+  params:
+    prompt: "【A】\n{{ $('draftA') }}\n\n【B】\n{{ $('draftB') }}"
 ```
 清單中**第一個是 primary**,綁定 `{{ $json }}`;其他上游用 `{{ $('draftB') }}` 或 `{{ $node["draftB"] }}` 引用。
-真正要「合併兩條資料流」時用 **merge** 節點。UI 上用拖曳連線,或直接改 `from`。
+真正要「合併兩條上游」時用 **assemble**(或 `ai`)節點搭配 `from: [a, b]`,在 prompt 裡把兩邊各自引用進來。UI 上用拖曳連線,或直接改 `from`。
 
 ### C) 多筆輸入「值」(批次)
 同一個 input 的多組值 → 批次,一組值產生一個 item。透過多組執行期數值或 `--input-file` 餵入。
@@ -108,10 +109,10 @@ combine:
 | 你想要的「多個輸入」 | 對應機制 | 怎麼設定 |
 |---|---|---|
 | 多個**參數欄位** | input 節點的 `params` | 加多個 param(目前走 `{ }` raw) |
-| 多個**上游來源** | 節點的 `from` 清單 | `from: [a, b]`,或用 merge 節點 |
+| 多個**上游來源** | 節點的 `from` 清單 | `from: [a, b]`(用 assemble / ai 節點) |
 | 多筆**輸入值** | 批次 items | 多組執行期值 / `--input-file` |
 
-> 一句話:面板裡的 `FROM` 是「上游連線」,不是「輸入欄位」;要多個欄位請加 `params`,要多個來源請用 `from: [...]` 或 merge。
+> 一句話:面板裡的 `FROM` 是「上游連線」,不是「輸入欄位」;要多個欄位請加 `params`,要多個來源請用 `from: [...]`。
 
 ---
 
@@ -136,7 +137,7 @@ combine:
 
 ## Q5. 各種節點類型在畫布上怎麼分辨?
 
-**情境**:畫布上節點變多時,想一眼看出哪個是 ai、哪個是 merge、哪個是起點。
+**情境**:畫布上節點變多時,想一眼看出哪個是 ai、哪個是 cmd、哪個是起點。
 
 **答**:每種節點類型都有**專屬顏色 + 圖示徽章**(參考 n8n 的做法)。徽章顯示在節點頭部最左邊,是辨識類型的「logo」;同色也用在類型 chip 上。打開節點時,面板頭部也會帶同一個徽章。
 
@@ -145,10 +146,7 @@ combine:
 | `input` | ▶ | 🟢 綠 `#10b981` | trigger / 起點(注入執行期參數) |
 | `ai` | ✦ | 🟣 紫 `#a78bfa` | 呼叫模型 |
 | `cmd` | $ | 🟠 琥珀 `#f59e0b` | 執行 shell 指令 |
-| `assemble` | ⊕ | 🔵 藍 `#60a5fa` | 模板組裝 |
-| `splitOut` | ⤙ | 🩵 青 `#22d3ee` | fan-out 拆分 |
-| `aggregate` | ⤚ | 🟦 靛 `#818cf8` | fan-in 匯總 |
-| `merge` | ⋈ | 🩷 粉 `#f472b6` | 合併兩個輸入 |
+| `assemble` | ⊕ | 🔵 藍 `#60a5fa` | 模板組裝 / 合併上游 |
 | `write` | ⤓ | 💠 藍綠 `#2dd4bf` | 寫入檔案 |
 
 **設計要點**(誠實標註,避免誤會):
@@ -218,7 +216,5 @@ combine:
 **重試規則(最多兩次模型呼叫,不迴圈)**:第一次 parse 失敗或驗證不符 → 帶 `correctionNote` 重跑一次 → 第二次仍錯就 `fail("schema mismatch after retry: …")`(`run.ts:367`),不會無限重試。
 
 **⚠️ 最常踩的點:引擎不會自動 wrap 純文字**。即使 schema 只有一個 `headline: string` 欄位,模型還是**必須**回 `{"headline":"…"}` 這個物件;它若只回一句純標題,`extractJson` 會 throw `no JSON found` → 觸發那次糾正重試。這就是為什麼 prompt 一定要明寫「只回傳 `{"headline": "你的標題"}`」——**光填 schema 不會改變模型怎麼答**(同 [Q2](#q2-我想讓節點輸出結構化資料該怎麼做) 的陷阱)。唯一會自動 wrap 的是 UI 的 **List** 格式(存成 `{_list: array}`),裸陣列不能當頂層才需要它。
-
-**旁支**:`splitOut` / `merge` 路徑用 `coerceJson`(`run.ts:438`)做容錯——它共用同一個 `extractJson`,但**轉不動就原樣回字串、不報錯**;跟 schema 路徑「驗證失敗會 retry / fail」的嚴格度不同。
 
 > 一句話:`schema` = 拿到字串後的「解析+驗證閘門」,不是模型端的輸出模式;成功才把 item 從字串換成解析後的物件,下游 `{{ $json.欄位 }}` 才取得到。

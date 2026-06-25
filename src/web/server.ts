@@ -131,9 +131,7 @@ async function handle(req: IncomingMessage, res: ServerResponse, opts: WebOption
       run: n.run ?? null,
       profile: n.profile ?? null,
       // node-type config the editor needs to draw shapes + type-specific editors
-      field: n.field ?? null, // splitOut / aggregate
-      mode: n.mode ?? null, // merge strategy / cmd cardinality
-      key: n.key ?? null, // merge byKey
+      mode: n.mode ?? null, // cmd cardinality / write file mode
       inputs: n.inputs ?? null, // cmd declared input files
       params: n.params ?? null, // input: declared params (the form fields the editor draws)
       path: n.path ?? null, // write: output file path

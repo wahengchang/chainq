@@ -28,8 +28,8 @@ export function nodeIdError(id: string): string | null {
 }
 
 /** The minimal legal fields for a freshly-added node of `type`. `from` is left
- * out — the user wires it by dragging a connection — so a merge/splitOut node is
- * intentionally still "needs input" until wired (validate surfaces that). */
+ * out — the user wires it by dragging a connection — so a node that needs input
+ * is intentionally still "needs input" until wired (validate surfaces that). */
 export function nodeStarter(type: NodeType): Record<string, unknown> {
   switch (type) {
     case "ai":
@@ -38,12 +38,6 @@ export function nodeStarter(type: NodeType): Record<string, unknown> {
       return { type, run: "echo hello" };
     case "assemble":
       return { type, prompt: "{{ $json }}" };
-    case "splitOut":
-      return { type };
-    case "aggregate":
-      return { type };
-    case "merge":
-      return { type, mode: "append" };
     case "input":
       return { type, params: {} };
     case "write":
