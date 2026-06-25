@@ -16,15 +16,20 @@ const CLI = join(REPO_ROOT, "src", "cli", "index.ts");
  * actually RUN ai nodes gate on this and skip when it's absent (e.g. CI). */
 export const haveClaude = spawnSync("which", ["claude"]).status === 0;
 
+const stripAnsi = (s: string | null): string => (s ?? "").replace(/\x1b\[[0-9;]*m/g, "");
+
 export interface CliResult {
-  out: string; // stdout + stderr, ANSI stripped
+  out: string; // stdout + stderr, ANSI stripped (back-compat: most asserts use this)
+  stdout: string; // ANSI stripped — the RESULT stream (`-q` / pipe-friendly)
+  stderr: string; // ANSI stripped — the PROGRESS stream
   code: number;
 }
 
 export function runCli(cwd: string, args: string[]): CliResult {
   const r = spawnSync(TSX, [CLI, ...args], { cwd, encoding: "utf8" });
-  const out = `${r.stdout ?? ""}${r.stderr ?? ""}`.replace(/\x1b\[[0-9;]*m/g, "");
-  return { out, code: r.status ?? 1 };
+  const stdout = stripAnsi(r.stdout);
+  const stderr = stripAnsi(r.stderr);
+  return { out: `${stdout}${stderr}`, stdout, stderr, code: r.status ?? 1 };
 }
 
 // "Non-headless": stream the CLI's real (colored) output straight to the
