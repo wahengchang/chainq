@@ -86,6 +86,9 @@ export function computeKeys(
       upstreamKeys,
       // cmd-mode / write-mode config: editing these must invalidate the node
       mode: node.mode ?? null,
+      // write: the output path is a side-effect input — change it and the node
+      // must re-run, or --cache serves the old output and never writes the new file.
+      path: node.path ?? null,
       input: inputMaterial,
     });
     keys.set(id, sha256(material));
