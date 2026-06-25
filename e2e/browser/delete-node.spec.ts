@@ -75,7 +75,7 @@ test("editor force-deletes a depended-on node: it goes, the dependent turns red 
   await expect(tail.locator(".nwarn")).toContainText('from: "mid" does not exist');
 
   // 3) the canvas message names what broke (breakage isn't silent)
-  await expect(page.locator("#canvasMsg")).toContainText("已刪除「mid」");
+  await expect(page.locator("#canvasMsg")).toContainText("Deleted “mid”");
   await expect(page.locator("#canvasMsg")).toContainText("tail");
   await page.screenshot({ path: "test-results/delete-node-broken.png", fullPage: true });
   await dwell(page, 1400);

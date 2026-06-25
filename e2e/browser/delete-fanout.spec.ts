@@ -88,7 +88,7 @@ test("editor force-deletes a fan-out middle node: it goes, BOTH downstream leave
   await expect(leafB.locator(".nwarn")).toContainText('from: "mid" does not exist');
 
   // 3) the canvas message names BOTH broken downstream steps
-  await expect(page.locator("#canvasMsg")).toContainText("已刪除「mid」");
+  await expect(page.locator("#canvasMsg")).toContainText("Deleted “mid”");
   await expect(page.locator("#canvasMsg")).toContainText("leafA");
   await expect(page.locator("#canvasMsg")).toContainText("leafB");
 

@@ -79,7 +79,7 @@ test("fan-out: the × deletes one of several branches, leaving the other two wir
   // 1) one wire gone, the other two branches remain.
   await expect(wires).toHaveCount(2);
   // 2) clean delete — confirmed, no ⚠ (y had no dependents and references nothing).
-  await expect(page.locator("#canvasMsg")).toContainText("已刪除連線 src → y");
+  await expect(page.locator("#canvasMsg")).toContainText("Removed link src → y");
   // 3) y is now unwired but valid (its prompt uses no $json), not flagged broken.
   await expect(nodeByName(page, "y")).not.toHaveClass(/invalid/);
 

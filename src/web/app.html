@@ -147,7 +147,7 @@
   .zoomctl #zoomLbl{min-width:46px;font-size:11px;color:var(--dim)}
   .zoomctl #zoomLbl:hover{color:var(--accent)}
   .zoomctl .zsep{width:1px;align-self:stretch;margin:3px 2px;background:var(--line)}
-  /* 引用線 toggle: shares the zoom toolbar; cool accent + dashed underline when ON,
+  /* refs toggle: shares the zoom toolbar; cool accent + dashed underline when ON,
      dim when OFF, so its state reads at a glance. #33 */
   .zoomctl #refToggle{font-size:11px;color:var(--dim)}
   .zoomctl #refToggle.on{color:var(--ref);text-decoration:underline dashed var(--ref) from-font}
@@ -269,19 +269,19 @@
   </div>
   <!-- default-profile command editor, anchored under the profile pill (positioned in JS) -->
   <div id="profilePop" class="fpop hidden">
-    <div class="tohint">default profile 的指令 · 每個 ai 節點呼叫的本機 CLI · prompt 走 stdin 自動帶入,不用寫在這裡 · 例如 <code>claude -p --model claude-sonnet-4-6</code></div>
+    <div class="tohint">Command for the default profile · the local CLI every ai node calls · the prompt is piped in via stdin automatically, no need to write it here · e.g. <code>claude -p --model claude-sonnet-4-6</code></div>
     <div class="frow">
       <input id="profileInput" spellcheck="false" placeholder="claude -p" onkeydown="if(event.key==='Enter')applyProfile()">
-      <button onclick="applyProfile()">套用</button>
+      <button onclick="applyProfile()">Apply</button>
     </div>
   </div>
 
   <!-- flow-wide default timeout popover, anchored under the ◷ flow clock (positioned in JS) -->
   <div id="flowTimeoutPop" class="fpop hidden">
-    <div class="tohint">整條 flow 的預設逾時(秒)· 各節點沒自己設時用這個 · 空白 = 內建 300</div>
+    <div class="tohint">Default timeout for the whole flow (seconds) · used by any node that doesn't set its own · blank = built-in 300</div>
     <div class="frow">
-      <input id="flowTimeoutInput" type="number" min="1" step="1" spellcheck="false" placeholder="例如 600" onkeydown="if(event.key==='Enter')applyFlowTimeout()">
-      <button onclick="applyFlowTimeout()">套用</button>
+      <input id="flowTimeoutInput" type="number" min="1" step="1" spellcheck="false" placeholder="e.g. 600" onkeydown="if(event.key==='Enter')applyFlowTimeout()">
+      <button onclick="applyFlowTimeout()">Apply</button>
     </div>
   </div>
 
@@ -294,7 +294,7 @@
          the zoom control — one fixed column so they never overlap. -->
     <div class="canvastools">
       <div id="canvasMsg" class="msg"></div>
-      <button id="stopBtn" class="stopbtn hidden" onclick="stopRun()" title="中止整個流程（停在已完成的節點，Esc）">■ stop</button>
+      <button id="stopBtn" class="stopbtn hidden" onclick="stopRun()" title="Abort the whole run (stops at completed nodes, Esc)">■ stop</button>
       <div class="addnode row">
         <select id="addType" title="node type">
           <option value="ai">✦ ai</option>
@@ -314,7 +314,7 @@
         <button onclick="zoomBy(0.1)" title="zoom in (⌘ +)">+</button>
         <button onclick="zoomFit()" title="fit graph to view">⤢</button>
         <span class="zsep"></span>
-        <button id="refToggle" class="on" onclick="toggleRefs()" title="顯示／隱藏引用線（prompt 用 {{ $('id') }} 跨步取值的連線）">⇠ 引用線</button>
+        <button id="refToggle" class="on" onclick="toggleRefs()" title="Show / hide reference wires (links drawn when a prompt pulls a value from another step via {{ $('id') }})">⇠ refs</button>
       </div>
     </div>
 
@@ -330,7 +330,7 @@
           </select>
           <button class="primary" onclick="runNode()" title="run this node + the upstream it needs, reusing cache — only what changed runs (n8n: partial execution)">▷ Execute step</button>
           <button onclick="runNode(true)" title="ignore cache — re-run this node and its upstream fresh, really calling the model">↻ Force execute</button>
-          <button id="pnResetBtn" class="hidden" title="discard this node's unsaved edit — back to the saved value" onclick="resetNode()">↩ 重設</button>
+          <button id="pnResetBtn" class="hidden" title="discard this node's unsaved edit — back to the saved value" onclick="resetNode()">↩ Reset</button>
           <button id="pnSaveBtn" onclick="saveNode()">Save</button>
           <button onclick="deleteNode()">delete</button>
           <button onclick="closeNode()">✕ close</button>
@@ -361,7 +361,7 @@
           </div>
         </div>
         <div class="mfoot">
-          <span id="pnDirty" class="dirtychip hidden">● 未儲存草稿 · 執行會跑這個版本 · ↩ 重設還原</span>
+          <span id="pnDirty" class="dirtychip hidden">● Unsaved draft · running will use this version · ↩ Reset to revert</span>
           <span id="pnMsg" class="msg" style="margin:0"></span>
         </div>
       </div>

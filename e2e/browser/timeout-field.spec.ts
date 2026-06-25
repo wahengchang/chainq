@@ -109,12 +109,12 @@ test("editor sets a flow-wide default timeout via the ◷ flow clock in the bar"
   await expect(pop).toBeHidden();
   await dwell(page, 400);
 
-  // click → popover opens; set 600s and 套用 → writes flow.defaults.timeout.
+  // click → popover opens; set 600s and Apply → writes flow.defaults.timeout.
   await flowClock.click();
   await expect(pop).toBeVisible();
   await page.locator("#flowTimeoutInput").fill("600");
   await dwell(page, 400);
-  await page.getByRole("button", { name: "套用" }).click();
+  await page.getByRole("button", { name: "Apply" }).click();
   await expect(pop).toBeHidden();
   await expect(flowClock).toHaveText("◷ Timeout 600s");
   expect(readFileSync(flowPath, "utf8")).toMatch(/defaults:\s*\n\s*timeout:\s*600/);
@@ -124,7 +124,7 @@ test("editor sets a flow-wide default timeout via the ◷ flow clock in the bar"
   // `defaults:` block is pruned from the YAML.
   await flowClock.click();
   await page.locator("#flowTimeoutInput").fill("");
-  await page.getByRole("button", { name: "套用" }).click();
+  await page.getByRole("button", { name: "Apply" }).click();
   await expect(flowClock).toHaveText("◷ Timeout");
   expect(readFileSync(flowPath, "utf8")).not.toMatch(/defaults:/);
 });

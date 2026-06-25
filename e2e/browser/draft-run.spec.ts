@@ -49,7 +49,7 @@ test("editor keeps an unsaved draft across close/reopen, runs it, resets, saves"
 
   const prompt = page.locator("#pnPrompt");
   const dirty = page.locator("#pnDirty");
-  const reset = page.getByRole("button", { name: "↩ 重設" });
+  const reset = page.getByRole("button", { name: "↩ Reset" });
   const out = page.locator("#pnOut");
   const canvasDot = page.locator(".node .ndirty");
 
@@ -60,7 +60,7 @@ test("editor keeps an unsaved draft across close/reopen, runs it, resets, saves"
   await expect(reset).toBeHidden();
   await dwell(page, 600);
 
-  // EDIT (no save) → footer "● 未儲存" lights up, ↩ Reset appears, canvas node gets a ●.
+  // EDIT (no save) → footer "● Unsaved draft" lights up, ↩ Reset appears, canvas node gets a ●.
   await prompt.fill("echo hello-DRAFT");
   await expect(dirty).toBeVisible();
   await expect(reset).toBeVisible();

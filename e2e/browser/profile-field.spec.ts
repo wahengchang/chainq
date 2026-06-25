@@ -60,10 +60,10 @@ test("editor edits the default profile's command via the toolbar pill — round-
   await expect(page.locator("#profileInput")).toHaveValue("claude -p");
   await dwell(page, 500);
 
-  // change the cmd to pin a model; 套用 → writes profiles.default.cmd, relabels pill.
+  // change the cmd to pin a model; Apply → writes profiles.default.cmd, relabels pill.
   await page.locator("#profileInput").fill("claude -p --model claude-sonnet-4-6");
   await dwell(page, 400);
-  await page.getByRole("button", { name: "套用" }).click();
+  await page.getByRole("button", { name: "Apply" }).click();
   await expect(pop).toBeHidden();
   await expect(pill).toHaveText("● claude -p --model claude-sonnet-4-6 · real");
   expect(readFileSync(flowPath, "utf8")).toMatch(/cmd:\s*'?claude -p --model claude-sonnet-4-6'?/);
@@ -76,7 +76,7 @@ test("editor edits the default profile's command via the toolbar pill — round-
 
   // an empty command is refused — the flow keeps a runnable cmd (壞不落地).
   await page.locator("#profileInput").fill("   ");
-  await page.getByRole("button", { name: "套用" }).click();
-  await expect(page.locator("#canvasMsg")).toContainText("不可為空");
+  await page.getByRole("button", { name: "Apply" }).click();
+  await expect(page.locator("#canvasMsg")).toContainText("cannot be empty");
   await dwell(page, 500);
 });
