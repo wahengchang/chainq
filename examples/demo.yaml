@@ -1,13 +1,22 @@
 # A tiny demo flow. Every step calls the real local model (needs: claude login).
+#
+#   greet(ai+schema，產一個 {name, kind} 物件) ─→ describe(ai，引用上一步的欄位)
+#
+# 重點是 greet 的 schema：沒有 schema，模型不保證回 JSON——丟一段裸 JSON 給它，
+# 它常會「當成聊天訊息」回你一段廢話（見 docs/faq Q7）。宣告 schema 後，輸出會被
+# 解析成真正的 JSON 物件並驗證，下一步才能用 {{ $json.name }} / {{ $json.kind }} 取值。
 profiles:
   default: { cmd: 'claude -p' }
 
 steps:
   greet:
     type: ai
-    prompt: '{"name": "chain", "kind": "prompt-chain tool"}'
+    schema:
+      name: string
+      kind: string
+    prompt: 'Output a JSON object describing this tool: name is "chain", kind is "prompt-chain tool".'
 
   describe:
     type: ai
     from: greet
-    prompt: 'Building {{ $json.name }}, a {{ $json.kind }}.'
+    prompt: 'Write a single punchy one-sentence tagline for {{ $json.name }}, a {{ $json.kind }}. Output only the tagline, no quotes.'
