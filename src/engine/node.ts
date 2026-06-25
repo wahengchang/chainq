@@ -42,5 +42,11 @@ export function nodeStarter(type: NodeType): Record<string, unknown> {
       return { type, params: {} };
     case "write":
       return { type, path: "out/{{date}}.md", mode: "overwrite" };
+    default:
+      // Unknown type (a typo, or a removed splitOut/aggregate/merge). Return a
+      // minimal {type} node — parseable, flagged by validate, painted as an error
+      // node in the editor — instead of `undefined`, which would crash callers
+      // (/api/add-node writing null, /api/set-type dereferencing starter.from).
+      return { type };
   }
 }

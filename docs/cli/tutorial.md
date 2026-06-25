@@ -96,9 +96,9 @@ cat .chain/outputs/summarize.out
 ```
 
 Outputs are stored as a JSON **items** array (`[{ "json": "..." }]`) — chainq's
-data model. One value in, one value out, so you see a single item here. When a
-step produces a list, you'll see many; that's how loops work (next: the
-[how-to guide](./how-to.md), "loop over a list").
+data model. One value in, one value out, so you see a single item here. Feed an
+`input` node a batch (`--input-file`) and each step runs once per item (next: the
+[how-to guide](./how-to.md)).
 
 ## Next steps
 

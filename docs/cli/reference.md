@@ -130,5 +130,5 @@ when you want a cleaner view.
 | `.chain/scratch/` | trial runs from `--pin` (never the real outputs) |
 
 The cache is a **Merkle key**: a node's key folds in its type, prompt/run, profile, declared
-input hashes, node-specific config (`field`/`mode`/`key`), and its upstreams' keys. Edit a node
+input hashes, node-specific config (`mode`), and its upstreams' keys. Edit a node
 → its key changes → it and its transitive downstream re-run; nothing else.
