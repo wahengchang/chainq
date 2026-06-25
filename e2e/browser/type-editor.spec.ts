@@ -1,7 +1,7 @@
-// Browser E2E — P2-a type-specific editor. splitOut/aggregate `field`, merge
-// `mode`/`key`, cmd `mode` can be set from the node panel instead of dropping to
-// raw YAML. Pure structural edits (no run), fully offline. Title carries "editor"
-// so `npm run e2e:ui:demo` (-g editor) picks it up.
+// Browser E2E — P2-a type-specific editor. cmd `mode` and write `path`/`mode` can
+// be set from the node panel instead of dropping to raw YAML. Pure structural edits
+// (no run), fully offline. Title carries "editor" so `npm run e2e:ui:demo`
+// (-g editor) picks it up.
 
 import { test, expect, type Page } from "@playwright/test";
 import { spawn, type ChildProcess } from "node:child_process";
@@ -21,12 +21,14 @@ steps:
   src:
     type: ai
     prompt: 'x'
-  fork:
-    type: splitOut
+  run:
+    type: cmd
     from: src
-  mrg:
-    type: merge
-    from: [src, fork]
+    run: 'cat'
+  out:
+    type: write
+    from: run
+    path: 'out/a.md'
 `;
 
 function startServer(): Promise<{ url: string; proc: ChildProcess }> {
@@ -48,29 +50,29 @@ let proc: ChildProcess, baseURL: string;
 test.beforeAll(async () => ({ url: baseURL, proc } = await startServer()));
 test.afterAll(() => proc?.kill());
 
-test("editor sets type-specific fields from the panel (splitOut field, merge mode+key) — no raw YAML", async ({ page }) => {
+test("editor sets type-specific fields from the panel (cmd mode, write path+mode) — no raw YAML", async ({ page }) => {
   await page.goto(baseURL);
 
-  // splitOut: set `field` in the panel, Save → it round-trips through the YAML
-  await nodeByName(page, "fork").dblclick();
-  await page.locator("#tfField").fill("items");
+  // cmd: switch mode once → perItem in the panel, Save → it round-trips through YAML
+  await nodeByName(page, "run").dblclick();
+  await expect(page.locator("#tfMode")).toHaveValue("once"); // default
+  await page.locator("#tfMode").selectOption("perItem");
   await dwell(page, 500);
   await page.getByRole("button", { name: "Save" }).click();
   await expect(page.locator("#pnMsg")).toContainText("saved");
-  await expect(page.locator("#tfField")).toHaveValue("items"); // re-parsed from YAML
+  await expect(page.locator("#tfMode")).toHaveValue("perItem"); // re-parsed from YAML
   await page.keyboard.press("Escape");
   await dwell(page, 400);
 
-  // merge: switch mode to byKey → the key field appears → set it → Save
-  await nodeByName(page, "mrg").dblclick();
-  await expect(page.locator("#tfKeyWrap")).toHaveClass(/hidden/); // append → key hidden
-  await page.locator("#tfMode").selectOption("byKey");
-  await expect(page.locator("#tfKeyWrap")).not.toHaveClass(/hidden/);
-  await page.locator("#tfKey").fill("id");
+  // write: edit path + flip mode overwrite → append, Save → both persist
+  await nodeByName(page, "out").dblclick();
+  await expect(page.locator("#tfPath")).toHaveValue("out/a.md");
+  await page.locator("#tfPath").fill("out/b.md");
+  await page.locator("#tfMode").selectOption("append");
   await dwell(page, 500);
   await page.getByRole("button", { name: "Save" }).click();
   await expect(page.locator("#pnMsg")).toContainText("saved");
-  await expect(page.locator("#tfMode")).toHaveValue("byKey"); // persisted
-  await expect(page.locator("#tfKey")).toHaveValue("id");
+  await expect(page.locator("#tfPath")).toHaveValue("out/b.md"); // persisted
+  await expect(page.locator("#tfMode")).toHaveValue("append");
   await dwell(page, 1000);
 });

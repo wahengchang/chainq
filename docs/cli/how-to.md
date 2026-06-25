@@ -29,41 +29,22 @@ chainq run flow.yaml --pin draft=sample.txt
 # (sample.txt holds the text you want `draft` to "have produced")
 ```
 
-## Loop over a list (do something to each item)
+## Combine two streams into one
 
-chainq has no loop construct — it's the items model. Produce a list, **Split Out**
-fans it into items, the next node runs **once per item** automatically, then
-**Aggregate** folds the results back:
-
-```yaml
-steps:
-  topics:  { type: ai, prompt: 'List 3 blog topics as a JSON array' }
-  split:   { type: splitOut, from: topics }          # ["a","b","c"] → 3 items
-  draft:   { type: ai, from: split,
-             prompt: 'Write a one-line pitch for: {{ $json }}' }   # runs 3×, $json = each topic
-  collect: { type: aggregate, from: draft }          # 3 items → one [pitch, pitch, pitch]
-```
-
-`ai` nodes are per-item by default. To loop a **shell** step per item, set
-`mode: perItem` (the item is piped to stdin):
-
-```yaml
-  each: { type: cmd, run: 'wc -w', from: split, mode: perItem }
-```
-
-## Merge two streams into one
+Point a single node at two upstreams with `from: [a, b]` and reference each in
+its prompt:
 
 ```yaml
 steps:
   a: { type: ai, prompt: '...' }
   b: { type: ai, prompt: '...' }
-  m: { type: merge, from: [a, b], mode: append }        # a's items then b's items
-  # or join two object streams on a shared key:
-  # m: { type: merge, from: [a, b], mode: byKey, key: id }
+  m: { type: assemble, from: [a, b],
+       params: { prompt: "【A】\n{{ $('a') }}\n\n【B】\n{{ $('b') }}" } }
 ```
 
-`merge` is the only node that takes two inputs. To pull another node's value into
-an ordinary step's prompt, just reference it: `{{ $('a') }}` (no Merge needed).
+An `assemble` (or `ai`) node with `from: [a, b]` is how you fan two streams in.
+To pull another node's value into an ordinary step's prompt without adding it to
+`from`, just reference it: `{{ $('a') }}`.
 
 ## Check a flow without calling the model
 

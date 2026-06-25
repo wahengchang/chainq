@@ -6,7 +6,7 @@ each answering a different question:
 | If you want to… | Read | Kind |
 |---|---|---|
 | **learn** the tool by building your first chain | [tutorial.md](./tutorial.md) | Tutorial |
-| **do a specific task** (loop over a list, run a subset, pin a sample) | [how-to.md](./how-to.md) | How-to |
+| **do a specific task** (run a subset, combine two streams, pin a sample) | [how-to.md](./how-to.md) | How-to |
 | **look up** a command, flag, node type, or `{{ }}` selector | [reference.md](./reference.md) | Reference |
 | **understand why** chainq works the way it does (items model, cache) | [explanation.md](./explanation.md) | Explanation |
 

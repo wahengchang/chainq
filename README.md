@@ -87,9 +87,9 @@ steps:
     path: out/result.json
 ```
 
-Every step is one of **8 node types**: `ai` (calls the model), `cmd` (a shell
-command), `input` (the trigger), `write` (save a file), or a data op
-(`splitOut` · `aggregate` · `merge` · `assemble`). Full runnable version:
+Every step is one of **5 node types**: `ai` (calls the model), `cmd` (a shell
+command), `assemble` (reshape / combine items), `input` (the trigger), or
+`write` (save a file). Full runnable version:
 [`examples/generate-json.yaml`](examples/generate-json.yaml).
 
 ## How you drive it

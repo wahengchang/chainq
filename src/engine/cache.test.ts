@@ -59,6 +59,19 @@ describe("Merkle cache keys", () => {
     const changed = computeKeys(f2, "/tmp");
     expect(changed.get("B")).not.toBe(base.get("B"));
   });
+
+  it("changing a write node's path changes its key (the output path is a side-effect input)", () => {
+    const mk = (path: string): Flow => ({
+      profiles: { default: { cmd: "cat" } },
+      steps: {
+        A: { id: "A", type: "ai", prompt: "x" },
+        W: { id: "W", type: "write", from: "A", path },
+      },
+    });
+    const before = computeKeys(mk("out/a.md"), "/tmp");
+    const after = computeKeys(mk("out/b.md"), "/tmp");
+    expect(after.get("W")).not.toBe(before.get("W")); // else --cache skips writing the new file
+  });
 });
 
 describe("from-order is cache-significant", () => {

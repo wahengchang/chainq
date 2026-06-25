@@ -27,6 +27,24 @@ describe("Runner — G2 fake model", () => {
     expect(r.every((x) => x.status === "ran")).toBe(true);
   });
 
+  it("fails a node of unknown type instead of running it as ai (removed splitOut/aggregate/merge)", async () => {
+    // The runNode guard stops a removed/typo type from falling through to the ai
+    // path and shelling out a real model call. Downstream halts (fast-fail E2).
+    const flow: Flow = {
+      profiles: cat,
+      steps: {
+        a: { id: "a", type: "ai", prompt: "hi" },
+        b: { id: "b", type: "bogus" as unknown as Flow["steps"][string]["type"], from: "a" },
+        c: { id: "c", type: "ai", from: "b", prompt: "{{ $json }}" },
+      },
+    };
+    const r = await new Runner(flow, { chainDir: dir() }).runChain();
+    const b = r.find((x) => x.id === "b")!;
+    expect(b.status).toBe("failed");
+    expect(b.error).toMatch(/unknown type "bogus"/);
+    expect(r.find((x) => x.id === "c")!.status).toBe("skipped"); // downstream never runs
+  });
+
   it("resolves a cross-layer reference to a grandparent ancestor (#33 Phase 2)", async () => {
     const flow: Flow = {
       profiles: cat,

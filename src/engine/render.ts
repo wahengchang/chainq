@@ -34,8 +34,7 @@ export interface RenderInputs {
    * ancestor for the current primary item. Built in run.ts by composing
    * `pairedItem` up the primary-input spine (the `from[0]` chain), so
    * $('id') / $node["id"] / .item to OTHER upstreams pairs to the right row
-   * through CHAINED fan-outs and (collapsing to the first source row) across an
-   * aggregate — not just one hop. A reference whose id is present here uses
+   * through CHAINED fan-outs — not just one hop. A reference whose id is present here uses
    * lineage[id]; anything off the spine falls back to `pairedIndex`. Optional:
    * a 1-in-1-out render (or any caller not tracking lineage) omits it with no
    * behavior change.
@@ -125,8 +124,8 @@ function resolveExpr(expr: string, inputs: RenderInputs): string | undefined {
     const itemM = /^\.item\b(.*)$/.exec(rest);
     const path = itemM ? itemM[1] : rest;
     // The paired item of OTHER upstreams follows the current item's lineage:
-    // prefer the multi-hop walk (lineage[id], correct through chained fan-outs
-    // and across aggregates), fall back to the single-hop pairedIndex for ids off
+    // prefer the multi-hop walk (lineage[id], correct through chained fan-outs),
+    // fall back to the single-hop pairedIndex for ids off
     // the primary spine, then the loop index. A self-reference ($('primary')) is
     // always just the current item.
     const refIdx =

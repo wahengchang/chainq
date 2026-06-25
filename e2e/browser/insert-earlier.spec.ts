@@ -16,25 +16,23 @@ const REPO = join(here, "..", "..");
 const TSX = join(REPO, "node_modules", ".bin", "tsx");
 const CLI = join(REPO, "src", "cli", "index.ts");
 
-// A 1-in-1-out chain: cities → split → describe → gather. For `describe`
-// (from: split) the node `cities` is a TRANSITIVE ancestor — not directly wired —
-// so it lands in the panel's "earlier outputs" box.
+// A 1-in-1-out chain: cities → step → describe. For `describe` (from: step) the
+// node `cities` is a TRANSITIVE ancestor — not directly wired — so it lands in the
+// panel's "earlier outputs" box.
 const FLOW = `profiles:
   default: { cmd: 'claude -p' }
 steps:
   cities:
     type: ai
     prompt: 'list 3 cities as a JSON array'
-  split:
-    type: splitOut
+  step:
+    type: ai
     from: cities
+    prompt: 'pick one: {{ $json }}'
   describe:
     type: ai
-    from: split
+    from: step
     prompt: 'describe {{ $json }}'
-  gather:
-    type: aggregate
-    from: describe
 `;
 
 function startServer(dir: string): Promise<{ url: string; proc: ChildProcess }> {
@@ -98,7 +96,7 @@ test("clicking an earlier output inserts a cross-step reference, leaving from: u
   await expect(page.locator("#pnPrompt")).toHaveValue('describe {{ $json }}{{ $node["cities"] }}');
   // 2) from: is UNTOUCHED — cities did not become a wiring chip; primary stays split.
   await expect(page.locator("#pnWire .chip", { hasText: "cities" })).toHaveCount(0);
-  await expect(page.locator("#pnWire .chip.p")).toContainText("split");
+  await expect(page.locator("#pnWire .chip.p")).toContainText("step");
   // 3) cities STAYS in the earlier-outputs box (still an ancestor, still not wired).
   await expect(page.locator("#pnEarlier .infield", { hasText: "cities" })).toHaveCount(1);
 

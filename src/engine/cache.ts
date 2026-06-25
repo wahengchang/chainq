@@ -84,10 +84,11 @@ export function computeKeys(
       profileCmd,
       inputFileHashes,
       upstreamKeys,
-      // collection-op / cmd-mode config: editing these must invalidate the node
-      field: node.field ?? null,
+      // cmd-mode / write-mode config: editing these must invalidate the node
       mode: node.mode ?? null,
-      key: node.key ?? null,
+      // write: the output path is a side-effect input — change it and the node
+      // must re-run, or --cache serves the old output and never writes the new file.
+      path: node.path ?? null,
       input: inputMaterial,
     });
     keys.set(id, sha256(material));

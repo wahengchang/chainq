@@ -33,14 +33,12 @@ describe("nodeStarter — minimal legal fields per type (single source)", () => 
     expect(nodeStarter("ai")).toEqual({ type: "ai", prompt: "new step" });
     expect(nodeStarter("cmd")).toEqual({ type: "cmd", run: "echo hello" });
     expect(nodeStarter("assemble")).toEqual({ type: "assemble", prompt: "{{ $json }}" });
-    expect(nodeStarter("merge")).toEqual({ type: "merge", mode: "append" });
-    expect(nodeStarter("splitOut")).toEqual({ type: "splitOut" });
-    expect(nodeStarter("aggregate")).toEqual({ type: "aggregate" });
     expect(nodeStarter("input")).toEqual({ type: "input", params: {} });
+    expect(nodeStarter("write")).toEqual({ type: "write", path: "out/{{date}}.md", mode: "overwrite" });
   });
 
   it("covers every NodeType (no missing case)", () => {
-    const all: NodeType[] = ["ai", "cmd", "assemble", "splitOut", "aggregate", "merge", "input"];
+    const all: NodeType[] = ["ai", "cmd", "assemble", "input", "write"];
     for (const t of all) expect(nodeStarter(t).type).toBe(t);
   });
 });

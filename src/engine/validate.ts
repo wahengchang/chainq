@@ -5,7 +5,7 @@
 // Shared by the CLI (chainq validate / before run) and the UI (before save-back)
 // — one validator, never two (eng review code-quality rule).
 
-import { topoOrder, upstreamsOf, ancestorsOf } from "./dag.js";
+import { topoOrder, upstreamsOf, ancestorsOf, NODE_TYPES } from "./dag.js";
 import { promptRefs } from "./render.js";
 import { staticParamErrors } from "./input.js";
 import type { Flow } from "./types.js";
@@ -21,6 +21,16 @@ export function validate(flow: Flow): ValidationError[] {
 
   for (const id of ids) {
     const node = flow.steps[id]!;
+
+    // unknown type — a typo, or a flow authored against a removed splitOut /
+    // aggregate / merge. Flag it (CLI prints it, the editor paints an error node)
+    // instead of running it as if it were an ai step.
+    if (!(NODE_TYPES as readonly string[]).includes(node.type)) {
+      errors.push({
+        node: id,
+        message: `unknown node type "${node.type}"${suggest(node.type, [...NODE_TYPES])} — valid types: ${NODE_TYPES.join(", ")}`,
+      });
+    }
 
     // from: must reference real nodes
     for (const up of upstreamsOf(node)) {
@@ -69,19 +79,7 @@ export function validate(flow: Flow): ValidationError[] {
     if (node.type === "cmd" && !node.run) {
       errors.push({ node: id, message: `cmd step has no run` });
     }
-    // collection operators: input arity
     const ups = upstreamsOf(node);
-    if (node.type === "merge") {
-      if (ups.length !== 2) {
-        errors.push({ node: id, message: `merge needs exactly 2 inputs (from: [a, b]), got ${ups.length}` });
-      }
-      if (node.mode === "byKey" && !node.key) {
-        errors.push({ node: id, message: `merge mode byKey needs a 'key' field` });
-      }
-    }
-    if ((node.type === "splitOut" || node.type === "aggregate") && ups.length !== 1) {
-      errors.push({ node: id, message: `${node.type} needs exactly 1 input, got ${ups.length}` });
-    }
     if (node.type === "write") {
       if (!node.path) errors.push({ node: id, message: `write step has no path` });
       if (ups.length < 1) errors.push({ node: id, message: `write needs an input to write (set from:)` });

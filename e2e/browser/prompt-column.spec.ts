@@ -1,10 +1,10 @@
 // Browser E2E — the middle "prompt" column only shows for nodes that use it.
 // Bug it guards: every non-input node used to render an editable "prompt (template)"
-// textarea, even though splitOut/aggregate/merge/write never read a prompt and cmd's
-// textarea is actually the shell command. So 5/8 node kinds showed a misleading column.
-// After the fix: prompt column shows only for ai/assemble/cmd; cmd relabels to
-// "command"; collection/IO nodes hide the column AND their INPUT chips are read-only
-// (no "insert into the prompt" affordance). Title carries "editor" for the demo filter.
+// textarea, even though IO nodes (input/write) never read a prompt and cmd's textarea
+// is actually the shell command. After the fix: prompt column shows only for
+// ai/assemble/cmd; cmd relabels to "command"; input/write hide the column AND their
+// INPUT chips are read-only (no "insert into the prompt" affordance). Title carries
+// "editor" for the demo filter.
 
 import { test, expect, type Page, type Locator } from "@playwright/test";
 import { spawn, type ChildProcess } from "node:child_process";
@@ -18,19 +18,15 @@ const REPO = join(here, "..", "..");
 const TSX = join(REPO, "node_modules", ".bin", "tsx");
 const CLI = join(REPO, "src", "cli", "index.ts");
 
-// one flow exercising all 8 node types (same shape as node-types.spec).
+// a linear flow exercising all 5 node types (same shape as node-types.spec).
 const FLOW = `profiles:
   default: { cmd: 'claude -p' }
 steps:
-  start:   { type: input, params: {} }
-  load:    { type: cmd, from: start, run: 'echo hi' }
-  gen:     { type: ai, from: load, prompt: 'x {{ $json }}' }
-  split:   { type: splitOut, from: gen }
-  step:    { type: ai, from: split, prompt: 'y {{ $json }}' }
-  gather:  { type: aggregate, from: step }
-  asm:     { type: assemble, from: gather, prompt: '{{ $json }}' }
-  combine: { type: merge, from: [asm, gen], mode: append }
-  save:    { type: write, from: combine, path: 'out/x.md', mode: overwrite }
+  start:  { type: input, params: {} }
+  load:   { type: cmd, from: start, run: 'echo hi' }
+  gen:    { type: ai, from: load, prompt: 'x {{ $json }}' }
+  asm:    { type: assemble, from: gen, prompt: '{{ $json }}' }
+  save:   { type: write, from: asm, path: 'out/x.md', mode: overwrite }
 `;
 
 function startServer(): Promise<{ url: string; proc: ChildProcess }> {
@@ -86,16 +82,16 @@ test("editor: prompt column only shows for nodes that use it (offline)", async (
   await expect(lab).toHaveText("command");
   await expect(page.locator("#pnPrompt")).toHaveAttribute("placeholder", /shell/);
 
-  // ── the 5 no-prompt kinds: middle column hidden, grid collapses to 2 cols ──
-  for (const name of ["split", "gather", "combine", "save", "start"]) {
+  // ── the no-prompt kinds: middle column hidden, grid collapses to 2 cols ────
+  for (const name of ["save", "start"]) {
     await open(page, name);
     await expect(col).toBeHidden();
     await expect(page.locator("#pnCols")).toHaveClass(/trigger/);
   }
 
-  // ── merge keeps its 2 INPUT chips, but read-only (no "insert" affordance) ──
-  await open(page, "combine");
-  await expect(page.locator("#pnInput .infield.ro")).toHaveCount(2);   // asm + gen, read-only
+  // ── write keeps its INPUT chip, but read-only (no "insert" affordance) ─────
+  await open(page, "save");
+  await expect(page.locator("#pnInput .infield.ro")).toHaveCount(1);   // asm, read-only
   await expect(page.locator("#pnInput .infield .ins")).toHaveCount(0); // no "↵ insert" label
   await dwell(page, 1200);
 });

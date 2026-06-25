@@ -24,26 +24,18 @@ Tune one prompt, pay for one step. Everything else in the design serves this.
 ## The items model (why nodes run "per item")
 
 chainq follows n8n's data model: **every wire carries a list of items, and a node
-runs once per input item** — automatically. This means there is no `loop`
-construct. To do something to each element of a list you don't write a loop; you
-fan the list into items and let the next node run per item:
+runs once per input item** — automatically. A single-value chain is just the
+degenerate case — one item in, one item out — so a plain linear flow behaves
+exactly as you'd expect.
 
-```
-list ─▶ [Split Out] ─▶ [do X]  ─▶ [Aggregate]
-        array→items   runs per    items→array
-                      item (auto)
-```
-
-Why this over a bolt-on `map`/`loop` node: iteration becomes the default, not a
-special case. Fan-out (`splitOut`), fan-in (`aggregate`), and combining streams
-(`merge`) are the only new pieces; "loop" falls out for free. A single-value
-chain is just the degenerate case — one item in, one item out — so existing
-linear flows behave exactly as before.
+To combine two upstreams into one step, point a node's `from` at both and
+reference each in its prompt — an `assemble` (or `ai`) node with
+`from: [a, b]` is the fan-in tool.
 
 An item is `{ json: <value> }`. For an `ai`/`cmd` node the value is the raw output
 text (not auto-parsed — model output is messy, and silently parsing markdown
 fences would corrupt prompts downstream). You reach into structure explicitly,
-with `splitOut` or a `{{ $json.field }}` path.
+with a `{{ $json.field }}` path.
 
 ## The cache is a Merkle key (why it's never stale)
 

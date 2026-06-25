@@ -70,20 +70,15 @@ A node's identity is its YAML key (`<id>`). Wires are the `from:` field.
 |---|---|---|
 | `ai` | Call the model once **per input item**. | `from`, `prompt`, `profile?`, `timeout?` |
 | `cmd` | Run a shell command (argv, no shell). | `run`, `inputs?`, `from?`, `mode?`, `timeout?` |
-| `assemble` | Pure data templating — render the prompt, no model call. | `from`, `prompt` |
-| `splitOut` | One item containing an array → one item per element (fan-out). | `from`, `field?` |
-| `aggregate` | Many items → one item holding the array (fan-in). Empty input → `[{json:[]}]`. | `from`, `field?` |
-| `merge` | Combine **two** input streams. | `from: [a, b]`, `mode?`, `key?` |
+| `assemble` | Pure data templating — render the prompt, no model call. Combine upstreams with `from: [a, b]`. | `from`, `prompt` |
 
 Field notes:
 
-- **`from`** — upstream node id (string), or `[a, b]` (only on `merge`). Required except on root nodes.
+- **`from`** — upstream node id (string), or `[a, b]` to fan two upstreams into one node (`assemble`/`ai`). Required except on root nodes.
 - **`prompt`** — template with `{{ }}` expressions (see below). `ai`/`assemble` only.
 - **`run`** — shell command, split on spaces into argv (no shell features). `cmd` only.
 - **`inputs`** — files a `cmd` reads; declaring them makes the node cacheable. Without it, a `cmd` is **volatile** (always re-runs, not persisted, and its downstream too).
-- **`mode`** — `cmd`: `once` (default, single run) | `perItem` (run per input item, item piped to stdin). `merge`: `append` (default) | `byPosition` | `byKey`.
-- **`field`** — `splitOut`/`aggregate`: a single property name to split/aggregate. Omit to use the whole item value.
-- **`key`** — `merge mode: byKey`: the property both sides join on. Required for `byKey`.
+- **`mode`** — `cmd`: `once` (default, single run) | `perItem` (run per input item, item piped to stdin).
 - **`timeout`** — `ai`/`cmd`: **seconds** before this step's subprocess is killed (`timed out`). Overrides the flow default; blank falls back to `defaults.timeout`, then the built-in **300s**. Raise it for a slow step (e.g. an `ai` step writing a long article: `timeout: 1200`). In the editor it lives behind the ◷ clock in a node's INPUT header.
 
 ## Prompt expressions (`{{ }}`)
@@ -114,11 +109,10 @@ when you want a cleaner view.
 ## The item model
 
 - Every wire carries a list of **items**. An item is `{ json: <value>, pairedItem?: <index> }`.
-- A node runs **once per input item** (`ai`, `cmd mode:perItem`). Collection nodes (`splitOut`,
-  `aggregate`, `merge`) see the whole array at once.
-- `ai`/`cmd` output text becomes one item; the text is **not** auto-parsed (`item.json` stays the raw string). Use `splitOut` or a `{{ }}` path to get structure.
+- A node runs **once per input item** (`ai`, `cmd mode:perItem`).
+- `ai`/`cmd` output text becomes one item; the text is **not** auto-parsed (`item.json` stays the raw string). Use a `{{ }}` path to get structure.
 - Single-value chains are 1-in-1-out (one item) — backward compatible with non-list flows.
-- Empty items → downstream is skipped (except `aggregate`, which still emits `[{json:[]}]`).
+- Empty items → downstream is skipped.
 
 ## Profiles
 
@@ -136,5 +130,5 @@ when you want a cleaner view.
 | `.chain/scratch/` | trial runs from `--pin` (never the real outputs) |
 
 The cache is a **Merkle key**: a node's key folds in its type, prompt/run, profile, declared
-input hashes, node-specific config (`field`/`mode`/`key`), and its upstreams' keys. Edit a node
+input hashes, node-specific config (`mode`), and its upstreams' keys. Edit a node
 → its key changes → it and its transitive downstream re-run; nothing else.

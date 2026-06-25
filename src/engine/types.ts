@@ -8,17 +8,12 @@
 //     default: { cmd: 'claude -p' }   fetch:     { type: cmd, run: 'cat in.txt', inputs: ['in.txt'] }
 //                                     summarize: { type: ai, from: fetch, prompt: '...{{ $json }}' }
 
-// ai/cmd/assemble run per-item; splitOut/aggregate/merge are COLLECTION operators
-// (they see the whole input items array, not one item at a time) — the n8n model.
-// `input` is the trigger: it has no upstream and emits the flow's seed item(s)
-// from declared params + run-time values (one set → 1 item; many sets → batch).
-// Note: there is deliberately NO "loop" container type. idea.md envisioned a
-// container that runs a multi-step sub-flow per item, but the items model already
-// expresses that — splitOut (fan-out) → a chain of per-item ai/cmd/assemble steps
-// (each runs once per input item, paired by paired-item lineage) → aggregate
-// (fan-in). A separate Loop container would be a second way to do the same thing,
-// which violates "永不寫兩套". Loop is ⛔ by design (see idea-gap.md).
-export type NodeType = "ai" | "cmd" | "assemble" | "splitOut" | "aggregate" | "merge" | "input" | "write";
+// ai/cmd/assemble run per-item (once per input item, paired by paired-item
+// lineage). `input` is the trigger: it has no upstream and emits the flow's seed
+// item(s) from declared params + run-time values (one set → 1 item; many → batch).
+// `write` persists the items to a file. Multi-input fan-in is expressed by an
+// ai/assemble node with `from: [a, b]` referencing both upstreams in its prompt.
+export type NodeType = "ai" | "cmd" | "assemble" | "input" | "write";
 
 /** A declared input parameter (n8n form field). All fields optional, so existing
  * flows (default-only) are unchanged. */
@@ -35,8 +30,6 @@ export interface ParamSpec {
   required?: boolean;
 }
 
-/** Merge combine strategy (n8n Merge node). */
-export type MergeMode = "append" | "byPosition" | "byKey";
 /** cmd execution cardinality. */
 export type CmdMode = "once" | "perItem";
 /** write 成品 file mode. */
@@ -70,13 +63,8 @@ export interface FlowNode {
   inputs?: string[];
   /** ai: which profile to use. Defaults to 'default'. */
   profile?: string;
-  /** splitOut/aggregate: a single property name of the (object) item to split out /
-   * aggregate. Omitted → operate on the whole item value. */
-  field?: string;
-  /** merge: combine strategy. cmd: 'once' | 'perItem'. write: 'overwrite' | 'append'. */
-  mode?: MergeMode | CmdMode | WriteMode;
-  /** merge byKey: the property name both sides are joined on. */
-  key?: string;
+  /** cmd: 'once' | 'perItem'. write: 'overwrite' | 'append'. */
+  mode?: CmdMode | WriteMode;
   /** write: output file path (relative to cwd). Supports {{date}} / {{datetime}}. */
   path?: string;
   /** ai: declared structured-output schema (C4). When set, the model output is
@@ -108,9 +96,9 @@ export type NodeStatus = "ran" | "cached" | "failed" | "skipped";
 /**
  * The unit that flows on every wire (n8n-style items model). A node's output is
  * a LIST of items; a node runs once per input item. `json` is the item's value —
- * raw text for an ai/cmd node (NOT auto-parsed), a parsed element after Split Out.
+ * raw text for an ai/cmd node (NOT auto-parsed).
  * `pairedItem` records which input item this derived from (for $('id') paired
- * lookup + Merge by-position); absent on root / collection outputs.
+ * lookup); absent on root outputs.
  */
 export interface Item {
   json: unknown;

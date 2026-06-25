@@ -26,6 +26,21 @@ describe("validate & cmd", () => {
     expect(p.exists(".chain/outputs/M.out")).toBe(false);
   });
 
+  it("rejects an unknown node type (removed splitOut/aggregate/merge) before anything runs", () => {
+    const p = newProject().write(
+      "flow.yaml",
+      `profiles:\n  default: { cmd: 'claude -p' }\nsteps:\n  a: { type: ai, prompt: 'x' }\n  b: { type: merge, from: a }\n`,
+    );
+    const v = p.chain("validate", "flow.yaml");
+    expect(v.code).toBe(1);
+    expect(v.out).toMatch(/unknown node type "merge"/);
+
+    const r = p.chain("run", "flow.yaml", "--cache");
+    expect(r.code).toBe(1);
+    expect(r.out).toMatch(/nothing ran/); // caught before any CLI call
+    expect(p.exists(".chain/outputs/b.out")).toBe(false);
+  });
+
   // runs an ai node (sum) → real model, gated.
   it.skipIf(!haveClaude)("a cmd reads its input file (cwd) and is cacheable on a re-run", () => {
     const p = newProject().write("in.txt", "hello").write("flow.yaml", mock("cmd-inputs"));

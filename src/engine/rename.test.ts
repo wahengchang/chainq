@@ -85,8 +85,9 @@ steps:
   a: { type: ai, prompt: 'a' }
   b: { type: ai, prompt: 'b' }
   c:
-    type: merge
+    type: assemble
     from: [a, b]
+    prompt: '{{ $json }}'
 `;
     const out = rename(src, "a", "x");
     const c = parseFlow(out).steps.c;

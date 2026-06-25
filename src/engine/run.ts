@@ -16,7 +16,7 @@ import { renderPrompt, promptRefs } from "./render.js";
 import { runSubprocess } from "./proc.js";
 import { extractJson, schemaErrors, correctionNote } from "./schema.js";
 import { nodeDisposition, planRun, type PlanDeps, type RunPlan } from "./plan.js";
-import type { Flow, FlowNode, NodeResult, Item, MergeMode } from "./types.js";
+import type { Flow, FlowNode, NodeResult, Item } from "./types.js";
 import { textItem, itemsText } from "./types.js";
 
 /** Expand {{date}} (YYYY-MM-DD) and {{datetime}} (YYYY-MM-DD-HH-MM-SS) in a path. */
@@ -253,30 +253,6 @@ export class Runner {
         }
         const sets = this.opts.input && this.opts.input.length ? this.opts.input : [{}];
         output = sets.map((set, i) => ({ json: { ...defaults, ...set }, pairedItem: i }));
-      } else if (node.type === "splitOut") {
-        // collection op: each input item's array field → one output item per element
-        output = [];
-        (primary ? itemsOf(primary) : []).forEach((it, i) => {
-          const base = coerceJson(it.json);
-          const arr = node.field ? (base as Record<string, unknown>)?.[node.field] : base;
-          if (!Array.isArray(arr)) {
-            throw new Error(
-              `splitOut: item ${i} ${node.field ? `field "${node.field}"` : "value"} is not an array`,
-            );
-          }
-          for (const el of arr) output.push({ json: el, pairedItem: i });
-        });
-      } else if (node.type === "aggregate") {
-        // collection op: all input items → ONE item holding the array (empty → [])
-        const values = (primary ? itemsOf(primary) : []).map((it) =>
-          node.field ? (coerceJson(it.json) as Record<string, unknown>)?.[node.field] : it.json,
-        );
-        output = [{ json: values }];
-      } else if (node.type === "merge") {
-        // collection op: combine two input streams (n8n Merge)
-        const a = ups[0] ? itemsOf(ups[0]) : [];
-        const b = ups[1] ? itemsOf(ups[1]) : [];
-        output = mergeItems(a, b, (node.mode as MergeMode) ?? "append", node.key);
       } else if (node.type === "cmd") {
         if (node.mode === "perItem") {
           // run the command once per input item, piping the item value to stdin
@@ -308,6 +284,11 @@ export class Runner {
         if (node.mode === "append") appendFileSync(target, content + "\n");
         else writeFileSync(target, content);
         output = [textItem(content)];
+      } else if (node.type !== "ai" && node.type !== "assemble") {
+        // unknown type (a typo, or a removed splitOut/aggregate/merge). validate()
+        // already flags it; this guard stops it falling through to the ai path and
+        // shelling out as if it were a model call.
+        return this.fail(id, `cannot run node "${id}": unknown type "${node.type}"`);
       } else {
         const runCount = primary ? itemsOf(primary).length : 1; // root runs once
         output = [];
@@ -392,9 +373,8 @@ export class Runner {
    *
    * This generalizes the single-hop `pairedItem`: a reference like $('seed') two or
    * more fan-outs downstream resolves to the right originating row, instead of
-   * indexing the wrong node with a one-hop index. Across an aggregate (many items →
-   * one) the lineage collapses to the FIRST source row — the only defined answer
-   * once the 1:1 pairing is gone. render() reads this map to resolve $('ancestor').
+   * indexing the wrong node with a one-hop index. render() reads this map to
+   * resolve $('ancestor').
    *
    * The DAG is acyclic (topoOrder would have thrown otherwise) so the spine
    * terminates at a trigger; a hop guard is belt-and-suspenders only.
@@ -431,52 +411,4 @@ function isAuthError(stderr: string): boolean {
  * values are JSON-stringified (so the existing path selectors can re-parse them). */
 function itemValue(item: Item): string {
   return typeof item.json === "string" ? item.json : JSON.stringify(item.json);
-}
-
-/** Coerce an item value to structured JSON: a string is parsed (so a cmd node that
- * echoes `["a","b"]` becomes a real array); anything else is returned as-is. */
-function coerceJson(v: unknown): unknown {
-  if (typeof v !== "string") return v;
-  try {
-    return JSON.parse(v);
-  } catch {
-    /* not clean JSON — try extracting it from ``` fences / surrounding prose */
-  }
-  try {
-    return extractJson(v); // shared with the schema path: models love wrapping JSON in ```json
-  } catch {
-    return v; // genuinely not JSON — leave as the raw string (splitOut errors clearly)
-  }
-}
-
-/** Shallow-merge two item values into one object (scalars wrap as { value }). */
-function mergeObjects(a: unknown, b: unknown): Record<string, unknown> {
-  const obj = (v: unknown): Record<string, unknown> =>
-    typeof v === "object" && v !== null ? (v as Record<string, unknown>) : { value: v };
-  return { ...obj(coerceJson(a)), ...obj(coerceJson(b)) };
-}
-
-/** Merge two input streams (n8n Merge node): append | byPosition | byKey. */
-function mergeItems(a: Item[], b: Item[], mode: MergeMode, key?: string): Item[] {
-  if (mode === "append") return [...a, ...b];
-  if (mode === "byPosition") {
-    const out: Item[] = [];
-    for (let i = 0; i < Math.min(a.length, b.length); i++) {
-      out.push({ json: mergeObjects(a[i]!.json, b[i]!.json), pairedItem: i });
-    }
-    return out;
-  }
-  if (mode === "byKey") {
-    if (!key) throw new Error("merge byKey requires a `key` field");
-    const bByKey = new Map<unknown, unknown>();
-    for (const it of b) bByKey.set((coerceJson(it.json) as Record<string, unknown>)?.[key], it.json);
-    const out: Item[] = [];
-    a.forEach((it, i) => {
-      const av = coerceJson(it.json) as Record<string, unknown>;
-      const match = bByKey.get(av?.[key]);
-      if (match !== undefined) out.push({ json: mergeObjects(av, match), pairedItem: i });
-    });
-    return out;
-  }
-  throw new Error(`merge: unknown mode "${mode}"`);
 }

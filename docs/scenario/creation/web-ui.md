@@ -52,7 +52,7 @@ macOS 會自動開預設瀏覽器;否則複製它印出的網址(`http://127.0.0
 
 ## 3. 新增一個節點
 
-1. 在下拉選型別:**✦ ai · $ cmd · ⊕ assemble · ⤙ split out · ⤚ aggregate · ⋈ merge · ⤓ write**。
+1. 在下拉選型別:**✦ ai · $ cmd · ⊕ assemble · ⤓ write**。
 2. 按 **+ add step**。系統會自動命名 `step1`、`step2`…並**立刻打開該節點的面板**。
 
 > ⚠️ 下拉**沒有 `input` 型別**。要建 `input`(觸發點 / 執行期欄位)目前只能用頂列的
@@ -75,8 +75,6 @@ macOS 會自動開預設瀏覽器;否則複製它印出的網址(`http://127.0.0
   | 型別 | 面板顯示的欄位 |
   |---|---|
   | `cmd` | **mode** — `once`(整批跑一次)/ `perItem`(每筆跑一次) |
-  | `splitOut` / `aggregate` | **field** — 要拆出 / 收集的屬性(留空 = 整筆) |
-  | `merge` | **mode**(append / byPosition / byKey)+ **key**(byKey 時 join 的屬性) |
   | `write` | **path**(輸出檔,支援 `{{date}}` / `{{datetime}}`)+ **mode**(overwrite / append) |
   | `input` | **input fields** — 宣告執行期欄位(name / type / default / required) |
 

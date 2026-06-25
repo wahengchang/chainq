@@ -121,10 +121,10 @@ describe("web server", () => {
     try {
       await post(base, "/api/create", { dir, name: "edit" });
 
-      // add a merge node from the nodeStarter single source → mode: append
-      const add = await post(base, "/api/add-node", { path: flow, id: "m", type: "merge" });
+      // add a multi-input assemble node from the nodeStarter single source
+      const add = await post(base, "/api/add-node", { path: flow, id: "m", type: "assemble" });
       expect(add.status).toBe(200);
-      expect((await nodesById()).m).toMatchObject({ type: "merge", mode: "append" });
+      expect((await nodesById()).m).toMatchObject({ type: "assemble", prompt: "{{ $json }}" });
 
       // an illegal id and a duplicate are both rejected
       expect((await post(base, "/api/add-node", { path: flow, id: "a/b", type: "ai" })).status).toBe(400);
@@ -457,29 +457,6 @@ steps:
       const res = await post(base, "/api/run", { path: flow });
       expect(res.status).toBe(409);
       expect(((await res.json()) as any).errors[0].message).toContain("another chain process");
-    } finally {
-      close();
-    }
-  });
-
-  // splitOut/aggregate tolerate ```json fences + prose (coerceJson falls back to
-  // extractJson) — models love wrapping JSON, and the scenario docs warned this
-  // broke splitOut. Offline via a fake model (cat a fenced fixture).
-  it("splitOut tolerates a ```json-fenced array from the model (offline)", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "chain-web-fence-"));
-    const { base, close } = await listen(dir);
-    const flow = join(dir, "f.yaml");
-    writeFileSync(join(dir, "fixture.json"), "```json\n[{\"t\":\"a\"},{\"t\":\"b\"},{\"t\":\"c\"}]\n```\n");
-    writeFileSync(
-      flow,
-      ["profiles:", "  default: { cmd: 'cat fixture.json' }", "steps:",
-       "  ideas: { type: ai, prompt: 'x' }", "  split: { type: splitOut, from: ideas }", ""].join("\n"),
-    );
-    try {
-      const split = (await (await post(base, "/api/run", { path: flow })).text())
-        .trim().split("\n").map((l) => JSON.parse(l) as any).filter((r) => r.id === "split").pop();
-      expect(split.status).toBe("ran");
-      expect(split.items).toBe(3); // fence stripped → array → 3 items
     } finally {
       close();
     }

@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { ancestorsOf, parseFlow, topoOrder, wouldCycle } from "./dag.js";
+import { validate } from "./validate.js";
 
 const YAML = `
 profiles:
@@ -19,8 +20,14 @@ describe("parseFlow", () => {
     expect(flow.steps.fetch!.inputs).toEqual(["in.txt"]);
   });
 
-  it("rejects an unknown node type", () => {
-    expect(() => parseFlow(`steps:\n  x: { type: bogus }`)).toThrow(/invalid type/);
+  it("parses an unknown node type leniently, and validate flags it", () => {
+    // An unknown type (a typo, or a removed splitOut/aggregate/merge) parses
+    // through so the editor can still open the flow and paint an error node;
+    // validate() is what reports it (the CLI prints it, nothing runs).
+    const flow = parseFlow(`steps:\n  x: { type: bogus }`);
+    expect(flow.steps.x!.type).toBe("bogus");
+    const errs = validate(flow);
+    expect(errs.some((e) => e.node === "x" && /unknown node type "bogus"/.test(e.message))).toBe(true);
   });
 
   it("parses a node `timeout` and a flow `defaults.timeout` (seconds)", () => {

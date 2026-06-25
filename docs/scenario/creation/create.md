@@ -118,17 +118,14 @@ curl -s "http://127.0.0.1:<PORT>/api/list?dir=/absolute/path/to/my-flow"
 
 ## 3. 建立一個節點
 
-一份 flow 是一串節點(steps)。型別有 7 種,各自的最小起始欄位如下表
+一份 flow 是一串節點(steps)。型別有 5 種,各自的最小起始欄位如下表
 (這張表是引擎的 `nodeStarter` 單一真相):
 
 | 型別 | 用途 | 起始欄位 | 專屬教學 |
 |---|---|---|---|
 | `ai` | 呼叫模型 | `prompt: "new step"` | [create-ai.md](create-ai.md) |
 | `cmd` | 跑 shell 指令 | `run: "echo hello"` | [create-cmd.md](create-cmd.md) |
-| `assemble` | 純整理/搬資料(不呼叫模型) | `prompt: "{{ $json }}"` | [create-assemble.md](create-assemble.md) |
-| `splitOut` | 把一筆拆成多筆(fan-out) | (無,需接 1 上游) | [create-splitout.md](create-splitout.md) |
-| `aggregate` | 把多筆併成一筆(fan-in) | (無,需接 1 上游) | [create-aggregate.md](create-aggregate.md) |
-| `merge` | 合併兩個上游 | `mode: "append"` | [create-merge.md](create-merge.md) |
+| `assemble` | 純整理/搬資料(不呼叫模型;`from: [a,b]` 可合併多條上游) | `prompt: "{{ $json }}"` | [create-assemble.md](create-assemble.md) |
 | `input` | 宣告執行期輸入欄位 | `params: {}` | [create-input.md](create-input.md) |
 | `write` | 把結果寫到檔案 | `path: "out/{{date}}.md"` | [create-write.md](create-write.md) |
 
@@ -164,7 +161,7 @@ curl -s http://127.0.0.1:<PORT>/api/add-node \
 
 - `type` 省略時預設 `ai`。
 - 節點 id 不合法會回 `400`(含原因);id 已存在也回 `400`。
-- 新節點是**未接線**的(刻意如此):像 `merge`/`splitOut` 加進來會處於
+- 新節點是**未接線**的(刻意如此):需要上游的節點加進來會處於
   「需要輸入」狀態,直到你用下一項把它接上。
 
 ---
@@ -185,9 +182,9 @@ curl -s http://127.0.0.1:<PORT>/api/add-node \
     prompt: 'Make it punchier: {{ $json }}'
 
   merged:
-    type: merge
+    type: assemble
     from: [draft, refine]     # 多上游;順序有意義(第一個 = $json)
-    mode: append
+    prompt: "{{ $('draft') }}\n\n{{ $('refine') }}"
 ```
 
 ### URL
