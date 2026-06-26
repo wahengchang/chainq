@@ -80,14 +80,18 @@ test("Run all (fresh) really calls claude -p on every node — no fake data", as
   const count = await nodes.count();
   expect(count).toBeGreaterThan(0);
 
-  // every node card must settle on the ran badge ("✓ ran · called the model")
+  // every node card must settle on RAN (fresh run → really called the model, not
+  // cached). The status shows on the card via the ✓ glyph — always visible, unlike
+  // the output body, which is collapsed by default (#40).
   for (let i = 0; i < count; i++) {
-    await expect(nodes.nth(i).locator(".outbadge")).toContainText("called the model", {
-      timeout: 120000,
-    });
-    await expect(nodes.nth(i).locator(".nodeout")).not.toBeEmpty();
+    await expect(nodes.nth(i).locator(".glyph.g-ran")).toBeVisible({ timeout: 120000 });
   }
   clearInterval(poll);
+
+  // expand the first node's output to confirm the "called the model" badge + real text
+  await nodes.first().locator(".xn.tog").click();
+  await expect(nodes.first().locator(".outbadge")).toContainText("called the model");
+  await expect(nodes.first().locator(".nodeout")).not.toBeEmpty();
 
   expect(sawProcess, "a `claude` process should have been spawned during Run all").toBe(true);
 });
