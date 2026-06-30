@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.1
+
+- **Docs: simpler Quickstart.** The README now leads with a global install
+  (`npm i -g @wahengchang2023/chainq`) so every command is just `chainq …`, and the
+  happy path is three lines — install → `chainq init` → `chainq ui` — followed by a
+  one-line `chainq run` to land the output. Fixed a stale "8 node types" claim (it's
+  **5**: `ai` · `cmd` · `assemble` · `input` · `write`) and added the editor screenshot
+  the README references. Docs-only — no engine change.
+
 ## 0.2.0
 
 - **Breaking: removed the collection operators `splitOut`, `aggregate`, and `merge`.**

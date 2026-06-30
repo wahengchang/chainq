@@ -6,7 +6,7 @@ Wire a few prompts together, run them on the CLI model you already have
 (`claude -p`, `codex -m`), and watch every step light up **on the same canvas you
 built it on**. One YAML file. No API key. No HTTP. No server to host.
 
-![chainq visual editor](docs/screenshots/07-editor-canvas.png)
+![chainq visual editor](docs/screenshots/doc-sample-1.png)
 
 ## Why chainq
 
@@ -19,7 +19,7 @@ then assemble. But the tools for "automating" that are built for a different job
 | Credentials | API keys, OAuth, billing | **none — `claude login` and go** |
 | Editing vs. running | build here, check the run log *over there* | **same canvas — edit it, run it, see it** |
 | The artifact | a config locked in their UI | **one YAML file you own and `git` it** |
-| Learning curve | a node ecosystem | **8 node types, one page** |
+| Learning curve | a node ecosystem | **5 node types, one page** |
 
 If you've ever thought *"this is just three prompts in a row, why do I need a
 whole platform?"* — that's the gap chainq fills.
@@ -40,14 +40,20 @@ That's the loop: **see the flow, run the flow, read the result — in one place.
 ## Quickstart
 
 ```bash
-npx @wahengchang2023/chainq init my-flow    # scaffold a project
-cd my-flow
-npx @wahengchang2023/chainq ui flow.yaml    # open the visual editor
-npx @wahengchang2023/chainq run flow.yaml   # …or run it in the terminal
+npm i -g @wahengchang2023/chainq    # install once, get the `chainq` command
+chainq init my-flow && cd my-flow   # scaffold a runnable starter flow
+chainq ui flow.yaml                 # open the editor — edit + run on one canvas
 ```
 
-Prefer a permanent command? `npm i -g @wahengchang2023/chainq`, then call **`chainq`**.
+Tune your flow on the canvas, then run it from the terminal to land the output —
+same YAML, no extra export step:
+
+```bash
+chainq run flow.yaml    # run the whole flow; output lands in the file your write step names
+```
+
 Needs **Node ≥ 18**. `ai` steps call your real local model — run `claude login` first.
+No global install? Swap `chainq` for `npx @wahengchang2023/chainq` in any command.
 
 ## What a flow looks like
 
