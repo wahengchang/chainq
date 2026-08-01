@@ -13,5 +13,5 @@ each answering a different question:
 New here? Start with the [tutorial](./tutorial.md). Already know the basics and
 just need a fact? Jump to the [reference](./reference.md).
 
-> chain runs prompt chains on your **local CLI model** (`claude -p`) — one YAML
+> chainq runs prompt chains on your **local CLI model** (`claude -p`) — one YAML
 > file per flow. Every `ai` step calls the real model, so run `claude login` once.

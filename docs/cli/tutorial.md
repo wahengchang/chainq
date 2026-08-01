@@ -1,7 +1,8 @@
 # Tutorial: your first chain
 
 By the end you'll have built, run, and re-run a two-step prompt chain, and seen
-chainq's whole point: editing one step re-runs only what changed.
+chainq's whole point: editing one step re-runs only what changed. If chainq is
+not installed yet, complete [Getting started](../getting-started.md) first.
 
 This is learning-oriented. Follow every step in order; don't skip. Each `ai`
 step calls the real model, so do this once first:

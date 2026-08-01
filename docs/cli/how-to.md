@@ -13,9 +13,10 @@ chainq run flow.yaml --steps 2           # run only the first 2 steps (topologic
 
 `--to` is n8n's "run to here". `--from` is "re-run this node" (it + its downstream).
 
-## Force everything to re-run
+## Re-run everything explicitly
 
 ```bash
+chainq run flow.yaml                     # fresh is already the default
 chainq run flow.yaml --fresh             # ignore the cache, re-run every node
 ```
 
@@ -39,12 +40,44 @@ steps:
   a: { type: ai, prompt: '...' }
   b: { type: ai, prompt: '...' }
   m: { type: assemble, from: [a, b],
-       params: { prompt: "【A】\n{{ $('a') }}\n\n【B】\n{{ $('b') }}" } }
+       prompt: "【A】\n{{ $('a') }}\n\n【B】\n{{ $('b') }}" }
 ```
 
 An `assemble` (or `ai`) node with `from: [a, b]` is how you fan two streams in.
 To pull another node's value into an ordinary step's prompt without adding it to
 `from`, just reference it: `{{ $('a') }}`.
+
+## Run the same flow for a batch of inputs
+
+Declare fields on an `input` node:
+
+```yaml
+steps:
+  start:
+    type: input
+    params:
+      topic: { type: string, required: true }
+  draft:
+    type: ai
+    from: start
+    prompt: 'Write one sentence about {{ $json.topic }}.'
+```
+
+Run one input set directly:
+
+```bash
+chainq run flow.yaml --input topic=automation
+```
+
+For a batch, pass a JSON array or JSONL file. Every record must be an object:
+
+```json
+[{ "topic": "automation" }, { "topic": "prompt chains" }]
+```
+
+```bash
+chainq run flow.yaml --input-file topics.json
+```
 
 ## Check a flow without calling the model
 
