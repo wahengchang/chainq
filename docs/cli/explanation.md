@@ -84,4 +84,4 @@ per-node panels. Structural edits in either always write back to the one YAML
 
 - The facts: [reference.md](./reference.md)
 - Do a task: [how-to.md](./how-to.md)
-- The current state of what's built vs not: [`../../draft.md`](../../draft.md) (the project's Capability & Gap Map)
+- The current architecture and scope: [`../design.md`](../design.md)

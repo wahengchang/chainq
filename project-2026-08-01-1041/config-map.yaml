@@ -1,0 +1,168 @@
+kind: automatic-docs-site-project-inventory
+version: 1
+status: phase_1_local_complete_pending_main_deploy
+generated_at: "2026-08-01T10:41:04+08:00"
+warning: >-
+  This file records known, pending-confirmation, and pending-spike configuration.
+  It is not runtime configuration and must not be copied directly into workflows.
+
+source_repository:
+  local_path: /Users/pp/Desktop/projects/chainq
+  remote: https://github.com/wahengchang/chainq.git
+  inferred_owner_from_remote: wahengchang
+  name: chainq
+  default_branch_observed_locally: main
+  head: 7616818572e70d92beaf657c1f9db9ff1ace2426
+  visibility: public_verified_via_github_api
+  github_pages: enabled_workflow_verified_via_github_api
+  existing_workflows:
+    - .github/workflows/ci.yml
+
+central_docs_repository:
+  topology: same_repository_subdirectory
+  owner: wahengchang
+  name: chainq
+  visibility: public_verified_via_github_api
+  default_branch: main
+  site_url: https://wahengchang.github.io/chainq/
+  site_directory: docs-site
+  worktree_parent_repository: wahengchang/chainq
+  worktree_path: /Users/pp/Desktop/projects/chainq-worktrees/docs-site-bootstrap
+  worktree_branch: codex/docs-site-bootstrap
+
+site:
+  framework: Astro
+  integration: Starlight
+  title: chainq documentation
+  language: mixed_english_and_traditional_chinese_source_content
+  site_origin: https://wahengchang.github.io
+  base_path: /chainq
+  last_updated: source_file_git_commit_time_injected_at_build
+  deployment_target: GitHub Pages project site
+  custom_theme: out_of_scope
+  analytics: out_of_scope
+  custom_domain: out_of_scope
+
+source_content_inventory:
+  markdown_under_docs: 21
+  screenshot_assets: 10
+  frontmatter_files: 0
+  local_markdown_links: 91
+  missing_local_links:
+    - source: docs/cli/explanation.md
+      target: ../../draft.md
+  publish_candidates_require_confirmation:
+    product_entry:
+      - README.md
+      - CHANGELOG.md
+    getting_started:
+      - docs/getting-started.md
+    cli:
+      - docs/cli/README.md
+      - docs/cli/tutorial.md
+      - docs/cli/how-to.md
+      - docs/cli/reference.md
+      - docs/cli/explanation.md
+    faq:
+      - docs/faq/FAQ.md
+    scenarios:
+      - docs/scenario/README.md
+      - docs/scenario/creation/README.md
+      - docs/scenario/creation/create.md
+      - docs/scenario/creation/create-ai.md
+      - docs/scenario/creation/create-assemble.md
+      - docs/scenario/creation/create-cmd.md
+      - docs/scenario/creation/create-input.md
+      - docs/scenario/creation/create-write.md
+      - docs/scenario/creation/web-ui.md
+  exclude_by_default_require_confirmation:
+    - docs/design.md
+    - docs/design/2026-06-02-eng-review-test-plan.md
+    - docs/design/2026-06-02-initial-design.md
+    - docs/design/2026-06-03-eng-review-test-plan.md
+    - docs/test-plan.md
+    - docs/tasks-eng-review.jsonl
+    - docs/iteration-pane-wireframe.html
+
+event_contract:
+  event_type: source-docs-updated
+  client_payload:
+    repository:
+      type: string
+      required: true
+    sha:
+      type: git_sha
+      required: true
+  optional_future_fields:
+    ref:
+      type: string
+    changed_paths:
+      type: array_of_strings
+
+page_metadata_contract:
+  title:
+    required: true
+    source: manual_or_normalized_source_title
+  lastUpdated:
+    required: true
+    meaning: canonical_source_file_last_commit_time
+    status: implemented_and_verified
+  sourceRepository:
+    required_for_generated: true
+  sourcePath:
+    required_for_generated: true
+  sourceCommit:
+    required_for_generated: true
+  generated:
+    required_for_generated: true
+    value: true
+
+build_info_contract:
+  builtAt:
+    meaning: current_build_time
+  docsCommit:
+    meaning: central_docs_repository_sha
+  sourceCommits:
+    meaning: map_of_source_key_to_checked_out_sha
+
+sync_manifest_contract:
+  status: schema_clear_values_pending_confirmation
+  sources:
+    source_key:
+      repository: owner/repository
+      branch_or_ref: main
+      files:
+        - from: path/in/source/repository.md
+          to: route/path.md
+  forbidden_patterns:
+    - copy_all_docs_glob
+    - publish_without_explicit_allowlist
+    - overwrite_manual_pages
+
+validation_contract:
+  blocking:
+    - markdown_or_mdx_compile_failure
+    - broken_internal_link
+    - missing_image_asset
+    - duplicate_route
+    - invalid_frontmatter
+    - generated_source_missing
+    - source_sha_missing
+    - last_updated_parse_failure
+    - astro_production_build_failure
+  deployment_rule: deploy_only_after_build_and_validation_succeed
+
+observed_test_baseline:
+  typecheck: passed
+  unit:
+    files_passed: 13
+    tests_passed: 129
+  cli_e2e_offline:
+    files_passed: 8
+    files_skipped: 3
+    tests_passed: 25
+    tests_skipped_real_model: 9
+  local_real_model_warning: >-
+    The environment exposes a claude binary, so an unfiltered local CLI E2E run
+    entered real-model tests and at least four cases failed. This is a source
+    baseline concern, not evidence about the not-yet-built docs site.
