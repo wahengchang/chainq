@@ -11,5 +11,12 @@
   "status": null,
   "captureMethod": "GitHub REST API via authenticated gh CLI",
   "browserScreenshot": null,
-  "browserScreenshotReason": "Chrome was not signed in to GitHub; no credentials were requested or handled."
+  "browserScreenshotReason": "Chrome was not signed in to GitHub; no credentials were requested or handled.",
+  "firstDeployment": {
+    "commit": "57456aa4a9645a1c25ad116908c6c463522987fd",
+    "workflowRunId": 30685177592,
+    "workflowRunUrl": "https://github.com/wahengchang/chainq/actions/runs/30685177592",
+    "conclusion": "success",
+    "completedAt": "2026-08-01T05:06:30Z"
+  }
 }
