@@ -1,0 +1,15 @@
+{
+  "capturedAt": "2026-08-01T13:01:39+08:00",
+  "repository": "wahengchang/chainq",
+  "visibility": "public",
+  "htmlUrl": "https://wahengchang.github.io/chainq/",
+  "buildType": "workflow",
+  "source": {
+    "branch": "main",
+    "path": "/"
+  },
+  "status": null,
+  "captureMethod": "GitHub REST API via authenticated gh CLI",
+  "browserScreenshot": null,
+  "browserScreenshotReason": "Chrome was not signed in to GitHub; no credentials were requested or handled."
+}

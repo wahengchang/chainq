@@ -1,0 +1,37 @@
+{
+  "name": "@wahengchang/chainq-docs",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "sync": "bun scripts/sync-docs.mjs",
+    "validate": "bun scripts/validate-generated-docs.mjs",
+    "prepare:docs": "bun run sync && bun run validate",
+    "dev": "bun run prepare:docs && astro dev",
+    "build": "bun run prepare:docs && astro build",
+    "preview": "astro preview",
+    "check": "bun run prepare:docs && astro check",
+    "test": "vitest run",
+    "e2e": "playwright test"
+  },
+  "dependencies": {
+    "@astrojs/starlight": "0.41.6",
+    "astro": "7.1.6",
+    "remark-gfm": "4.0.1",
+    "remark-parse": "11.0.0",
+    "remark-stringify": "11.0.0",
+    "unified": "11.0.5",
+    "unist-util-visit": "5.1.0",
+    "yaml": "2.9.0"
+  },
+  "devDependencies": {
+    "@astrojs/check": "0.9.10",
+    "@playwright/test": "1.62.1",
+    "@types/node": "24.13.3",
+    "typescript": "6.0.3",
+    "vitest": "4.1.10"
+  }
+}
