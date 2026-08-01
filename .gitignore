@@ -29,5 +29,8 @@ out/
 # local scratch flow dir
 /test/
 
+# local Codex project planning and browser evidence
+project-*/
+
 # Claude Code 個人設定
 .claude/settings.local.json
