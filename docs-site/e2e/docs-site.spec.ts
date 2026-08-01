@@ -38,4 +38,11 @@ test("published documentation exposes real source metadata and per-page Git date
   await page.getByRole("link", { name: "Getting started", exact: true }).first().click();
   await expect(page).toHaveURL(/\/chainq\/getting-started\/$/);
   await expect(page.getByRole("heading", { level: 1, name: "Getting started" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 2, name: "1. Install chainq" })).toBeVisible();
+  await expect(page.getByText("there is no import or export step")).toBeVisible();
+
+  await page.screenshot({
+    path: resolve(evidenceDir, "phase1-03-getting-started-content.png"),
+    fullPage: true,
+  });
 });

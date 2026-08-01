@@ -1,165 +1,116 @@
 # Getting started
 
-A beginner's walkthrough: go from nothing to a running prompt chain in a few minutes.
-No prior knowledge of `chainq` assumed.
+Go from installation to a running prompt chain, then open the same flow in the
+visual editor. You do not need to know chainq's YAML format before starting.
 
-> **What is chainq?** A tool that runs a *chain of prompts* — you give several AI steps
-> in one YAML file, it runs them in order, feeds each step's output to the next, and
-> caches everything so re-running is cheap. It uses your **local CLI model** (`claude -p`),
-> so there's no API key.
+## 1. Install chainq
 
----
-
-## 0. One-time setup: make `chainq` a command you can type
-
-Install it once from npm (needs **Node ≥ 18**):
+chainq needs **Node.js 18 or newer**. Install the CLI globally:
 
 ```bash
 npm install -g @wahengchang2023/chainq
 ```
 
-Now `chainq` works from any folder. Test it:
+Check that the command is available:
 
 ```bash
 chainq
-# usage: chainq init [dir] | chainq new <name> | chainq run|validate <flow.yaml> ... | chainq ls [dir]
+# usage: chainq init [dir] | chainq new <name> | chainq ui [flow.yaml] | ...
 ```
 
-> Don't want a global install? Use `npx @wahengchang2023/chainq` instead of `chainq`, e.g.
-> `npx @wahengchang2023/chainq init my-first-flow`.
+Prefer not to install globally? Replace `chainq` in any example with
+`npx @wahengchang2023/chainq`.
 
----
-
-## 1. Make a new project
+The starter flow uses the local `claude -p` CLI. Sign in once before the first
+model run:
 
 ```bash
-chainq init my-first-flow      # creates the folder and a starter project
+claude login
+```
+
+You can use another local CLI model later by changing the flow's `profiles:`.
+
+## 2. Create a project
+
+```bash
+chainq init my-first-flow
 cd my-first-flow
 ```
 
-You now have three files:
+The command creates:
 
-```
+```text
 my-first-flow/
-├─ flow.yaml      ← your workflow (the only file that matters)
-├─ input.txt      ← a sample input the flow reads
-└─ .gitignore     ← ignores the .chain/ cache folder
+├── flow.yaml     # the prompt chain; commit this
+├── input.txt     # sample input read by the starter flow
+└── .gitignore    # keeps .chain/ run data out of Git
 ```
 
-## 2. Look at what it made (`flow.yaml`)
+One flow is one YAML file. `flow.yaml` starts with a `cmd` step that reads
+`input.txt`, followed by an `ai` step that summarizes it.
 
-```yaml
-profiles:
-  default: { cmd: 'claude -p' }   # the real local model (needs: claude login)
+## 3. Validate and run it
 
-steps:
-  load:
-    type: cmd                      # a shell step
-    run: 'cat input.txt'           # reads input.txt
-    inputs: ['input.txt']          # tells chainq this file is the input (so it caches right)
+Validate the structure without calling the model:
 
-  summarize:
-    type: ai                       # an AI step
-    from: load                     # takes load's output as its input
-    prompt: 'Summarize in one sentence: {{ $json }}'   # {{ $json }} = the input
+```bash
+chainq validate flow.yaml
 ```
 
-Two steps: `load` reads a file, `summarize` asks the model to summarize it. The arrow is
-the `from:` line.
-
-## 3. Run it
-
-Every `ai` step calls the real local model, so log in once with `claude login`, then:
+Then run the whole chain:
 
 ```bash
 chainq run flow.yaml
 ```
-```
+
+chainq shows a preflight before spending a model call, streams each step's
+status to stderr, and prints the final leaf output to stdout.
+
+```text
 plan: 1 ai call(s) · 0 reused · 0 skipped
-✓ load        ← ran
-✓ summarize   ← ran
+✓ load (1 item)
+✓ summarize (1 item)
 ```
 
-## 4. The whole point: edit a prompt, re-run only what changed
-
-By default `chainq run` re-runs every node (a fresh run). To reuse unchanged
-outputs — the cheap iteration loop — add `--cache`. Run it again with no edits:
+A plain `run` is fresh: every step runs again. Add `--cache` when iterating and
+you want unchanged steps to reuse their previous outputs:
 
 ```bash
 chainq run flow.yaml --cache
 ```
-```
-plan: 0 ai call(s) · 2 reused · 0 skipped
-⊘ load        ← cached (not re-run)
-⊘ summarize   ← cached
-```
-Nothing changed, so **nothing re-runs** — `⊘` means served from cache.
 
-Now open `flow.yaml`, change the `summarize` prompt (e.g. add "in a funny tone"), save,
-and run again with `--cache`:
-```
-⊘ load        ← still cached (you didn't touch it)
-✓ summarize   ← re-ran (you edited it)
-```
-Only what you changed re-runs. That's the core idea — tune one prompt, pay for one step.
-
-## 5. Add more workflows
-
-A project can hold many flows. Make another:
+## 4. Open the visual editor
 
 ```bash
-chainq new tweets              # creates tweets.yaml (a 2-step starter chain)
-chainq run tweets.yaml
-chainq ls                      # list every flow in this project
+chainq ui flow.yaml
 ```
 
----
+The editor opens on `127.0.0.1` using a random local port. The canvas and CLI
+share the same engine and the same `flow.yaml`; there is no import or export
+step. Run the flow, inspect each node's real output, edit a prompt, then save or
+reset the draft.
 
-## Command reference
+## 5. Know what to commit
 
-| Command | What it does |
-|---|---|
-| `chainq init [dir]` | Create a new **project** (folder + starter `flow.yaml` + input + .gitignore) |
-| `chainq new <name>` | Create another **workflow** YAML in the current project |
-| `chainq run <flow.yaml>` | Run the chain — **re-runs every node** by default |
-| `chainq run <flow.yaml> --cache` | Reuse cached outputs; only stale nodes re-run (the cheap iteration loop) |
-| `chainq run <flow.yaml> --fresh` | Ignore the cache, re-run everything (same as the default) |
-| `chainq run <flow.yaml> --from <step>` | Force re-run a step and everything after it |
-| `chainq run <flow.yaml> --to <step>` | Run only up to a step |
-| `chainq run <flow.yaml> --pin <step>=<file>` | Try a change with a fixed input, into a scratch area (real outputs untouched) |
-| `chainq validate <flow.yaml>` | Check the file for mistakes without running anything |
-| `chainq ls [dir]` | List the flow files in a project |
-
-`--force` on `init`/`new` overwrites an existing file.
-
-## Core ideas (in one screen)
-
-- **Flow** = one YAML file = a chain of steps.
-- **Step types:** `ai` (calls the model), `cmd` (runs a shell command), `assemble` (just shuffles data).
-- **`from:`** wires a step to the one(s) it reads. `{{ $json }}` is that input; `{{ $json.field }}`
-  picks a field out of JSON. **Multi-input** (n8n-style): `from: [a, b]` — `{{ $json }}` is the first
-  (`a`); reach any named upstream with `{{ $node["b"] }}` or the n8n alias `{{ $('b') }}`. A
-  `$('id')` reference can reach **any ancestor**, not just a direct `from:` — so you can pull a
-  value from several steps back without wiring it into the data flow.
-- **Profiles** map a name to a model command (e.g. `default: claude -p`). Every `ai` step calls
-  the real local model — there is no offline/fake profile.
-- **`timeout:`** (seconds) caps how long an `ai`/`cmd` step may run before it's killed. Set it on a
-  slow step (`timeout: 1200` for a long article), or set a flow-wide `defaults: { timeout: 600 }`.
-  Blank falls back to the built-in 300s. In the editor: the ◷ clock in a node, ◷ Timeout in the bar.
-- **Cache:** with `--cache`, editing a step re-runs it and everything downstream; everything else
-  is reused. Editing an *upstream* step also re-runs its downstream (never serves a stale result).
-- **`--pin`:** freeze a step's output to a sample so you can iterate on a *later* step without
-  paying to re-run the expensive earlier ones. Trial runs go to `.chain/scratch/`, never your real outputs.
-
-## Where things are stored
-
-```
+```text
 my-first-flow/
-├─ flow.yaml            your workflow (commit this)
-└─ .chain/              chainq's work area (git-ignored)
-   ├─ outputs/          each step's last real output (the cache)
-   ├─ scratch/          --pin trial runs (never touches outputs/)
-   └─ state.json        what's been run + cache keys
+├── flow.yaml              # commit
+├── input.txt              # commit if it is safe project input
+└── .chain/                # do not commit
+    ├── outputs/           # cached real outputs
+    ├── scratch/           # isolated --pin trial runs
+    ├── layout.json        # visual canvas positions
+    └── state.json         # cache state
 ```
 
-That's it. Edit `flow.yaml`, run, watch `✓`/`⊘`, repeat.
+Model outputs can contain sensitive data. Review files before sharing them even
+when they are already covered by `.gitignore`.
+
+## Next steps
+
+- Learn the edit-and-cache loop in [Tutorial: your first chain](cli/tutorial.md).
+- Copy a focused recipe from the [How-to guides](cli/how-to.md).
+- Look up every command, flag, node type, and YAML field in the
+  [CLI reference](cli/reference.md).
+- Build flows in the browser with the [web UI walkthrough](scenario/creation/web-ui.md).
+- Resolve input, schema, and UI questions in the [FAQ](faq/FAQ.md).

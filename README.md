@@ -4,7 +4,8 @@
 
 Wire a few prompts together, run them on the CLI model you already have
 (`claude -p`, `codex -m`), and watch every step light up **on the same canvas you
-built it on**. One YAML file. No API key. No HTTP. No server to host.
+built it on**. One YAML file. No model API key in the flow and no hosted runtime
+to operate.
 
 ![chainq visual editor](docs/screenshots/doc-sample-1.png)
 
@@ -16,7 +17,7 @@ then assemble. But the tools for "automating" that are built for a different job
 | | n8n · Make · Zapier | **chainq** |
 |---|---|---|
 | Where it runs | a server / their cloud | **your machine, your CLI model** |
-| Credentials | API keys, OAuth, billing | **none — `claude login` and go** |
+| Credentials in the flow | API keys, OAuth, billing | **none — use your existing local CLI login** |
 | Editing vs. running | build here, check the run log *over there* | **same canvas — edit it, run it, see it** |
 | The artifact | a config locked in their UI | **one YAML file you own and `git` it** |
 | Learning curve | a node ecosystem | **5 node types, one page** |

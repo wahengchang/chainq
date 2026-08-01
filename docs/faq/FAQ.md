@@ -1,7 +1,7 @@
 # chainq 常見問題(FAQ)
 
-> 本文件由使用者提供的截圖與問題逐題彙整而成。每一題包含:問題、截圖情境、回答。
-> 鐵律:CLI / flow YAML 才是規格,UI 只是鏡像。以下回答均對照 `src/engine` 程式碼查證。
+本頁整理初次建立 flow 時最常遇到的概念與操作問題。CLI、web UI
+與 flow YAML 共用同一個引擎;以下行為均以目前實作為準。
 
 ## 目錄
 
@@ -17,18 +17,18 @@
 
 ## Q1. 第一個節點一定要是 input 嗎?
 
-**情境**:剛用 `chainq new` 建立新專案,看到第一個節點是 `draft`(ai 型別),面板底部寫著 `no upstream — this is a start node`,不確定是不是該換成 input。
+**情境**:新 flow 預設從 `start`(`input`)開始,不確定是不是每條 flow 都必須如此。
 
 **答**:不用。**任何沒有 `from`(上游)的節點,就是起點節點(start node)**,第一個節點是 `ai` 完全正常。
 
-- 預設模板(`src/cli/new.ts` 的 `NEW_FLOW_TEMPLATE`)就是直接從一個 `ai` 節點 `draft` 開始,沒有 input 節點。
 - `input`(`▶ input`)是一種**特殊的 trigger 節點**,它唯一的作用是「宣告執行期參數(params)」並射出種子 item——等同 CLI 的 `--input k=v`。
 - 只有當你想**在每次執行時從外部餵值**(例如主題、數量)時,才需要 input 節點。如果你的第一個 prompt 本身就自足(像 `generate 3 food ideas`),根本不需要 input 節點。
 
 > 一句話:`input` 不是「必須的第一個節點」,而是「起點節點的其中一種——專門用來注入執行期數值的那種」。
 
-**📌 更新(預設行為)**:現在**新建的 flow 一律從一個 `start` trigger(input 節點)開始**,並接到第一個節點(`chainq new` 與網頁「Create」共用同一份模板,見 [Q4](#q4-網頁編輯器跟-cli-指令的邏輯有對應上嗎))。這個 `start` 可以完全是空的(no params),它只是讓每條 chain 都有一個明確的起點。
-> 注意:這只是**預設模板**。引擎**沒有**強制驗證(舊 flow、沒有 input 節點的 flow 仍然合法可跑);「任何無 `from` 的節點都是起點」這條規則不變。
+目前 `chainq new` 與網頁「Create」都使用同一份模板:從一個 `start`
+trigger 開始,再接到第一個 `ai` 節點。這只是方便理解的預設,不是引擎限制;
+舊 flow 或沒有 `input` 的 flow 仍然合法可跑。
 
 ---
 
@@ -87,7 +87,8 @@ topic_in:
 ```
 一組值 → 1 個種子 item;多組值 → 批次(batch)。
 
-> **目前 UI 缺口(誠實標註)**:input 節點面板只**顯示**參數表單,沒有「+ 新增參數」按鈕;要新增參數目前得切到 `{ }` raw 手動編 YAML(面板本身的提示也寫 `Add params in { } raw`)。而且畫布上的 `+ add step` 下拉**目前不含 `input` 選項**(`src/web/app.html` 只列了 ai/cmd/assemble/write)——所以要新增 input 節點,同樣得走 `{ }` raw。引擎是支援 input 的,只是 UI 還沒接上這兩個入口。
+在 web UI 的 `input fields` 編輯器按 `+ add field`,即可新增欄位並設定型別、
+預設值與 required;也可以直接在 YAML 編輯 `params`。
 
 ### B) 一個節點吃多個「上游」(fan-in / 多重 `from`)
 `from` 可以是單一名稱,**也可以是清單**:

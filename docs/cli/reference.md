@@ -32,6 +32,8 @@ For *why* it works this way, see [explanation.md](./explanation.md).
 | `--steps <n>` | Run only the first `n` nodes in topological order. |
 | `--pin <node>=<file>` | Treat `<file>` as `<node>`'s output (a fixed sample). The run goes to `.chain/scratch/` and never touches real outputs. |
 | `--profile <name>` | Override every `ai` node's profile with `<name>` for this run (must be defined in `profiles:`). |
+| `--input <name>=<value>` | Set one declared `input` parameter. Repeat the flag to set multiple fields. Values are coerced using the parameter's declared type. |
+| `--input-file <file>` | Read input sets from one JSON object, a JSON array of objects, or JSONL. The chain runs once per object. |
 | `-q`, `--quiet` | Hide progress (the `flow:`/`plan:`/per-node lines on stderr). Still prints the result on stdout and still shows failures. The pipe-friendly mode. |
 | `-s`, `--silent` | Print nothing at all — progress **and** result. Only the exit code is left (`0` ok, `1` failed). |
 
@@ -71,14 +73,19 @@ A node's identity is its YAML key (`<id>`). Wires are the `from:` field.
 | `ai` | Call the model once **per input item**. | `from`, `prompt`, `profile?`, `timeout?` |
 | `cmd` | Run a shell command (argv, no shell). | `run`, `inputs?`, `from?`, `mode?`, `timeout?` |
 | `assemble` | Pure data templating — render the prompt, no model call. Combine upstreams with `from: [a, b]`. | `from`, `prompt` |
+| `input` | Declare runtime fields and emit one seed item per input set. It is a trigger and cannot have `from`. | `params?` |
+| `write` | Persist upstream items to a file. | `from`, `path`, `mode?` |
 
 Field notes:
 
-- **`from`** — upstream node id (string), or `[a, b]` to fan two upstreams into one node (`assemble`/`ai`). Required except on root nodes.
+- **`from`** — upstream node id (string), or `[a, b]` to fan multiple upstreams into one node (`assemble`/`ai`). Optional on root `ai`/`cmd`/`assemble` nodes, forbidden on `input`, and required on `write`.
 - **`prompt`** — template with `{{ }}` expressions (see below). `ai`/`assemble` only.
 - **`run`** — shell command, split on spaces into argv (no shell features). `cmd` only.
 - **`inputs`** — files a `cmd` reads; declaring them makes the node cacheable. Without it, a `cmd` is **volatile** (always re-runs, not persisted, and its downstream too).
 - **`mode`** — `cmd`: `once` (default, single run) | `perItem` (run per input item, item piped to stdin).
+- **`params`** — `input`: runtime field map. Each field may declare `type`, `default`, and `required`; values come from the UI, `--input`, or `--input-file`.
+- **`path`** — `write`: output path relative to the flow directory. Supports `{{date}}` and `{{datetime}}`.
+- **`mode`** — `write`: `overwrite` (default) or `append`.
 - **`timeout`** — `ai`/`cmd`: **seconds** before this step's subprocess is killed (`timed out`). Overrides the flow default; blank falls back to `defaults.timeout`, then the built-in **300s**. Raise it for a slow step (e.g. an `ai` step writing a long article: `timeout: 1200`). In the editor it lives behind the ◷ clock in a node's INPUT header.
 
 ## Prompt expressions (`{{ }}`)
