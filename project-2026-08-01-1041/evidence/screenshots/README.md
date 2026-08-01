@@ -8,6 +8,8 @@
 |---|---|
 | `phase1-01-home-source-and-last-updated.png` | 本機 production preview 的首頁、真實來源 SHA、圖片、sidebar 與 `Last updated: Jun 30, 2026`。 |
 | `phase1-02-cli-reference-distinct-last-updated.png` | CLI reference 顯示另一個真實日期 `Jun 25, 2026`，證明不是統一 build time。 |
+| `phase1-03-live-pages-home.png` | 首次部署後的公開 Pages 首頁；顯示合併 commit `57456aa`、真實圖片與完整導覽。 |
+| `phase1-04-live-cli-reference.png` | 公開 CLI Reference；來源 path/SHA 正確，頁面日期維持 `Jun 25, 2026`。 |
 
 GitHub Pages 設定頁的 Chrome session 沒有登入 GitHub，因此沒有偽造設定頁截圖，也沒有觸碰帳密；等價設定已透過既有登入的 GitHub CLI/API 完成，原始狀態另存於上一層 `evidence/github-pages-setting.json`。
 

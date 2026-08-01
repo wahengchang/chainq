@@ -2,7 +2,7 @@
 
 > 建立時間：2026-08-01 10:41（Asia/Taipei）
 >
-> 階段：Phase 1 本機閉環完成；等待分支進入 `main` 後首次 Pages 部署
+> 階段：Phase 1 已完成並部署
 >
 > 來源專案：`wahengchang/chainq`（本機 branch：`main`，HEAD：`7616818`）
 >
@@ -32,8 +32,9 @@
 | Astro/Starlight production build | ✅ | Astro check：0 errors／0 warnings／0 hints；production build：19 pages。 |
 | 真實瀏覽器驗收 | ✅ | Playwright headless 與 headed + `SLOWMO=850` 各通過；兩張畫面在 `evidence/screenshots/`。 |
 | GitHub Pages source | ✅ | GitHub API 已啟用 `build_type: workflow`；網址為 `https://wahengchang.github.io/chainq/`，原始回應在 `evidence/github-pages-setting.json`。 |
-| 線上首次部署 | ⬜ | workflow 只在 `main` 觸發；需先讓實作分支進入 `main`，再檢查 Actions run 與公開網址。 |
+| 線上首次部署 | ✅ | PR #63 已合併；Actions run `30685177592` 成功，線上網址為 `https://wahengchang.github.io/chainq/`。 |
 | GitHub 設定頁截圖 | ⬜ | Chrome 沒有 GitHub 登入狀態；未要求、記錄或處理任何帳密，因此目前以 API 回應留證。 |
+| 線上瀏覽器驗收 | ✅ | `phase1-03-live-pages-home.png`、`phase1-04-live-cli-reference.png`；來源 SHA `57456aa`，頁面日期分別為 Jun 30 與 Jun 25, 2026。 |
 
 以下四種視圖保留立項時的完整 Pre-Spike 基線；其中「尚未建立」等文字描述的是當時狀態，實作後狀態以上表為準。
 
