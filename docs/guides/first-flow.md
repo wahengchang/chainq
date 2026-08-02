@@ -22,7 +22,7 @@ You now have:
 
 ```
 my-first-flow/
-├─ flow.yaml      ← your workflow (the only file that matters)
+├─ flow.yaml      ← your flow definition
 ├─ input.txt      ← a sample input the flow reads
 └─ .gitignore     ← ignores the .chain/ cache folder
 ```
@@ -35,7 +35,7 @@ profiles:
 
 steps:
   load:
-    type: cmd                      # a shell step
+    type: cmd                      # a local command (no shell)
     run: 'cat input.txt'           # reads input.txt
     inputs: ['input.txt']          # declares the input → this node is cacheable
   summarize:
@@ -88,7 +88,7 @@ tone"), save, and run again with `--cache`:
 ```
 
 Only what you changed re-runs. Tune one prompt, pay for one step. That's the
-iteration loop chainq is built around — see [explanation.md](./explanation.md).
+iteration loop chainq is built around — see [execution and caching](../concepts/execution.md).
 
 ## 5. Where the output went
 
@@ -99,10 +99,10 @@ cat .chain/outputs/summarize.out
 Outputs are stored as a JSON **items** array (`[{ "json": "..." }]`) — chainq's
 data model. One value in, one value out, so you see a single item here. Feed an
 `input` node a batch (`--input-file`) and each step runs once per item (next: the
-[how-to guide](./how-to.md)).
+[common tasks](common-tasks.md)).
 
 ## Next steps
 
 - Add another flow: `chainq new tweets` → `chainq run tweets.yaml`
-- Do a real task: [how-to.md](./how-to.md)
-- Look up any command or flag: [reference.md](./reference.md)
+- Do a real task: [common tasks](common-tasks.md)
+- Look up any command or flag: [CLI reference](../reference/cli.md)

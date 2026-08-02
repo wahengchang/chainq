@@ -53,7 +53,8 @@
     "e2e:ui:headless": "playwright test",
     "e2e:ui:headed": "playwright test --headed",
     "e2e:ui:demo": "SLOWMO=${SLOWMO:-900} playwright test --headed -g editor",
-    "e2e:ui:debug": "playwright test --debug -g editor"
+    "e2e:ui:debug": "playwright test --debug -g editor",
+    "docs:links": "node scripts/check-doc-links.mjs"
   },
   "dependencies": {
     "yaml": "^2.5.0"
