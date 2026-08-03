@@ -1,7 +1,7 @@
 # How-to guides
 
 Task-oriented recipes. Each one is a single goal — copy, adapt, run. For the full
-list of flags and node types, see [reference.md](./reference.md).
+list of flags and node types, see [CLI reference](../reference/cli.md).
 
 ## Re-run only part of a chain
 
@@ -11,7 +11,7 @@ chainq run flow.yaml --from clean        # force-rerun `clean` AND everything do
 chainq run flow.yaml --steps 2           # run only the first 2 steps (topological order)
 ```
 
-`--to` is n8n's "run to here". `--from` is "re-run this node" (it + its downstream).
+`--to` selects an upstream dependency cone. `--from` selects a node and its downstream dependents.
 
 ## Re-run everything explicitly
 

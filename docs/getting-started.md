@@ -108,9 +108,10 @@ when they are already covered by `.gitignore`.
 
 ## Next steps
 
-- Learn the edit-and-cache loop in [Tutorial: your first chain](cli/tutorial.md).
-- Copy a focused recipe from the [How-to guides](cli/how-to.md).
+- Learn the edit-and-cache loop in [Tutorial: your first flow](guides/first-flow.md).
+- Copy a focused recipe from the [Common tasks](guides/common-tasks.md).
 - Look up every command, flag, node type, and YAML field in the
-  [CLI reference](cli/reference.md).
-- Build flows in the browser with the [web UI walkthrough](scenario/creation/web-ui.md).
-- Resolve input, schema, and UI questions in the [FAQ](faq/FAQ.md).
+  [CLI reference](reference/cli.md).
+- Build flows in the browser with the [visual editor guide](guides/visual-editor.md).
+- Diagnose common failures in [Troubleshooting](troubleshooting.md).
+- Look up every YAML field in the [flow YAML reference](reference/flow.md).

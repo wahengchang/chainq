@@ -19,16 +19,21 @@ export default defineConfig({
       ],
       sidebar: [
         { label: "Home", slug: "index" },
+        { label: "Documentation", slug: "documentation" },
         { label: "Getting started", slug: "getting-started" },
         {
-          label: "CLI",
-          items: [{ autogenerate: { directory: "cli" } }],
+          label: "Guides",
+          items: [{ autogenerate: { directory: "guides" } }],
         },
-        { label: "FAQ", slug: "faq" },
         {
-          label: "Scenarios",
-          items: [{ autogenerate: { directory: "scenario" } }],
+          label: "Reference",
+          items: [{ autogenerate: { directory: "reference" } }],
         },
+        {
+          label: "Concepts",
+          items: [{ autogenerate: { directory: "concepts" } }],
+        },
+        { label: "Troubleshooting", slug: "troubleshooting" },
         { label: "Changelog", slug: "changelog" },
       ],
     }),

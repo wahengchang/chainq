@@ -7,71 +7,33 @@ files:
     to: index.md
     title: chainq
     description: Prompt chaining for local CLI models, defined in one YAML file.
-
+  - from: docs/README.md
+    to: documentation.md
+    title: Documentation
   - from: docs/getting-started.md
     to: getting-started.md
     title: Getting started
-
-  - from: docs/cli/README.md
-    to: cli/index.md
-    title: CLI documentation
-
-  - from: docs/cli/tutorial.md
-    to: cli/tutorial.md
-    title: "Tutorial: your first chain"
-
-  - from: docs/cli/how-to.md
-    to: cli/how-to.md
-    title: How-to guides
-
-  - from: docs/cli/reference.md
-    to: cli/reference.md
+  - from: docs/guides/first-flow.md
+    to: guides/first-flow.md
+    title: "Tutorial: your first flow"
+  - from: docs/guides/visual-editor.md
+    to: guides/visual-editor.md
+    title: Visual editor guide
+  - from: docs/guides/common-tasks.md
+    to: guides/common-tasks.md
+    title: Common tasks
+  - from: docs/reference/cli.md
+    to: reference/cli.md
     title: CLI reference
-
-  - from: docs/cli/explanation.md
-    to: cli/explanation.md
-    title: Explanation
-
-  - from: docs/faq/FAQ.md
-    to: faq.md
-    title: chainq 常見問題
-
-  - from: docs/scenario/README.md
-    to: scenario/index.md
-    title: 場景式操作教學
-
-  - from: docs/scenario/creation/README.md
-    to: scenario/creation/index.md
-    title: 建立各種元件
-
-  - from: docs/scenario/creation/create.md
-    to: scenario/creation/create.md
-    title: 建立各種東西
-
-  - from: docs/scenario/creation/create-ai.md
-    to: scenario/creation/create-ai.md
-    title: 建立 ai 節點
-
-  - from: docs/scenario/creation/create-assemble.md
-    to: scenario/creation/create-assemble.md
-    title: 建立 assemble 節點
-
-  - from: docs/scenario/creation/create-cmd.md
-    to: scenario/creation/create-cmd.md
-    title: 建立 cmd 節點
-
-  - from: docs/scenario/creation/create-input.md
-    to: scenario/creation/create-input.md
-    title: 建立 input 節點
-
-  - from: docs/scenario/creation/create-write.md
-    to: scenario/creation/create-write.md
-    title: 建立 write 節點
-
-  - from: docs/scenario/creation/web-ui.md
-    to: scenario/creation/web-ui.md
-    title: 用 web UI 建立
-
+  - from: docs/reference/flow.md
+    to: reference/flow.md
+    title: Flow YAML reference
+  - from: docs/concepts/execution.md
+    to: concepts/execution.md
+    title: Execution and caching
+  - from: docs/troubleshooting.md
+    to: troubleshooting.md
+    title: Troubleshooting
   - from: CHANGELOG.md
     to: changelog.md
     title: Changelog

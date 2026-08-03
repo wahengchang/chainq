@@ -94,8 +94,8 @@ steps:
     path: out/result.json
 ```
 
-Every step is one of **5 node types**: `ai` (calls the model), `cmd` (a shell
-command), `assemble` (reshape / combine items), `input` (the trigger), or
+Every step is one of **5 node types**: `ai` (calls the model), `cmd` (a local
+command, executed without a shell), `assemble` (reshape / combine items), `input` (the trigger), or
 `write` (save a file). Full runnable version:
 [`examples/generate-json.yaml`](examples/generate-json.yaml).
 
@@ -110,18 +110,14 @@ command), `assemble` (reshape / combine items), `input` (the trigger), or
 - **CLI** — `chainq init · new · run · validate · ls`. `run` re-runs everything by
   default; add `--cache` to reuse unchanged steps.
 
-## Docs
+## Documentation
 
-| You want to… | Go to |
-|---|---|
-| Go from zero to running, step by step | [Getting started](docs/getting-started.md) |
-| Look up a command or flow field | [CLI reference](docs/cli/reference.md) |
-| Follow a hands-on walkthrough | [Tutorial](docs/cli/tutorial.md) · [How-to](docs/cli/how-to.md) |
-| Understand *why* it works this way | [Explanation](docs/cli/explanation.md) |
-| Clear up common confusions (input vs `from`, schema…) | [FAQ](docs/faq/FAQ.md) |
-| Copy a working example flow | [Scenarios](docs/scenario/) · [examples/](examples/) |
-| Read design notes and internals | [docs/design.md](docs/design.md) |
-| See what changed | [CHANGELOG](CHANGELOG.md) |
+- [Documentation map](docs/README.md) — choose a tutorial, guide, reference, or concept page.
+- [Getting started](docs/getting-started.md) — install chainq and complete a first run.
+- [CLI reference](docs/reference/cli.md) and [flow YAML reference](docs/reference/flow.md) — look up commands and configuration.
+- [Visual editor guide](docs/guides/visual-editor.md) and [common tasks](docs/guides/common-tasks.md) — complete specific workflows.
+- [Troubleshooting](docs/troubleshooting.md) — resolve common validation, model, cache, and output problems.
+- [Changelog](CHANGELOG.md) — review released changes.
 
 ## Security
 

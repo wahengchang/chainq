@@ -206,8 +206,11 @@ export function syncDocs() {
     const outputPath = normalizeRepoPath(entry.to);
     const sourceFile = resolve(REPO_ROOT, sourcePath);
     const destination = resolve(GENERATED_DOCS, outputPath);
-    const lastUpdated = git(["log", "-1", "--format=%cI", "--", sourcePath]);
-    if (!lastUpdated) throw new Error(`no Git history for manifest source: ${sourcePath}`);
+    // New pages have no path-specific history until their first commit. Falling
+    // back to the source commit keeps local checks usable before that commit.
+    const lastUpdated =
+      git(["log", "-1", "--format=%cI", "--", sourcePath]) ||
+      git(["show", "-s", "--format=%cI", sourceCommit]);
     const generated = transformMarkdown({
       source: readFileSync(sourceFile, "utf8"),
       sourcePath,

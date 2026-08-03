@@ -12,7 +12,7 @@ describe("same-repository documentation sync", () => {
   });
 
   test("generates every allowlisted page with source metadata", () => {
-    expect(result.pages).toHaveLength(18);
+    expect(result.pages).toHaveLength(11);
     const home = readFileSync(resolve(GENERATED_DOCS, "index.md"), "utf8");
     expect(home).toContain("lastUpdated:");
     expect(home).toContain("Source: [`README.md`]");
@@ -22,7 +22,7 @@ describe("same-repository documentation sync", () => {
   test("rewrites links to published pages using the GitHub Pages base", () => {
     const home = readFileSync(resolve(GENERATED_DOCS, "index.md"), "utf8");
     expect(home).toContain("/chainq/getting-started/");
-    expect(home).toContain("/chainq/cli/reference/");
+    expect(home).toContain("/chainq/reference/cli/");
   });
 
   test("links unlisted repository files to the exact source commit", () => {
@@ -39,6 +39,6 @@ describe("same-repository documentation sync", () => {
   });
 
   test("validates the complete generated output", () => {
-    expect(validateGeneratedDocs()).toEqual({ pages: 18 });
+    expect(validateGeneratedDocs()).toEqual({ pages: 11 });
   });
 });
