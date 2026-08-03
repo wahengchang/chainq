@@ -234,13 +234,16 @@ function nodeCard(n){
   const fromLine=(n.from||[]).length
     ? '<div class="npreview" style="color:var(--accent)">from ['+esc(n.from.join(", "))+']'+(multi?" ← multi-input":"")+'</div>' : '';
   const warnLine=bad?'<div class="nwarn" title="'+esc(bad)+'">⚠ '+esc(bad)+'</div>':'';
+  // a runtime FAILURE shows its reason on the card without needing to expand the
+  // output (when expanded, the full error already shows in `out` above).
+  const failLine=(r&&r.status==="failed"&&r.error&&!outOpen)?'<div class="nwarn" title="'+esc(r.error)+'">✗ '+esc(r.error)+'</div>':'';
   d.innerHTML='<div class="noderun-wrap">'
       +'<button class="noderun" title="Execute step — run this node + the upstream it needs, reusing cache" onclick="event.stopPropagation();runTo(\''+n.id+'\')">▷</button>'
       +'<button class="noderun" title="Force execute — ignore cache, re-run fresh, really call the model" onclick="event.stopPropagation();runTo(\''+n.id+'\',true)">↻</button>'
     +'</div>'
     +'<div class="nh">'+typeBadge(n.type)+'<span class="nn">'+esc(n.id)+'</span>'+draftDot+xn+glyph+typeChip(n.type)+'</div>'
     +fromLine
-    +'<div class="npreview">'+esc((n.prompt||n.run||"").slice(0,70))+'</div>'+out+warnLine
+    +'<div class="npreview">'+esc((n.prompt||n.run||"").slice(0,70))+'</div>'+out+warnLine+failLine
     +'<div class="port" title="drag onto another node to connect →"></div>';
   // Figma/n8n model (#40 v2): a single click SELECTS the node (highlight, no panel);
   // a DOUBLE click opens the editor. Shift+click toggles it in the selection group.
@@ -1045,7 +1048,10 @@ async function loadItems(id){
   // or the user sees an old result next to a live spinner (looks like THIS run's).
   const st=results[id]&&results[id].status;
   if(st==="running"||st==="pending")return;
-  if(data.output&&data.output.length){$("pnOut").className="mbody";$("pnOut").innerHTML=renderItems(data.output);}
+  // A failed run shows its ERROR in pnOut (refreshSelectedOutput). /api/items serves
+  // the last SUCCESSFUL .out (never updated on failure), so painting it here would
+  // mask the error with a stale result — skip the output paint, keep the inputs.
+  if(st!=="failed"&&data.output&&data.output.length){$("pnOut").className="mbody";$("pnOut").innerHTML=renderItems(data.output);}
   const n=nodes.find(x=>x.id===id);if(!n)return;
   const ups=n.from||[];
   if(ups.length&&data.inputs){

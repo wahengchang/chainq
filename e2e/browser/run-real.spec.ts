@@ -67,11 +67,14 @@ test("↻ re-run with the real profile actually calls claude -p", async ({ page 
   await node.hover();
   await node.getByRole("button", { name: "↻" }).click();
 
-  // the card badge must say it RAN (called the model) — NOT cached
-  await expect(node.locator(".outbadge")).toContainText("called the model", { timeout: 90000 });
+  // the card must settle on RAN (called the model, not cached) — the ✓ glyph shows
+  // on the card always, unlike the output body which is collapsed by default (#40).
+  await expect(node.locator(".glyph.g-ran")).toBeVisible({ timeout: 90000 });
   clearInterval(poll);
 
-  // real output text on the card, modal stays closed
+  // expand the output to confirm the badge text + real output, modal stays closed
+  await node.locator(".xn.tog").click();
+  await expect(node.locator(".outbadge")).toContainText("called the model");
   await expect(node.locator(".nodeout")).not.toHaveText(/running…/);
   await expect(node.locator(".nodeout")).not.toBeEmpty();
   await expect(page.locator(".modal")).toBeHidden();
