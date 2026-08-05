@@ -2,6 +2,8 @@
 
 **Prompt chaining for people who live in prompts — not in dashboards.**
 
+npm: [@wahengchang2023/chainq](https://www.npmjs.com/package/@wahengchang2023/chainq)
+
 Wire a few prompts together, run them on the CLI model you already have
 (`claude -p`, `codex exec`), and watch every step light up **on the same canvas you
 built it on**. One YAML file. No model API key in the flow and no hosted runtime
