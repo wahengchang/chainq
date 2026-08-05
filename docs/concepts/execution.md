@@ -54,7 +54,8 @@ and chainq can recreate it.
 
 ## Why local CLI profiles
 
-A profile names a local command such as `claude -p`. The flow contains no model
+A profile names a local command such as `claude -p` or non-interactive
+`codex exec`. The flow contains no model
 API key and chainq inherits the local CLI's authentication. This keeps the YAML
 portable, but it also means model availability, cost, and login errors come from
 the selected CLI.

@@ -18,6 +18,7 @@ const CLI = join(REPO, "src", "cli", "index.ts");
 
 const FLOW = `profiles:
   default: { cmd: 'claude -p' }
+  codex: { cmd: 'codex exec --ephemeral --sandbox read-only --skip-git-repo-check --color never -' }
 steps:
   gen:
     type: ai
@@ -48,6 +49,31 @@ test("editor edits the default profile's command via the toolbar pill — round-
   await page.goto(baseURL);
   const pill = page.locator("#profileBtn");
   const pop = page.locator("#profilePop");
+  const runProfile = page.getByLabel("Run profile");
+
+  // Run-time provider selection is visible, defaults to the flow's own profile,
+  // and sends an override without writing it into the YAML.
+  await expect(runProfile).toHaveValue("");
+  await expect(runProfile.locator("option")).toHaveText([
+    "Flow default · claude -p",
+    "codex · codex exec --ephemeral --sandbox read-only --skip-git-repo-check --color never -",
+  ]);
+  const yamlBeforeRunOverride = readFileSync(flowPath, "utf8");
+  let runRequest = {};
+  await page.route("**/api/run", async (route) => {
+    runRequest = route.request().postDataJSON();
+    await route.fulfill({
+      status: 200,
+      contentType: "application/x-ndjson",
+      body: '{"id":"gen","status":"ran","output":"ok","items":1,"error":null}\n',
+    });
+  });
+  await runProfile.selectOption("codex");
+  await page.getByRole("button", { name: "▷ Run all" }).click();
+  await expect.poll(() => runRequest).toMatchObject({ profile: "codex" });
+  expect(readFileSync(flowPath, "utf8")).toBe(yamlBeforeRunOverride);
+  await runProfile.selectOption("");
+  await page.unroute("**/api/run");
 
   // the pill in the top bar shows the default profile's cmd; popover starts closed.
   await expect(pill).toHaveText("● claude -p · real");
@@ -66,6 +92,7 @@ test("editor edits the default profile's command via the toolbar pill — round-
   await page.getByRole("button", { name: "Apply" }).click();
   await expect(pop).toBeHidden();
   await expect(pill).toHaveText("● claude -p --model claude-sonnet-4-6 · real");
+  await expect(runProfile.locator("option").first()).toHaveText("Flow default · claude -p --model claude-sonnet-4-6");
   expect(readFileSync(flowPath, "utf8")).toMatch(/cmd:\s*'?claude -p --model claude-sonnet-4-6'?/);
   await dwell(page, 600);
 

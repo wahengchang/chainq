@@ -6,6 +6,7 @@ nodes. A node's key under `steps` is its identifier.
 ```yaml
 profiles:
   default: { cmd: 'claude -p' }
+  codex: { cmd: 'codex exec --ephemeral --sandbox read-only --skip-git-repo-check --color never -' }
 defaults:
   timeout: 600
 steps:
@@ -66,6 +67,11 @@ Calls the selected local model once per input item.
 With `schema`, output must be a JSON object containing each declared field with
 the declared shallow type. Extra fields are allowed. chainq makes one corrective
 retry after invalid output, then fails the node.
+
+The bundled Codex command uses `codex exec` because chainq is non-interactive. It
+reads the rendered prompt from stdin (`-`), keeps the run ephemeral and read-only,
+and sends its final response to stdout. Select it with `--profile codex`; omitting
+the flag preserves the flow's existing default and per-node profile choices.
 
 ### `cmd`
 

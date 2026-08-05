@@ -9,7 +9,7 @@
   "scripts": {
     "sync": "bun scripts/sync-docs.mjs",
     "validate": "bun scripts/validate-generated-docs.mjs",
-    "prepare:docs": "bun run sync && bun run validate",
+    "prepare:docs": "bun run sync && bun run validate && node ../scripts/delete-appledouble.mjs --clean",
     "dev": "bun run prepare:docs && astro dev",
     "build": "bun run prepare:docs && astro build",
     "preview": "astro preview",

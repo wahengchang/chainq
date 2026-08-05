@@ -18,7 +18,7 @@ export function resolveProfile(flow: Flow, name: string | undefined): ProfileSpe
 }
 
 // Split a command template into argv. v1 splits on whitespace (no shell, no
-// quoting). Good enough for `claude -p`, `codex -m gpt-5`, `cat`. A node that
+// quoting). Good enough for `claude -p`, `codex exec ... -`, `cat`. A node that
 // genuinely needs shell features uses a `cmd` step with an explicit marker
 // (future work — noted in the design doc, not v1).
 export function cmdToArgv(cmd: string): string[] {

@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.3.0
+
+- **Codex is now a first-class local runtime.** New projects, generated workflows,
+  and bundled examples include a non-interactive `codex exec` profile alongside the
+  backward-compatible Claude default. The editor adds a run-only profile selector,
+  and the CLI suite covers a real Codex execution path. `examples/must-eat.yaml`
+  demonstrates a Codex-default workflow.
+- **Input nodes now separate saved configuration from run-time values.** The editor
+  places YAML-backed field definitions in a collapsible **Flow field setup** section
+  and session-only values in a distinct **Run input** section. Defaults, overrides,
+  required values, reset behavior, keyboard access, stale-value cleanup, and quoted
+  values are covered by browser tests.
+- **Claude and Codex project guidance can coexist.** Shared instructions live in
+  `AGENTS.md`, Claude imports them from `CLAUDE.md`, and each client keeps its own
+  hook configuration. A tested AppleDouble cleaner keeps external-drive metadata out
+  of the worktree without touching `.git`, and CI verifies the configuration.
+
 ## 0.2.1
 
 - **Docs: simpler Quickstart.** The README now leads with a global install

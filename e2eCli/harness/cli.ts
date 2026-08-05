@@ -15,6 +15,7 @@ const CLI = join(REPO_ROOT, "src", "cli", "index.ts");
 /** Is the real `claude` CLI on PATH? There is no fake model — scenarios that
  * actually RUN ai nodes gate on this and skip when it's absent (e.g. CI). */
 export const haveClaude = spawnSync("which", ["claude"]).status === 0;
+export const haveCodex = spawnSync("which", ["codex"]).status === 0;
 
 const stripAnsi = (s: string | null): string => (s ?? "").replace(/\x1b\[[0-9;]*m/g, "");
 

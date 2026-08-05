@@ -96,10 +96,12 @@ Define extra profiles, then pick one per run:
 profiles:
   default: { cmd: 'claude -p' }
   big:     { cmd: 'claude -p --model opus' }
+  codex:   { cmd: 'codex exec --ephemeral --sandbox read-only --skip-git-repo-check --color never -' }
 ```
 
 ```bash
 chainq run flow.yaml --profile big       # every ai node uses the `big` profile this run
+chainq run flow.yaml --profile codex     # every ai node uses Codex for this run
 ```
 
 ## List every flow in a project

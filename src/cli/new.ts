@@ -10,9 +10,11 @@ import { existsSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 export const NEW_FLOW_TEMPLATE = `# A new chain workflow. Edit the prompts, then:
-#   chainq run THIS_FILE                  # every ai step calls the model (needs: claude login)
+#   chainq run THIS_FILE                  # default: Claude (needs: claude login)
+#   chainq run THIS_FILE --profile codex  # opt in to Codex (needs: codex login)
 profiles:
   default: { cmd: 'claude -p' }
+  codex: { cmd: 'codex exec --ephemeral --sandbox read-only --skip-git-repo-check --color never -' }
 
 steps:
   # The start point (trigger). Every chain begins here. Define input fields under
@@ -53,6 +55,7 @@ export function runNew(args: string[]): number {
   console.error(`created ${path}`);
   console.error(`\nnext:`);
   console.error(`  chainq run ${file}                   # first: claude login`);
+  console.error(`  chainq run ${file} --profile codex   # first: codex login`);
   console.error(`  chainq ui ${file}                    # edit it visually`);
   return 0;
 }

@@ -1,6 +1,6 @@
 {
   "name": "@wahengchang2023/chainq",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "type": "module",
   "description": "Run multi-step prompt chains on local CLI models, defined in one YAML file.",
   "keywords": [
@@ -29,7 +29,7 @@
     "node": ">=18"
   },
   "bin": {
-    "chainq": "./dist/cli/index.js"
+    "chainq": "dist/cli/index.js"
   },
   "files": [
     "dist",
@@ -54,6 +54,7 @@
     "e2e:ui:headed": "playwright test --headed",
     "e2e:ui:demo": "SLOWMO=${SLOWMO:-900} playwright test --headed -g editor",
     "e2e:ui:debug": "playwright test --debug -g editor",
+    "check:agents": "node scripts/check-agent-config.mjs && node scripts/delete-appledouble.mjs --check",
     "docs:links": "node scripts/check-doc-links.mjs"
   },
   "dependencies": {

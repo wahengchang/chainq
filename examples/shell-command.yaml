@@ -11,12 +11,13 @@
 #
 # 注意:cmd 預設「不可快取」(每次重跑);要可快取得宣告 inputs:（見 CLAUDE.md 眉角）。
 #
-# 跑（describe 會呼叫真實模型,需先 claude login;list 只是跑 ls）：
+# 跑（describe 會呼叫真實模型；預設需 claude login，Codex 加 --profile codex；list 只跑 ls）：
 #   chainq run examples/shell-command.yaml
 # 或在編輯器裡開：
 #   chainq ui examples/shell-command.yaml
 profiles:
   default: { cmd: 'claude -p' }
+  codex: { cmd: 'codex exec --ephemeral --sandbox read-only --skip-git-repo-check --color never -' }
 
 steps:
   # cmd：在本機跑一條指令,拿 stdout 當輸出（這裡列出目前資料夾的檔案）

@@ -11,6 +11,9 @@ step calls the real model, so do this once first:
 claude login
 ```
 
+To follow the same tutorial with Codex, run `codex login` instead and append
+`--profile codex` to each `chainq run` command.
+
 ## 1. Scaffold a project
 
 ```bash
@@ -32,6 +35,7 @@ my-first-flow/
 ```yaml
 profiles:
   default: { cmd: 'claude -p' }   # the real local model
+  codex: { cmd: 'codex exec --ephemeral --sandbox read-only --skip-git-repo-check --color never -' }
 
 steps:
   load:
