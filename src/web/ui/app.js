@@ -12,7 +12,9 @@
 // the bugs that matter — undefined vars, typos, wrong call signatures.
 const $=(id)=>/** @type {any} */(document.getElementById(id));
 const api=(u,o)=>fetch(u,o).then(async r=>({ok:r.ok,status:r.status,data:await r.json().catch(()=>({}))}));
-const esc=s=>(s==null?"":String(s)).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+const esc=s=>(s==null?"":String(s)).replace(/[&<>"']/g,c=>({
+  '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;',
+}[c]));
 const errs=d=>(d.errors||[]).map(e=>"✗ "+e.node+": "+e.message).join("\n");
 const G={ran:"✓",cached:"⊘",failed:"✗",skipped:"–",pending:"○",running:"◌"};
 // node-type display — one glyph per node type for the chip/badge.
@@ -58,7 +60,41 @@ let invalid={};
 // strings; the server coerces them (parseVal) so "5"→5, "true"→true, exactly
 // like the command line.
 let inputVals={};
-function setInputVal(name,val){inputVals[name]=val;}
+const hasInputVal=name=>Object.prototype.hasOwnProperty.call(inputVals,name);
+function inputName(el){return decodeURIComponent(el.dataset.param||"");}
+function runtimeState(name,spec){
+  if(hasInputVal(name))return{kind:"override",label:"Run override",reset:spec.default!==undefined?"Reset to default":"Clear override"};
+  if(spec.default!==undefined)return{kind:"default",label:"Using default"};
+  if(spec.required)return{kind:"missing",label:"Required · not set"};
+  return{kind:"empty",label:"Not set"};
+}
+function updateInputState(el){
+  const n=nodes.find(x=>x.id===selected),name=inputName(el),spec=(n&&n.params&&n.params[name])||{};
+  const box=el.closest(".runtimefield"),state=runtimeState(name,spec);if(!box)return;
+  const lab=box.querySelector(".runstate"),reset=box.querySelector(".runreset");
+  if(lab){lab.className="runstate "+state.kind;lab.textContent=state.label;}
+  if(reset){reset.hidden=!hasInputVal(name);reset.textContent=state.reset||"Reset to default";}
+}
+function setInputVal(el){
+  const name=inputName(el),value=el.type==="checkbox"?el.checked:el.value;
+  if(el.type!=="checkbox"&&value==="")delete inputVals[name];else inputVals[name]=value;
+  updateInputState(el);
+}
+function renderSelectedInputValues(){
+  const n=nodes.find(x=>x.id===selected);if(n&&n.type==="input")$("pnInput").innerHTML=renderParamsForm(n);
+}
+function resetInputVal(button){
+  const el=button.closest(".runtimefield")?.querySelector(".paramin");if(!el)return;
+  delete inputVals[inputName(el)];renderSelectedInputValues();
+}
+function restoreInputVal(el){
+  if(el.type!=="checkbox"&&el.value===""&&!hasInputVal(inputName(el)))renderSelectedInputValues();
+}
+function pruneInputVals(){
+  const names=new Set();
+  nodes.forEach(n=>{if(n.type==="input")Object.keys(n.params||{}).forEach(k=>names.add(k));});
+  Object.keys(inputVals).forEach(k=>{if(!names.has(k))delete inputVals[k];});
+}
 // build the input set for a run from the input nodes' params + inputVals. Only
 // non-empty values are sent (empty → param falls back to its YAML default). All
 // empty → undefined, so the run shares the no-input cache key (never [{}]).
@@ -69,31 +105,36 @@ function collectInput(){
   names.forEach(k=>{const v=inputVals[k];if(v!=null&&v!=="")set[k]=v;});
   return Object.keys(set).length?[set]:undefined;
 }
-// the params form drawn in an input node's panel — one field per declared param,
-// prefilled with its default. Editing a field updates inputVals (sent on run).
+// The input node's primary surface: effective values for this browser session.
+// Defaults come from YAML; touching a control creates a run-only override.
 function renderParamsForm(n){
   const params=n.params||{};const names=Object.keys(params);
-  if(!names.length)return '<span class="dim">no fields yet — add one above, then a run can pass values into the chain.</span>';
-  return '<div class="dim" style="margin-bottom:6px">test values for ▷ Run — sent with each run, like CLI <code>--input</code> (not saved to the flow)</div>'
-    +names.map(nm=>{
+  const head='<section class="runinputs" aria-labelledby="pnRunInputTitle">'
+    +'<div class="inputsection-head"><strong id="pnRunInputTitle">Run input</strong><span class="sessionbadge">Session only · not saved</span></div>'
+    +'<div class="inputsection-hint">Values used by <b>Execute step</b> and <b>Run all</b>. They reset when you reload or switch flows.</div>';
+  if(!names.length)return head+'<div class="runempty">No run inputs yet. Define a Flow field above, then Save.</div></section>';
+  return head+names.map((nm,index)=>{
       const spec=params[nm]||{};const def=spec.default;const t=spec.type;
-      const req=spec.required?'<span class="g-failed" title="required"> *</span>':'';
-      const tcip=t?'<span class="dim" style="margin-left:6px;font-size:11px">'+esc(t)+'</span>':'';
-      const tag='<span class="intag">'+esc(nm)+'</span>'+req+tcip;
+      const req=spec.required?'<span class="requiredmark" title="required">required</span>':'';
+      const tcip='<span class="runtime-type">'+esc(t||"any")+'</span>';
+      const id='pnRuntimeInput'+index,stateId=id+'State',state=runtimeState(nm,spec),encoded=encodeURIComponent(nm);
+      const tag='<label for="'+id+'"><span class="intag">'+esc(nm)+'</span>'+tcip+req+'</label>';
       let field;
       if(t==="boolean"){
-        const on=inputVals[nm]!=null?(inputVals[nm]===true||inputVals[nm]==="true"):(def===true);
-        field='<input type="checkbox" class="paramin" data-param="'+esc(nm)+'"'+(on?" checked":"")
-          +' onchange="setInputVal(this.dataset.param,this.checked)" style="margin-top:6px">';
+        const value=hasInputVal(nm)?inputVals[nm]:def,on=value===true||value==="true";
+        field='<label class="runtime-bool" for="'+id+'"><input id="'+id+'" type="checkbox" class="paramin" data-param="'+encoded+'"'
+          +(on?" checked":"")+' onchange="setInputVal(this)" aria-describedby="'+stateId+'"><span>Enabled</span></label>';
       }else{
-        const cur=inputVals[nm]!=null?inputVals[nm]:(def!=null?def:"");
-        field='<input class="paramin" type="'+(t==="number"?"number":"text")+'" data-param="'+esc(nm)+'" '
-          +'value="'+esc(cur)+'" oninput="setInputVal(this.dataset.param,this.value)" '
-          +'placeholder="'+(def!=null?esc(String(def)):(t||"value"))+'" '
-          +'style="width:100%;margin-top:4px;box-sizing:border-box">';
+        const cur=hasInputVal(nm)?inputVals[nm]:(def!=null?def:"");
+        field='<input id="'+id+'" class="paramin" type="'+(t==="number"?"number":"text")+'" data-param="'+encoded+'" '
+          +'value="'+esc(cur)+'" oninput="setInputVal(this)" onblur="restoreInputVal(this)" '
+          +'placeholder="'+(def!=null?'Default: '+esc(String(def)):(spec.required?"Required value":(t||"Optional value")))+'" '
+          +'aria-describedby="'+stateId+'">';
       }
-      return '<div class="infield" style="cursor:default">'+tag+field+'</div>';
-    }).join("");
+      return '<div class="runtimefield"><div class="runtime-meta">'+tag
+        +'<span id="'+stateId+'" class="runstate '+state.kind+'" aria-live="polite">'+state.label+'</span></div>'
+        +field+'<button type="button" class="runreset" onclick="resetInputVal(this)"'+(hasInputVal(nm)?'':' hidden')+'>'+(state.reset||"Reset to default")+'</button></div>';
+    }).join("")+'</section>';
 }
 // The input-node FIELD DEFINITION editor (saved to the flow). This is the missing
 // "where do I set inputs" surface: define each field's name / type / default /
@@ -107,18 +148,34 @@ function paramRow(name,spec){
     +'<select class="pf-type" title="value type">'+topt("","any")+topt("string","string")+topt("number","number")+topt("boolean","boolean")+'</select>'
     +'<input class="pf-def" spellcheck="false" placeholder="default (optional)" value="'+esc(def!=null?String(def):"")+'">'
     +'<label class="pf-req" title="a run must supply this (unless it has a default)"><input type="checkbox" class="pf-reqbox"'+(req?" checked":"")+'>req</label>'
-    +'<button type="button" class="pf-del" title="remove field" onclick="this.closest(\'.paramrow\').remove();markDirty()">×</button>'
+    +'<button type="button" class="pf-del" title="remove field" onclick="removeParamRow(this)">×</button>'
     +'</div>';
 }
 function renderParamsEditor(n){
   const params=n.params||{};const names=Object.keys(params);
-  const rows=names.map(nm=>paramRow(nm,params[nm])).join("");
-  return '<label style="margin-top:0">input fields — values a run can supply (like CLI <code>--input</code>)</label>'
+  const rows=names.map(nm=>paramRow(nm,params[nm])).join(""),open=names.length===0,count=names.length;
+  return '<section class="flowfields">'
+    +'<button type="button" class="flowfields-toggle" aria-expanded="'+open+'" aria-controls="pnParamsPanel" onclick="toggleParamsEditor(this)">'
+    +'<span class="flowfields-title"><span class="flowfields-caret" aria-hidden="true">'+(open?'▾':'▸')+'</span><strong>Flow field setup</strong><span class="flowfields-count">'+count+' field'+(count===1?'':'s')+'</span></span>'
+    +'<span class="savedbadge" aria-hidden="true">Saved in YAML</span></button>'
+    +'<div id="pnParamsPanel" class="flowfields-body"'+(open?'':' hidden')+'>'
+    +'<div class="inputsection-hint">Define each field’s name, type, default and required rule. <b>Save</b> writes these settings to the flow.</div>'
     +'<div id="pnParams">'+rows+'</div>'
     +'<button type="button" class="addparam" onclick="addParamRow()">+ add field</button>'
-    +'<div class="dim" style="font-size:11px;margin-top:6px">each field flows downstream as <code>{{ $json.name }}</code>. Leave empty to just kick off the chain. <b>Save</b> to apply.</div>';
+    +'<div class="inputsection-hint paramhint">Each field flows downstream as <code>{{ $json.name }}</code>. Leave empty to just kick off the chain.</div>'
+    +'</div></section>';
 }
-function addParamRow(){const c=$("pnParams");if(c){c.insertAdjacentHTML("beforeend",paramRow());/** @type {any} */(c.lastElementChild).querySelector(".pf-name").focus();markDirty();}}
+function toggleParamsEditor(button){
+  const panel=$(button.getAttribute("aria-controls")),open=button.getAttribute("aria-expanded")==="true";
+  button.setAttribute("aria-expanded",String(!open));if(panel)panel.hidden=open;
+  const caret=button.querySelector(".flowfields-caret");if(caret)caret.textContent=open?'▸':'▾';
+}
+function updateParamCount(){
+  const count=document.querySelectorAll("#pnParams .paramrow").length,lab=document.querySelector(".flowfields-count");
+  if(lab)lab.textContent=count+' field'+(count===1?'':'s');
+}
+function addParamRow(){const c=$("pnParams");if(c){c.insertAdjacentHTML("beforeend",paramRow());updateParamCount();/** @type {any} */(c.lastElementChild).querySelector(".pf-name").focus();markDirty();}}
+function removeParamRow(button){button.closest(".paramrow")?.remove();updateParamCount();markDirty();}
 // read the field-definition rows back into a `params` object for saveNode.
 function collectParams(){
   const out=/** @type {any} */({});const rows=document.querySelectorAll("#pnParams .paramrow");
@@ -161,7 +218,7 @@ async function createFlow(){
   const{ok,data}=await api("/api/create",{method:"POST",body:JSON.stringify({dir:$("dir").value,name})});
   if(!ok)return setMsg("createMsg","err",data.error||"create failed");open(data.path);
 }
-async function open(path){if(path!==current)drafts={};current=path;selected=null;results={};inputVals={};layout={};manual=false;$("path").textContent=path;
+async function open(path){if(path!==current){drafts={};$("profile").value="";}current=path;selected=null;results={};inputVals={};layout={};manual=false;$("path").textContent=path;
   $("create").classList.add("hidden");$("editor").classList.remove("hidden");showNodes();await loadLayout();await loadNodes();}
 // load saved node positions; any saved layout switches the canvas to free positioning.
 async function loadLayout(){const{data}=await api("/api/layout?path="+encodeURIComponent(current));
@@ -174,7 +231,7 @@ let flowDefaults=null,flowProfiles=null;
 async function loadNodes(){
   const{ok,data}=await api("/api/parse?path="+encodeURIComponent(current));
   if(!ok){setMsg("canvasMsg","err","could not parse — use { } raw to fix it");$("graph").innerHTML="";return;}
-  setMsg("canvasMsg","","");nodes=data.nodes;
+  setMsg("canvasMsg","","");nodes=data.nodes;pruneInputVals();
   flowDefaults=data.defaults||null;renderFlowTimeout();
   flowProfiles=data.profiles||null;renderProfile();
   await loadValidity();   // flag bad nodes (⚠) before the first paint
@@ -862,6 +919,18 @@ document.addEventListener("click",e=>{
 // shells out to. Click to edit it; saves to profiles.default.cmd (comment-preserving,
 // /api/set-profile). The prompt always rides in via STDIN, so the cmd is launch-only.
 function defaultProfileCmd(){return (flowProfiles&&flowProfiles.default&&flowProfiles.default.cmd)?String(flowProfiles.default.cmd):"";}
+function renderRunProfileSelector(){
+  const sel=$("profile");if(!sel)return;
+  const previous=sel.value;
+  sel.textContent="";
+  const add=(value,label)=>{const opt=document.createElement("option");opt.value=value;opt.textContent=label;sel.appendChild(opt);};
+  add("","Flow default · "+(defaultProfileCmd()||"not configured"));
+  Object.entries(flowProfiles||{}).forEach(([name,spec])=>{
+    if(name==="default")return;
+    add(name,name+" · "+(spec&&spec.cmd?String(spec.cmd):"not configured"));
+  });
+  sel.value=Object.prototype.hasOwnProperty.call(flowProfiles||{},previous)?previous:"";
+}
 function renderProfile(){
   const ctl=$("profileCtl");if(!ctl)return;
   const cmd=defaultProfileCmd();
@@ -869,6 +938,7 @@ function renderProfile(){
   const btn=$("profileBtn");
   btn.textContent="● "+(cmd||"(no command set)")+" · real";   // textContent — never inject cmd into innerHTML
   btn.onclick=toggleProfile;
+  renderRunProfileSelector();
 }
 function toggleProfile(){
   const pop=$("profilePop"),btn=$("profileBtn");if(!pop||!btn)return;
@@ -1303,4 +1373,4 @@ boot();
 // Migration bridge: these handlers are still referenced by inline onclick= in
 // app.html (and in runtime-generated card markup), so a module must expose them
 // on window. Converting to addEventListener is the follow-up.
-Object.assign(window,{listFlows,createFlow,back,toggleRaw,runAll,runNode,saveNode,deleteNode,closeNode,addNode,saveRaw,renameSelected,schedulePreview,insertVar,insertEarlier,runTo,setInputVal,addParamRow,addSchemaRow,onSchemaFormat,toggleSchema,schemaPreview,changeType,markDirty,resetNode,zoomBy,zoomReset,zoomFit,stopRun,toggleRefs,toggleTimeout,onTimeoutInput,toggleFlowTimeout,applyFlowTimeout,applyProfile,toggleOut});
+Object.assign(window,{listFlows,createFlow,back,toggleRaw,runAll,runNode,saveNode,deleteNode,closeNode,addNode,saveRaw,renameSelected,schedulePreview,insertVar,insertEarlier,runTo,setInputVal,resetInputVal,restoreInputVal,addParamRow,removeParamRow,toggleParamsEditor,addSchemaRow,onSchemaFormat,toggleSchema,schemaPreview,changeType,markDirty,resetNode,zoomBy,zoomReset,zoomFit,stopRun,toggleRefs,toggleTimeout,onTimeoutInput,toggleFlowTimeout,applyFlowTimeout,applyProfile,toggleOut});

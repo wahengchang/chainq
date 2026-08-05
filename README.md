@@ -3,7 +3,7 @@
 **Prompt chaining for people who live in prompts — not in dashboards.**
 
 Wire a few prompts together, run them on the CLI model you already have
-(`claude -p`, `codex -m`), and watch every step light up **on the same canvas you
+(`claude -p`, `codex exec`), and watch every step light up **on the same canvas you
 built it on**. One YAML file. No model API key in the flow and no hosted runtime
 to operate.
 
@@ -53,8 +53,19 @@ same YAML, no extra export step:
 chainq run flow.yaml    # run the whole flow; output lands in the file your write step names
 ```
 
-Needs **Node ≥ 18**. `ai` steps call your real local model — run `claude login` first.
+Needs **Node ≥ 18**. `ai` steps call your real local model — run `claude login` first
+for the default profile, or `codex login` before selecting the `codex` profile.
 No global install? Swap `chainq` for `npx @wahengchang2023/chainq` in any command.
+
+Every generated flow keeps Claude as the backward-compatible default and also includes
+a Codex profile:
+
+```bash
+chainq run flow.yaml --profile codex
+```
+
+The visual editor exposes the same choice as a run-only profile selector. Switching
+profiles does not rewrite the YAML.
 
 ## What a flow looks like
 
@@ -63,6 +74,10 @@ few steps, then `ai + schema` assembles them into guaranteed-valid JSON and `wri
 saves it — the whole thing readable top to bottom:
 
 ```yaml
+profiles:
+  default: { cmd: 'claude -p' }
+  codex: { cmd: 'codex exec --ephemeral --sandbox read-only --skip-git-repo-check --color never -' }
+
 steps:
   trigger:                       # input — the data to feed in
     type: input

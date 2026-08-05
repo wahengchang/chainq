@@ -1,4 +1,5 @@
-# A tiny demo flow. Every step calls the real local model (needs: claude login).
+# A tiny demo flow. Every step calls the real local model (default: `claude login`;
+# use `--profile codex` after `codex login` to run with Codex).
 #
 #   greet(ai+schema，產一個 {name, kind} 物件) ─→ describe(ai，引用上一步的欄位)
 #
@@ -7,6 +8,7 @@
 # 解析成真正的 JSON 物件並驗證，下一步才能用 {{ $json.name }} / {{ $json.kind }} 取值。
 profiles:
   default: { cmd: 'claude -p' }
+  codex: { cmd: 'codex exec --ephemeral --sandbox read-only --skip-git-repo-check --color never -' }
 
 steps:
   greet:

@@ -34,6 +34,8 @@
   .bar{display:flex;align-items:center;gap:10px;padding:8px 16px;border-bottom:1px solid var(--line);background:var(--panel);z-index:3}
   .bar .path{color:var(--dim);font-size:11px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .profilepill{font-size:11px;color:var(--ran);border:1px solid var(--line);border-radius:3px;padding:3px 8px;letter-spacing:.02em}
+  .runprofile{display:flex;align-items:center;gap:5px;color:var(--dim);font-size:10px;white-space:nowrap}
+  .runprofile select{max-width:210px;padding:3px 24px 3px 7px;font-size:11px;color:var(--accent)}
   .stage{position:relative;height:calc(100vh - 49px);overflow:auto;
     background:radial-gradient(circle,var(--panel2) 1px,transparent 1px);background-size:22px 22px}
   .flowrow{display:flex;align-items:flex-start;flex-wrap:wrap;gap:0;padding:30px}
@@ -74,6 +76,40 @@
   .paramrow .pf-del:hover{color:var(--bad);border-color:var(--bad)}
   .addparam{margin-top:8px;color:var(--accent);border:1px dashed var(--line);border-radius:3px;padding:4px 10px;font-size:12px}
   .addparam:hover{border-color:var(--accent)}
+  /* Input nodes separate low-frequency YAML field setup from run-only values. */
+  .flowfields,.runinputs{border:1px solid var(--line);border-radius:6px;overflow:hidden;background:var(--panel2);color:var(--ink)}
+  .flowfields-toggle{width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 10px;border:0;border-radius:0;background:transparent;color:var(--ink);text-align:left}
+  .flowfields-toggle:hover{background:color-mix(in srgb,var(--line) 35%,transparent)}
+  .flowfields-toggle:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+  .flowfields-title{display:flex;align-items:center;gap:7px;min-width:0}
+  .flowfields-caret{color:var(--dim);font-size:10px;width:10px}
+  .flowfields-count{color:var(--dim);font-size:10px;font-weight:400;white-space:nowrap}
+  .savedbadge,.sessionbadge{font-size:9px;line-height:1;border:1px solid var(--line);border-radius:9px;padding:3px 7px;white-space:nowrap;font-weight:500}
+  .savedbadge{color:var(--dim)}
+  .flowfields-body{padding:10px;border-top:1px solid var(--line);background:var(--panel)}
+  .inputsection-hint{color:var(--dim);font-size:11px;line-height:1.45}
+  .inputsection-hint b{color:var(--ink);font-weight:500}
+  .paramhint{margin-top:8px}
+  .runinputs{margin-top:10px;padding:10px;background:color-mix(in srgb,var(--pin) 4%,var(--panel2));border-color:color-mix(in srgb,var(--pin) 28%,var(--line))}
+  .inputsection-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:5px}
+  .inputsection-head strong{font-size:12px;color:var(--ink)}
+  .sessionbadge{color:var(--pin);border-color:color-mix(in srgb,var(--pin) 42%,var(--line));background:color-mix(in srgb,var(--pin) 8%,transparent)}
+  .runtimefield{position:relative;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
+  .runtime-meta{display:flex;align-items:center;gap:7px;margin-bottom:5px;min-height:18px}
+  .runtime-meta label{display:flex;align-items:center;gap:6px;min-width:0;color:var(--ink);cursor:pointer}
+  .runtime-type{color:var(--dim);font-size:10px}
+  .requiredmark{color:var(--bad);font-size:9px;border:1px solid color-mix(in srgb,var(--bad) 45%,transparent);border-radius:8px;padding:1px 5px}
+  .runstate{margin-left:auto;font-size:9px;line-height:1;border-radius:8px;padding:3px 6px;white-space:nowrap;border:1px solid var(--line)}
+  .runstate.default{color:var(--ran);border-color:color-mix(in srgb,var(--ran) 40%,var(--line));background:color-mix(in srgb,var(--ran) 8%,transparent)}
+  .runstate.override{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 45%,var(--line));background:color-mix(in srgb,var(--accent) 10%,transparent)}
+  .runstate.missing{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 45%,var(--line));background:color-mix(in srgb,var(--bad) 8%,transparent)}
+  .runstate.empty{color:var(--dim)}
+  .runtimefield>.paramin{width:100%;box-sizing:border-box}
+  .runtime-bool{display:flex;align-items:center;gap:7px;width:max-content;color:var(--ink);cursor:pointer}
+  .runreset{display:block;margin-top:5px;padding:0;border:0;background:transparent;color:var(--dim);font-size:10px;text-decoration:underline;text-decoration-style:dotted}
+  .runreset[hidden]{display:none}
+  .runreset:hover{color:var(--accent);border:0;background:transparent}
+  .runempty{margin-top:10px;padding:10px;border:1px dashed var(--line);border-radius:4px;color:var(--dim);font-size:11px}
   /* ai output-schema editor: format selector + format-driven visibility + preview */
   .schemawrap{padding:10px 12px;border-bottom:1px solid var(--line)}
   .schemahdr{display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none}
@@ -259,8 +295,11 @@
     <button onclick="back()">← projects</button>
     <span class="path" id="path"></span>
     <button onclick="toggleRaw()" id="rawBtn">{ } raw</button>
-    <!-- run-time profile override (empty = each node uses the default profile). -->
-    <input type="hidden" id="profile" value="">
+    <!-- Run-only profile override. Empty = preserve each node/default profile. -->
+    <label class="runprofile" title="Run-only override · does not change the YAML">
+      <span>run profile</span>
+      <select id="profile" aria-label="Run profile"></select>
+    </label>
     <!-- editable: the default profile's command — the CLI every ai node shells out to. -->
     <span id="profileCtl"></span>
     <span id="flowTimeoutCtl"></span>

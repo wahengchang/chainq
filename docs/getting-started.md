@@ -21,11 +21,18 @@ chainq
 Prefer not to install globally? Replace `chainq` in any example with
 `npx @wahengchang2023/chainq`.
 
-The starter flow uses the local `claude -p` CLI. Sign in once before the first
+The starter flow uses the local `claude -p` CLI by default. Sign in once before the first
 model run:
 
 ```bash
 claude login
+```
+
+To use the bundled Codex profile instead, sign in once and select it for the run:
+
+```bash
+codex login
+chainq run flow.yaml --profile codex
 ```
 
 You can use another local CLI model later by changing the flow's `profiles:`.

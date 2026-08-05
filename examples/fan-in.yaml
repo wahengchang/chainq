@@ -6,10 +6,11 @@
 # 重點在 node3：用 from: [node1, node2] 宣告兩條上游，
 # 在 prompt 裡用 {{ $node["node1"] }} / {{ $node["node2"] }} 各取一條。
 #
-# 跑（每個 ai 節點都呼叫真實模型，需先 claude login）：
+# 跑（每個 ai 節點都呼叫真實模型；預設需先 claude login，Codex 加 --profile codex）：
 #   chain run examples/fan-in.yaml
 profiles:
   default: { cmd: 'claude -p' }
+  codex: { cmd: 'codex exec --ephemeral --sandbox read-only --skip-git-repo-check --color never -' }
 
 steps:
   # 觸發點：給一個日本城市名（其餘節點都從這裡長出去）

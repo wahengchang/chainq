@@ -1,0 +1,29 @@
+# 必吃美食・單步範例:
+#
+#   trigger(input,給一個地名) ─→ recommend(ai,列三樣必吃)
+#
+# trigger 提供 text 欄位;recommend 用 {{ $json.text }} 把地名插進 prompt。
+# 跑(ai 節點會呼叫真實 Codex,需先 codex login):
+#   chainq run examples/must-eat.yaml
+# 改地名:
+#   chainq run examples/must-eat.yaml --input text=台南
+profiles:
+  default:
+    {
+      cmd: 'codex exec --ephemeral --sandbox read-only --skip-git-repo-check --color
+        never -'
+    }
+
+steps:
+  trigger:
+    type: input
+    params:
+      text:
+        type: string
+        default: '台南'
+
+  recommend:
+    type: ai
+    from: trigger
+    prompt: '3 must-eat foods in {{ $json.text }}, very short, in zh-tw (output only
+      the answer, no other information)'

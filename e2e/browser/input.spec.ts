@@ -65,8 +65,12 @@ steps:
     await seed.dblclick();
     const field = page.locator('.paramin[data-param="topic"]');
     await expect(field).toBeVisible();
+    await expect(page.locator(".flowfields-toggle")).toHaveAttribute("aria-expanded", "false");
+    await expect(field).toHaveValue("tokyo");
+    await expect(page.locator(".runstate.default")).toHaveText("Using default");
     await dwell(page, 600);
     await field.fill("kyoto");
+    await expect(page.locator(".runstate.override")).toHaveText("Run override");
     await dwell(page, 400);
     await page.keyboard.press("Escape");
 
@@ -87,10 +91,11 @@ steps:
       name:  { type: string, required: true }
       topic: { default: tokyo }
       count: { type: number, default: 1 }
+      enabled: { type: boolean, default: true }
   out:
     type: assemble
     from: seed
-    prompt: '{{ $json.name }}/{{ $json.topic }}/{{ $json.count }}'
+    prompt: '{{ $json.name }}/{{ $json.topic }}/{{ $json.count }}/{{ $json.enabled }}'
 `;
   let proc: ChildProcess, baseURL: string;
   test.beforeAll(async () => ({ url: baseURL, proc } = await startServer(FLOW)));
@@ -104,7 +109,8 @@ steps:
     // the form draws a typed widget per param: number → number input
     await seed.dblclick();
     await expect(page.locator('.paramin[data-param="count"]')).toHaveAttribute("type", "number");
-    await expect(page.locator("#pnInput")).toContainText("*"); // required marker on `name`
+    await expect(page.locator('.paramin[data-param="enabled"]')).toBeChecked();
+    await expect(page.locator("#pnInput")).toContainText("required");
     await dwell(page, 800);
     await page.keyboard.press("Escape");
 
@@ -118,11 +124,13 @@ steps:
     await seed.dblclick();
     await page.locator('.paramin[data-param="name"]').fill("ada");
     await page.locator('.paramin[data-param="count"]').fill("9");
+    await page.locator('.paramin[data-param="enabled"]').uncheck();
+    await expect(page.locator(".runstate.override")).toHaveCount(3);
     await dwell(page, 500);
     await page.keyboard.press("Escape");
     await out.locator(".noderun").first().click();
     await out.locator(".xn.tog").click(); // collapsed by default → expand to read the output (#40)
-    await expect(out.locator(".nodeout")).toContainText("ada/tokyo/9");
+    await expect(out.locator(".nodeout")).toContainText("ada/tokyo/9/false");
     await dwell(page, 1200);
   });
 });

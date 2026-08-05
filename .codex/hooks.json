@@ -1,0 +1,17 @@
+{
+  "description": "Keep macOS AppleDouble sidecars out of this external-drive checkout.",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$(git rev-parse --show-toplevel)/scripts/delete-appledouble.mjs\" --clean",
+            "statusMessage": "清理 AppleDouble sidecars"
+          }
+        ]
+      }
+    ]
+  }
+}

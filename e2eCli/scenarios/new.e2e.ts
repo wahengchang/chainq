@@ -10,6 +10,7 @@ describe("new", () => {
     expect(p.chain("new", "blog").code).toBe(0);
     expect(p.exists("blog.yaml")).toBe(true);
     expect(p.chain("validate", "blog.yaml").code).toBe(0);
+    expect(p.read("blog.yaml")).toContain("codex exec --ephemeral --sandbox read-only");
   });
 
   it.skipIf(!haveClaude)("the new workflow runs end-to-end (real model)", () => {

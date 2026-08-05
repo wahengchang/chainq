@@ -14,7 +14,7 @@
 #      ——直接把文字拼進 { } 會因引號/換行壞掉，schema 這條路才穩。
 #   2) 用 write 節點落地：上游已是 JSON 物件，path 設成 .json，寫出來就是合法 JSON 檔。
 #
-# 跑（field_b/field_c/to_json 會呼叫真實模型，需先 claude login）：
+# 跑（field_b/field_c/to_json 會呼叫真實模型；預設需 claude login，Codex 加 --profile codex）：
 #   chainq run examples/generate-json.yaml
 # 或在編輯器裡開：
 #   chainq ui examples/generate-json.yaml
@@ -23,6 +23,7 @@
 #   {"original":"...","zh_tw":"...","japanese":"..."}
 profiles:
   default: { cmd: 'claude -p' }
+  codex: { cmd: 'codex exec --ephemeral --sandbox read-only --skip-git-repo-check --color never -' }
 
 steps:
   # 觸發點：要組進 JSON 的原始資料（執行時可用 --input text=... 覆蓋）

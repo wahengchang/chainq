@@ -1,6 +1,7 @@
 // `chainq init [dir] [--force]` — scaffold a new chain project.
 //
-// Writes a runnable starter: a flow.yaml with a `claude -p` default profile, a
+// Writes a runnable starter: a flow.yaml with Claude as the backward-compatible
+// default plus an opt-in, non-interactive Codex profile, a
 // .gitignore for the .chain/ work dir, and a sample input. Refuses to clobber an
 // existing flow.yaml unless --force.
 
@@ -11,6 +12,7 @@ const FLOW_TEMPLATE = `# A chain flow: ONE YAML file = one prompt chain.
 #   chainq run flow.yaml          # every ai step calls the model (needs: claude login)
 profiles:
   default: { cmd: 'claude -p' }   # your local CLI model
+  codex: { cmd: 'codex exec --ephemeral --sandbox read-only --skip-git-repo-check --color never -' }
 
 steps:
   load:
@@ -55,5 +57,6 @@ export function runInit(args: string[]): number {
   console.error(`        ${inputPath}`);
   console.error(`\nnext:`);
   console.error(`  chainq run flow.yaml                  # first: claude login`);
+  console.error(`  chainq run flow.yaml --profile codex  # first: codex login`);
   return 0;
 }
