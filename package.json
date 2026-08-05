@@ -29,7 +29,7 @@
     "node": ">=18"
   },
   "bin": {
-    "chainq": "./dist/cli/index.js"
+    "chainq": "dist/cli/index.js"
   },
   "files": [
     "dist",
