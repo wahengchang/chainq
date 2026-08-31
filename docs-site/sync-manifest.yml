@@ -22,6 +22,9 @@ files:
   - from: docs/guides/common-tasks.md
     to: guides/common-tasks.md
     title: Common tasks
+  - from: docs/guides/agent-skill.md
+    to: guides/agent-skill.md
+    title: Agent skill
   - from: docs/reference/cli.md
     to: reference/cli.md
     title: CLI reference

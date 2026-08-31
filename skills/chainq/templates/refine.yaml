@@ -1,0 +1,58 @@
+# Pattern: refine — draft, critique, revise.
+# The point: `revise` sees BOTH the draft and the critique. A revise step that
+# only sees the critique has nothing to rewrite.
+#
+#   chainq validate refine.yaml
+#   chainq run refine.yaml --input topic='why prompt chains beat one big prompt'
+#   chainq ui refine.yaml
+profiles:
+  default: { cmd: 'claude -p' }
+
+steps:
+  start:
+    type: input
+    params:
+      topic: { type: string, required: true }
+      words: { type: number, default: 120 }
+
+  draft:
+    type: ai
+    from: start
+    prompt: |
+      Write a {{ $json.words }}-word explainer about: {{ $json.topic }}
+      Concrete, no filler, no headings. Output only the text.
+
+  critique:
+    type: ai
+    from: draft
+    prompt: |
+      You are a demanding editor. List the 3 weakest things about this draft.
+      One per line, each naming the exact sentence and what is wrong with it.
+
+      {{ $json }}
+
+  # Note the TOPIC line: a revise stage that sees only the draft and the critique
+  # quietly drops constraints from the original request (ask for 3 sentences, get
+  # 3 paragraphs). Carry the brief forward to every stage that must respect it.
+  revise:
+    type: ai
+    from: [draft, critique]
+    prompt: |
+      Rewrite the draft so every issue below is resolved. Stay on the original
+      topic and keep it to about {{ $('start').words }} words.
+      Output only the rewritten text.
+
+      TOPIC:
+      {{ $('start').topic }}
+
+      DRAFT:
+      {{ $('draft') }}
+
+      ISSUES:
+      {{ $('critique') }}
+
+  save:
+    type: write
+    from: revise
+    path: out/{{date}}-explainer.md
+    mode: overwrite

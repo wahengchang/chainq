@@ -13,6 +13,7 @@ export type {
 } from "./types.js";
 export { textItem, itemsText } from "./types.js";
 export {
+  NODE_TYPES,
   parseFlow,
   topoOrder,
   upstreamsOf,

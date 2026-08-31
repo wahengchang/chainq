@@ -29,9 +29,12 @@ SLOWMO=850 node_modules/.bin/playwright test e2e/browser/<spec>.spec.ts --headed
 src/engine/   ← 唯一真相來源:純引擎(parse / validate / DAG / cache / run)。
               公開介面只走 engine/index.ts;CLI 與 UI 都從這裡 import,
               絕不碰內部模組、絕不另寫一套(「永不寫兩套」)。
-src/cli/      ← 薄殼:run · validate · ls · init · new · ui。無引擎邏輯。
+src/cli/      ← 薄殼:run · validate · ls · init · new · ui · skill。無引擎邏輯。
 src/web/      ← 本機 web server(Node 內建 http,零依賴,綁 127.0.0.1)
               + 單頁編輯器:server.ts、app.html、ui/app.js。
+skills/chainq/ ← 出貨給使用者的 Agent Skill:SKILL.md + references/ + templates/。
+              唯一來源——`chainq skill install`、npm 套件、Claude Code plugin
+              (.claude-plugin/)三條安裝路徑都指向這個資料夾,不另外複製一份。
 ```
 
 - **Flow = 一個 YAML 檔**:具名 steps + model profiles。**node 的 id 就是 YAML key**。畫布座標不進 flow,另存 `.chain/layout.json`。

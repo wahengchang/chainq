@@ -110,12 +110,36 @@ command, executed without a shell), `assemble` (reshape / combine items), `input
 - **CLI** — `chainq init · new · run · validate · ls`. `run` re-runs everything by
   default; add `--cache` to reuse unchanged steps.
 
+## Let your coding agent write the flow
+
+chainq ships an [Agent Skill](docs/guides/agent-skill.md) that teaches Claude Code
+(and any agent reading the same format) what a chainq flow is — so it produces an
+actual prompt chain, not a YAML file wrapped around a shell script:
+
+```bash
+npx skills add wahengchang/chainq --skill chainq        # this project
+npx skills add wahengchang/chainq --skill chainq -g     # every project
+```
+
+That is the open [skills](https://github.com/vercel-labs/skills) CLI — it installs
+into Claude Code, Codex, Cursor, opencode and a dozen more from the same source.
+Claude Code users can use a plugin instead, tracking this repository:
+
+```
+/plugin marketplace add wahengchang/chainq
+/plugin install chainq@chainq
+```
+
+Then just ask: *"build me a flow that reads notes.md, pulls out the decisions and
+the open questions, and writes a summary to out/."*
+
 ## Documentation
 
 - [Documentation map](docs/README.md) — choose a tutorial, guide, reference, or concept page.
 - [Getting started](docs/getting-started.md) — install chainq and complete a first run.
 - [CLI reference](docs/reference/cli.md) and [flow YAML reference](docs/reference/flow.md) — look up commands and configuration.
 - [Visual editor guide](docs/guides/visual-editor.md) and [common tasks](docs/guides/common-tasks.md) — complete specific workflows.
+- [Agent skill](docs/guides/agent-skill.md) — install the skill that teaches an agent to author flows.
 - [Troubleshooting](docs/troubleshooting.md) — resolve common validation, model, cache, and output problems.
 - [Changelog](CHANGELOG.md) — review released changes.
 

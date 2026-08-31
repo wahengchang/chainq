@@ -1,0 +1,64 @@
+# Pattern: fan out, then synthesize.
+# One source, three independent narrow passes, one synthesis that sees all three.
+# The branches never see each other — that independence is what makes the
+# synthesis worth doing.
+#
+#   chainq validate fan-out-synthesize.yaml
+#   chainq run fan-out-synthesize.yaml --steps 2      # prove the front cheaply
+#   chainq run fan-out-synthesize.yaml
+profiles:
+  default: { cmd: 'claude -p' }
+
+steps:
+  load:
+    type: cmd
+    run: 'cat transcript.txt'
+    inputs: ['transcript.txt']     # declared → this node is cacheable
+
+  decisions:
+    type: ai
+    from: load
+    prompt: |
+      List every decision made in this transcript, one per line.
+      If there are none, output exactly: none
+
+      {{ $json }}
+
+  risks:
+    type: ai
+    from: load
+    prompt: |
+      List every risk, blocker, or open question raised, one per line.
+      If there are none, output exactly: none
+
+      {{ $json }}
+
+  next_steps:
+    type: ai
+    from: load
+    prompt: |
+      List every committed next step as "owner — action — due", one per line.
+      If there are none, output exactly: none
+
+      {{ $json }}
+
+  update:
+    type: ai
+    from: [decisions, risks, next_steps]
+    prompt: |
+      Write a weekly update for a manager: 5 sentences, plain language,
+      outcomes first. Use ONLY the material below — invent nothing.
+
+      DECISIONS:
+      {{ $('decisions') }}
+
+      RISKS:
+      {{ $('risks') }}
+
+      NEXT STEPS:
+      {{ $('next_steps') }}
+
+  save:
+    type: write
+    from: update
+    path: out/{{date}}-update.md

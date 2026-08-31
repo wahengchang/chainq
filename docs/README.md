@@ -9,6 +9,7 @@ current product.
 - [Getting started](getting-started.md) — install chainq, create a flow, and run it.
 - [CLI tutorial](guides/first-flow.md) — learn the edit, run, and cache loop.
 - [Visual editor guide](guides/visual-editor.md) — build and run a flow on the canvas.
+- [Agent skill](guides/agent-skill.md) — teach a coding agent to author chainq flows.
 
 ## Guides
 
