@@ -2,21 +2,12 @@
 
 ## Unreleased
 
-- **Docs: the README and the npm package now point at each other.** The README opens
-  with live badges built from npm registry data (version, supported Node range,
-  license) plus CI and documentation-site badges, so the GitHub page reflects what is
-  actually published and every badge links back to the package. Quickstart now names
-  the two things you install — the [`@wahengchang2023/chainq`](https://www.npmjs.com/package/@wahengchang2023/chainq)
-  CLI and the [agent skill](docs/guides/agent-skill.md) — instead of mentioning the
-  skill only much further down, and a new *Elsewhere* block gives absolute links to the
-  documentation site, the npm package, and the repository, which are the only links
-  that survive on the npm page (its README renderer does not resolve this repository's
-  relative doc links). On the package side: `homepage` now points at the published
-  documentation site (npm already links the repository separately), the description
-  matches the README's pitch, keywords cover how people actually search for this
-  (`claude-code`, `agent-skill`, `local-first`, `no-api-key`, …), `CHANGELOG.md` ships
-  in the tarball, and `publishConfig.access` is pinned to `public` so a scoped publish
-  cannot silently fail.
+- **Packaging and docs.** npm metadata now points at the hosted documentation site,
+  the README leads with the one thing you have to install (the CLI) and presents the
+  bundled agent skill as the optional extra it is, and `CHANGELOG.md` ships inside the
+  published package. Profile examples no longer suggest `codex -m`: a profile `cmd`
+  must read the prompt on **stdin**, which that invocation was never verified to do
+  ([#71](https://github.com/wahengchang/chainq/issues/71)).
 
 - **New: a bundled agent skill.** chainq ships an [Agent Skill](https://agentskills.io)
   at `skills/chainq/` that teaches a coding agent how to author a flow. It exists to

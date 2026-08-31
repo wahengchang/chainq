@@ -27,9 +27,12 @@ steps:
 | `steps` | yes | id → node. YAML order is the stable run order where dependencies allow. |
 | `defaults.timeout` | no | seconds, applied to nodes without their own `timeout`. Built-in fallback is 300. |
 
-A profile's `cmd` is a local CLI that reads the prompt on **stdin**: `claude -p`,
-`claude -p --model opus`, `codex -m <model>`. It is split into argv and spawned
-without a shell. No API keys ever appear in a flow.
+A profile's `cmd` is a local CLI that **reads the whole prompt on stdin and writes
+the answer to stdout** — chainq writes the prompt to the child's stdin and closes
+it. `claude -p` and `claude -p --model opus` do this. Any other CLI works only in
+its own non-interactive, stdin-reading mode; check that mode before assuming a
+flag. The command is split into argv and spawned without a shell, and no API keys
+ever appear in a flow.
 
 ## Shared node fields
 
