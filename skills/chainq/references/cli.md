@@ -17,7 +17,6 @@ own login — for the default profile, `claude login` first.
 | `chainq ls [dir]` | list flow YAMLs, skipping hidden dirs and `node_modules` |
 | `chainq validate <flow.yaml>` | static checks only — no model call, no command run |
 | `chainq run <flow.yaml> [options]` | validate, then run |
-| `chainq skill install [--global] [--force]` | install this skill for an agent (see below) |
 
 Exit codes: `0` success, `1` validation or run failure, `2` unknown or incomplete
 command.
@@ -98,16 +97,16 @@ chainq run flow.yaml --profile big
 
 Per node instead: `profile: big` on that `ai` node.
 
-## Installing this skill elsewhere
+## Installing this skill
+
+This skill is distributed through the open skills CLI, which reads it straight
+from the repository:
 
 ```bash
-npx @wahengchang2023/chainq skill install            # → ./.claude/skills/chainq
-npx @wahengchang2023/chainq skill install --global   # → ~/.claude/skills/chainq
-npx @wahengchang2023/chainq skill path               # print the bundled source dir
+npx skills add wahengchang/chainq --skill chainq        # project-local
+npx skills add wahengchang/chainq --skill chainq -g     # every project
+npx skills use wahengchang/chainq --skill chainq        # once, without installing
 ```
-
-`--dir <path>` copies to any directory, for agents that read skills elsewhere.
-`--force` replaces an existing install.
 
 ## The editor
 

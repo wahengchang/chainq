@@ -14,8 +14,6 @@ directory.
 | `chainq ls [dir]` | Recursively list `.yaml` and `.yml` files, excluding hidden directories and `node_modules`. |
 | `chainq validate <flow.yaml>` | Check the flow without running commands or models. |
 | `chainq run <flow.yaml> [options]` | Validate and run the flow. A full run executes every node unless cache reuse is requested. |
-| `chainq skill install [options]` | Install the bundled agent skill for a coding agent. Refuses to replace an existing install unless `--force` is set. |
-| `chainq skill path` | Print the directory of the bundled agent skill. |
 
 Running an incomplete or unknown command returns exit code `2`. Validation and
 run failures return `1`; success returns `0`.
@@ -38,17 +36,6 @@ run failures return `1`; success returns `0`.
 
 `--input` values override matching values from every input set loaded with
 `--input-file`.
-
-## Skill options
-
-| Option | Description |
-|---|---|
-| `--global`, `-g` | Install to `~/.claude/skills/` instead of the current project. |
-| `--dir <path>` | Install into `<path>/chainq`. Use it for agents that read skills elsewhere. |
-| `--force` | Replace an existing install. |
-
-Without an option the skill is installed to `.claude/skills/chainq` in the current
-directory. See the [agent skill guide](../guides/agent-skill.md).
 
 ## Output
 

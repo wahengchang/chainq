@@ -2,23 +2,28 @@
 
 ## Unreleased
 
-- **New: a bundled agent skill, and `chainq skill install` to place it.** chainq now
-  ships an [Agent Skill](https://agentskills.io) at `skills/chainq/` that teaches a
-  coding agent how to author a flow. It exists to fix one specific failure: an agent
-  asked for a flow would emit YAML whose real work sat in `cmd` steps — a task runner
-  with chainq syntax, not a prompt chain. The skill leads with that prime directive
-  (`ai` is the default node type; `cmd` is edge I/O only; one step is one cognitive
-  act), a chain-smell checklist to run before handing a flow back, and a decomposition
-  method with before/after examples. It is progressively disclosed: `SKILL.md` is the
-  only file loaded up front, with `references/` (authoring · flow syntax · patterns ·
-  CLI · troubleshooting) and three runnable `templates/` opened on demand.
-  Install it three ways — `npx @wahengchang2023/chainq skill install` for one project,
-  `--global` for every project, or `/plugin marketplace add wahengchang/chainq` for
-  Claude Code, all from the same source directory. `--dir <path>` targets any other
-  agent; `--force` replaces an existing install, and without it chainq refuses rather
-  than overwrite a copy you edited. Covered by `src/cli/skill.test.ts`, which validates
-  every shipped template through the real engine and asserts the templates obey the
-  skill's own prime directive. See [docs/guides/agent-skill.md](docs/guides/agent-skill.md).
+- **New: a bundled agent skill.** chainq ships an [Agent Skill](https://agentskills.io)
+  at `skills/chainq/` that teaches a coding agent how to author a flow. It exists to
+  fix one specific failure: an agent asked for a flow would emit YAML whose real work
+  sat in `cmd` steps — a task runner with chainq syntax, not a prompt chain. The
+  skill's rule is that the model's work belongs in visible `ai` nodes while `cmd`
+  stays a narrow deterministic boundary (a command may sit mid-chain; it may never
+  carry reasoning or call a model for an `ai` node), and it guards the opposite
+  failure too: a full chain is not a maximal one, and a stage earns a node only when
+  its output is worth inspecting, reusing, caching, or tuning alone. Progressively
+  disclosed — `SKILL.md` is the only file loaded up front, with `references/`
+  (authoring · patterns · flow syntax · CLI · troubleshooting) and three runnable
+  `templates/` opened on demand.
+  Installed with the open skills CLI, which reads the same directory straight from
+  the repository: `npx skills add wahengchang/chainq --skill chainq` (add `-g` for
+  every project), covering Claude Code, Codex, Cursor, opencode and more from one
+  command. `.claude-plugin/` additionally publishes it as a Claude Code plugin.
+  `src/skills.test.ts` keeps it honest in CI: every shipped template is parsed and
+  validated by the real engine and must obey the skill's own rule, every internal
+  link must resolve, and every node type, command, and flag the skill documents must
+  still exist in the product — so the skill fails the build instead of silently
+  teaching agents something that no longer works.
+  See [docs/guides/agent-skill.md](docs/guides/agent-skill.md).
 
 ## 0.2.1
 

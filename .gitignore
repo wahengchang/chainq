@@ -1,7 +1,5 @@
 node_modules/
 dist/
-# 本機是 bun-only(見 CLAUDE.md),但 CI 與發佈以 package-lock.json 為準
-bun.lock
 .chain/
 *.log
 *.tgz

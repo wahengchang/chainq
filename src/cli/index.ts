@@ -14,7 +14,6 @@
 //           -s, --silent             print nothing — progress AND result; exit code only
 //   chainq validate <flow.yaml>       static pre-run checks only
 //   chainq ls [dir]                   list flow YAMLs under dir (default cwd)
-//   chainq skill install [--global]   install the bundled agent skill (see skill.ts)
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -32,7 +31,6 @@ import {
 } from "../engine/index.js";
 import { runInit } from "./init.js";
 import { runNew } from "./new.js";
-import { runSkill } from "./skill.js";
 import { startWebServer } from "../web/server.js";
 
 const PREFIX: Record<NodeResult["status"], string> = {
@@ -171,10 +169,6 @@ async function main(argv: string[]): Promise<number> {
     return runNew(args);
   }
 
-  if (cmd === "skill") {
-    return runSkill(args);
-  }
-
   if (cmd === "ui") {
     const initialFlow = args[0] ? resolve(args[0]) : undefined;
     startWebServer({ cwd: process.cwd(), initialFlow });
@@ -192,7 +186,7 @@ async function main(argv: string[]): Promise<number> {
   const file = args[0];
   if (!cmd || !file || !["run", "validate"].includes(cmd)) {
     console.error(
-      "usage: chainq init [dir] | chainq new <name> | chainq ui [flow.yaml] | chainq <run|validate> <flow.yaml> [flags] | chainq ls [dir] | chainq skill install [--global]",
+      "usage: chainq init [dir] | chainq new <name> | chainq ui [flow.yaml] | chainq <run|validate> <flow.yaml> [flags] | chainq ls [dir]",
     );
     return 2;
   }

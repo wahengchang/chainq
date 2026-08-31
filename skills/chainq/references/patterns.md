@@ -120,9 +120,10 @@ steps:
     inputs: ['notes.md']     # declared → cacheable; without this it re-runs always
 ```
 
-Exactly one `cmd`, at the edge. Everything after it is `ai`. If a second `cmd`
-appears in the middle of the chain, you are almost certainly doing reasoning in a
-command — see [authoring.md](authoring.md).
+The `cmd` here is a boundary, not a stage that thinks. A second `cmd` mid-chain
+is fine when it is equally deterministic — `draft(ai) → lint(cmd) → fix(ai)` is a
+good flow. What is never fine is a command that decides, drafts, or calls a model
+on an `ai` node's behalf — see [authoring.md](authoring.md).
 
 Remember there is no shell: `git diff main` is fine, `git diff | head -50` is not.
 

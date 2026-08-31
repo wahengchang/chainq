@@ -31,12 +31,19 @@ steps:
 
       {{ $json }}
 
+  # Note the TOPIC line: a revise stage that sees only the draft and the critique
+  # quietly drops constraints from the original request (ask for 3 sentences, get
+  # 3 paragraphs). Carry the brief forward to every stage that must respect it.
   revise:
     type: ai
     from: [draft, critique]
     prompt: |
-      Rewrite the draft so every issue below is resolved. Keep the length.
+      Rewrite the draft so every issue below is resolved. Stay on the original
+      topic and keep it to about {{ $('start').words }} words.
       Output only the rewritten text.
+
+      TOPIC:
+      {{ $('start').topic }}
 
       DRAFT:
       {{ $('draft') }}

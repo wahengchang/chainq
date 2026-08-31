@@ -76,6 +76,11 @@ The node's item becomes the parsed object, so downstream can use `{{ $json.field
 
 Without `schema`, output stays **raw text** — `{{ $json.field }}` will not work.
 
+`schema` is a **flat `{ field: type }` map, not JSON Schema.** Writing
+`schema: { type: object, properties: {...} }` passes `chainq validate` and then
+fails at run time, because chainq goes looking for fields literally named `type`
+and `properties` in the model's answer.
+
 ```yaml
 to_json:
   type: ai

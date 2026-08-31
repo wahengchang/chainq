@@ -8,10 +8,16 @@ single oversized prompt. This is how to avoid producing that file.
 
 Answer five questions, in order, before writing YAML.
 
+**0. Does chainq fit at all?**
+It earns its keep when the task holds two or more meaningful prompt
+transformations, branching prompt work, or a pipeline worth re-running. One
+deterministic shell operation with no prompt-chain structure should not be forced
+into a flow — say so rather than building one.
+
 **1. What comes in, and from where?**
 A value the user types, a file on disk, or the output of a tool they already have.
 That is exactly one node: `input` (typed value), or `cmd` (read a file / call a
-tool). Nothing else at the boundary.
+tool).
 
 **2. What are the cognitive acts between input and answer?**
 Say the chain out loud as verbs joined by arrows. Use this catalogue — each verb
@@ -46,14 +52,20 @@ Now write the YAML. Every arrow from question 2 is one `ai` step.
 
 ## Sizing a step
 
-A step is the right size when all of these hold:
+Split a stage out when its intermediate output is worth **inspecting, reusing,
+branching from, caching, or tuning on its own**. That single test decides it — not
+prompt length, and not a target node count.
 
-- Its prompt fits in one or two sentences of instruction plus its inputs.
+Signs a step is the right size:
+
 - Its output is something a person would recognise if shown it alone on the canvas.
 - Re-running only this step, with a tweaked prompt, is a meaningful experiment.
 - You can name it in one word: `extract`, `score`, `draft`, `critique`, `revise`.
 
-If naming it needs "and", split it.
+If naming it needs "and", it is probably two steps. But a long prompt is not by
+itself a reason to split: fragments whose outputs mean nothing alone are their own
+failure, and they cost a model call each. Keep a stage whole when splitting it
+would only produce pieces nobody would ever inspect.
 
 ## Naming
 
@@ -146,7 +158,8 @@ steps:
 ```
 
 Why this is right: three independent extractions the user can read and correct on
-the canvas, one synthesis that sees all three, one file. Tuning "risks" is one
+the canvas — each one is worth inspecting alone, which is what earns it a node —
+one synthesis that sees all three, one file. Tuning "risks" is one
 prompt edit and one `--from risks` re-run.
 
 Every prompt above uses a block scalar (`prompt: |`). Do that whenever a prompt
@@ -202,16 +215,22 @@ steps:
 ```
 
 One `cmd` at the boundary, three `ai` steps doing the work. The test for a
-legitimate `cmd`: *could a model produce this output from what it already has?*
-If yes, it is an `ai` step.
+legitimate `cmd`: *is its output fully determined by its input, with no judgement
+involved?* If a model would have to decide something, it is an `ai` step.
+
+Position is not the test. A deterministic command is welcome mid-chain —
+`draft(ai) → lint(cmd) → fix(ai)` is a good flow, and so is a format conversion
+between two prompt stages. The only thing that is always wrong is a command that
+carries reasoning, or that calls a model on an `ai` node's behalf.
 
 Note `git diff --unified=3 main` works because it is plain argv. `git diff | head`
 would not — there is no shell.
 
 ## Rewriting a flow that became a script runner
 
-1. List every `cmd` node. For each, ask: is this fetching data, or is it deciding
-   something? Deciding → convert to `ai`, and move the logic into the prompt.
+1. List every `cmd` node. For each, ask: is this deterministic work, or is it
+   deciding something? Deciding → convert to `ai`, and move the logic into the
+   prompt. A genuinely deterministic command may stay exactly where it is.
 2. Find every `ai` node whose prompt contains "and then", "also", or a numbered
    list of tasks. Split at those seams.
 3. Re-wire: each new step's `from:` is the step whose output it consumes.

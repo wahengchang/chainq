@@ -107,8 +107,8 @@ command, executed without a shell), `assemble` (reshape / combine items), `input
   even several steps back) read distinctly — warm-solid vs. cool-dashed, toggle to hide
   references. Give a slow step room with a per-node ◷ timeout so a long `ai` run isn't
   killed mid-flight. Binds to `127.0.0.1` only.
-- **CLI** — `chainq init · new · run · validate · ls · skill`. `run` re-runs everything
-  by default; add `--cache` to reuse unchanged steps.
+- **CLI** — `chainq init · new · run · validate · ls`. `run` re-runs everything by
+  default; add `--cache` to reuse unchanged steps.
 
 ## Let your coding agent write the flow
 
@@ -117,11 +117,13 @@ chainq ships an [Agent Skill](docs/guides/agent-skill.md) that teaches Claude Co
 actual prompt chain, not a YAML file wrapped around a shell script:
 
 ```bash
-npx @wahengchang2023/chainq skill install            # → ./.claude/skills/chainq
-npx @wahengchang2023/chainq skill install --global   # → ~/.claude/skills/chainq
+npx skills add wahengchang/chainq --skill chainq        # this project
+npx skills add wahengchang/chainq --skill chainq -g     # every project
 ```
 
-Or as a Claude Code plugin, tracking this repository:
+That is the open [skills](https://github.com/vercel-labs/skills) CLI — it installs
+into Claude Code, Codex, Cursor, opencode and a dozen more from the same source.
+Claude Code users can use a plugin instead, tracking this repository:
 
 ```
 /plugin marketplace add wahengchang/chainq
