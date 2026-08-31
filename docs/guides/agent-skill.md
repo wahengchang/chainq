@@ -18,11 +18,14 @@ npx skills use wahengchang/chainq --skill chainq          # once, without instal
 ```
 
 That one command covers Claude Code, Codex, Cursor, opencode, Cline and a dozen
-more agents. Narrow it with `-a`:
+more agents. Narrow it by repeating `-a`, one agent per flag:
 
 ```bash
-npx skills add wahengchang/chainq --skill chainq -a claude-code,codex
+npx skills add wahengchang/chainq --skill chainq -a claude-code -a codex
 ```
+
+A comma-separated list is rejected — `-a claude-code,codex` fails with
+`Invalid agents`.
 
 Claude Code users can install it as a plugin instead, which tracks this
 repository and updates with `/plugin marketplace update chainq`:

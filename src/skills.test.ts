@@ -90,11 +90,15 @@ describe("shipped templates", () => {
     }
   });
 
-  it("carry the flow's source material through to the final stage", () => {
+  it("reach the flow's source material from the final stage", () => {
     // A revise/synthesis stage that never sees the original request quietly drops
     // its constraints (asked for 3 sentences, got 3 paragraphs). A node "carries"
     // the source if it names a carrier with $('id'), or reads one through $json
     // via its primary upstream. The last ai stage of every template must carry.
+    //
+    // This proves reachability, NOT that every relevant constraint survives —
+    // a template could reference the trigger and still drop one of its fields.
+    // The per-template expectations below cover that, one template at a time.
     for (const name of templates()) {
       const flow = parseFlow(readFileSync(join(TEMPLATE_DIR, name), "utf8"));
       const roots = Object.values(flow.steps).filter((n) => upstreamsOf(n).length === 0);
@@ -117,6 +121,27 @@ describe("shipped templates", () => {
       ).toBe(true);
     }
   });
+
+  // What the generic reachability check above cannot know: which fields of the
+  // trigger a given template must actually respect. Asserted per template, so
+  // dropping `words` from refine's revise prompt fails here even though the
+  // prompt still references `topic`.
+  const REQUIRED_REFS: Record<string, string[]> = {
+    "refine.yaml": ["$('start').topic", "$('start').words"],
+  };
+
+  it("respect every constraint their trigger declares", () => {
+    for (const [template, refs] of Object.entries(REQUIRED_REFS)) {
+      const yaml = readFileSync(join(TEMPLATE_DIR, template), "utf8");
+      expect(templates(), `${template} is listed here but no longer shipped`).toContain(template);
+      const flow = parseFlow(yaml);
+      const aiNodes = Object.values(flow.steps).filter((n) => n.type === "ai");
+      const last = aiNodes[aiNodes.length - 1]!;
+      for (const ref of refs) {
+        expect(last.prompt ?? "", `${template}: "${last.id}" drops ${ref}`).toContain(ref);
+      }
+    }
+  });
 });
 
 describe("the skill does not drift from the product", () => {
@@ -130,6 +155,31 @@ describe("the skill does not drift from the product", () => {
     for (const file of markdownFiles().concat(templates().map((t) => join("templates", t)))) {
       for (const [, used] of read(file).matchAll(/^\s*type:\s*(\w+)\s*$/gm)) {
         expect(NODE_TYPES, `${file} uses removed node type "${used}"`).toContain(used);
+      }
+    }
+  });
+
+  it("shows install commands the skills CLI actually accepts", () => {
+    // The guards above cover chainq's own CLI. The install instructions invoke a
+    // DIFFERENT program, so nothing here validated them — and a comma list
+    // (`-a claude-code,codex`) is rejected by it with "Invalid agents". Repeat
+    // the flag instead. Checked wherever we print that command.
+    const REPO = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+    const sources = [
+      join(SKILL_DIR, "README.md"),
+      join(SKILL_DIR, "references", "cli.md"),
+      join(REPO, "skills", "README.md"),
+      join(REPO, "docs", "guides", "agent-skill.md"),
+      join(REPO, "README.md"),
+    ];
+    for (const file of sources) {
+      for (const line of readFileSync(file, "utf8").split("\n")) {
+        if (!/\bskills\s+(?:add|use)\b/.test(line) && !/^\s+-a\b/.test(line)) continue;
+        const agents = line.match(/(?:-a|--agent)\s+(\S+)/);
+        expect(
+          agents?.[1] ?? "",
+          `${file}: "-a ${agents?.[1]}" — the skills CLI rejects comma lists, repeat -a instead`,
+        ).not.toMatch(/,/);
       }
     }
   });

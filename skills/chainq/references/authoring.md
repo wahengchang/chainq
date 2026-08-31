@@ -16,12 +16,19 @@ into a flow — say so rather than building one.
 
 **1. What comes in, and from where?**
 A value the user types, a file on disk, or the output of a tool they already have.
-That is exactly one node: `input` (typed value), or `cmd` (read a file / call a
-tool).
+Each boundary source enters through its own node — `input` for a typed value,
+`cmd` for a file or a tool. **Several sources is normal**, and they meet at the
+first `ai` step that needs them:
+
+```text
+job_description (input) ─┐
+                         ├─→ analyze (ai) → ...
+resume.md (cmd) ─────────┘
+```
 
 **2. What are the cognitive acts between input and answer?**
-Say the chain out loud as verbs joined by arrows. Use this catalogue — each verb
-is one `ai` step:
+Say the chain out loud as verbs joined by arrows. **A verb identifies a candidate
+stage, not automatically a node** — question 6 decides which candidates earn one:
 
 | Verb | The step does | Typical output |
 |---|---|---|
@@ -48,7 +55,13 @@ If a downstream step reads fields, or the result is a `.json` file, the producin
 step is `ai` with `schema:`. Without `schema`, model output is raw text and
 `{{ $json.field }}` will not work.
 
-Now write the YAML. Every arrow from question 2 is one `ai` step.
+**6. Which candidates earn their own node?**
+Take each arrow from question 2 and ask: is this intermediate output worth
+inspecting, reusing, branching from, caching, or tuning on its own? Yes → its own
+`ai` step. No → fold it into its neighbour. Two verbs in one prompt is fine when
+nobody would ever look at the seam between them.
+
+Now write the YAML.
 
 ## Sizing a step
 
@@ -62,7 +75,7 @@ Signs a step is the right size:
 - Re-running only this step, with a tweaked prompt, is a meaningful experiment.
 - You can name it in one word: `extract`, `score`, `draft`, `critique`, `revise`.
 
-If naming it needs "and", it is probably two steps. But a long prompt is not by
+If naming it needs "and", that is a sign of two candidate stages. But a long prompt is not by
 itself a reason to split: fragments whose outputs mean nothing alone are their own
 failure, and they cost a model call each. Keep a stage whole when splitting it
 would only produce pieces nobody would ever inspect.
@@ -232,7 +245,9 @@ would not — there is no shell.
    deciding something? Deciding → convert to `ai`, and move the logic into the
    prompt. A genuinely deterministic command may stay exactly where it is.
 2. Find every `ai` node whose prompt contains "and then", "also", or a numbered
-   list of tasks. Split at those seams.
+   list of tasks. Those are candidate seams — split the ones where the
+   intermediate output is worth inspecting, reusing, caching, or tuning on its
+   own, and leave the rest whole.
 3. Re-wire: each new step's `from:` is the step whose output it consumes.
 4. Delete `assemble`-able `ai` steps — string joining costs a model call for nothing.
 5. `chainq validate flow.yaml`, then `chainq run flow.yaml --steps 2` to prove the

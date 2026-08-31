@@ -12,10 +12,13 @@ npx skills add wahengchang/chainq --skill chainq -g       # every project
 npx skills use wahengchang/chainq --skill chainq          # once, without installing
 ```
 
-For specific agents only:
+For specific agents only — repeat `-a`, one agent per flag:
 
 ```bash
-npx skills add wahengchang/chainq --skill chainq -a claude-code,codex,opencode
+npx skills add wahengchang/chainq --skill chainq \
+  -a claude-code \
+  -a codex \
+  -a opencode
 ```
 
 Claude Code users can install it as a plugin instead, which tracks the repository:

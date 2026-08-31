@@ -37,10 +37,11 @@ that needs shell plumbing is usually a flow modelled wrong.
 
 ## A full chain is not a maximal one
 
-Node count is not the goal. **Split a stage when its intermediate output is worth
-inspecting, reusing, branching from, caching, or tuning on its own** — that is the
-whole test. Splitting past that produces fragments whose outputs mean nothing to a
-reader, which is its own failure.
+Node count is not the goal. **A cognitive verb identifies a candidate stage, not
+automatically a node.** A candidate earns its own node when its intermediate output
+is worth inspecting, reusing, branching from, caching, or tuning on its own — that
+is the whole test. Splitting past it produces fragments whose outputs mean nothing
+to a reader, and each one still costs a model call.
 
 The useful check: *if the `cmd` nodes were hidden, could a reviewer still see
 where the model analyzes, decides, drafts, critiques, and synthesizes?*
