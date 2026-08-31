@@ -12,7 +12,7 @@ describe("same-repository documentation sync", () => {
   });
 
   test("generates every allowlisted page with source metadata", () => {
-    expect(result.pages).toHaveLength(11);
+    expect(result.pages).toHaveLength(12);
     const home = readFileSync(resolve(GENERATED_DOCS, "index.md"), "utf8");
     expect(home).toContain("lastUpdated:");
     expect(home).toContain("Source: [`README.md`]");
@@ -39,6 +39,6 @@ describe("same-repository documentation sync", () => {
   });
 
   test("validates the complete generated output", () => {
-    expect(validateGeneratedDocs()).toEqual({ pages: 11 });
+    expect(validateGeneratedDocs()).toEqual({ pages: 12 });
   });
 });

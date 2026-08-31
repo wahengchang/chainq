@@ -1,5 +1,11 @@
 # chainq
 
+[![npm](https://img.shields.io/npm/v/@wahengchang2023/chainq?logo=npm&label=npm&color=cb3837)](https://www.npmjs.com/package/@wahengchang2023/chainq)
+[![node](https://img.shields.io/node/v/@wahengchang2023/chainq?logo=nodedotjs&logoColor=white&color=3c873a)](https://nodejs.org)
+[![CI](https://github.com/wahengchang/chainq/actions/workflows/ci.yml/badge.svg)](https://github.com/wahengchang/chainq/actions/workflows/ci.yml)
+[![docs](https://img.shields.io/badge/docs-wahengchang.github.io%2Fchainq-0a7cff)](https://wahengchang.github.io/chainq/)
+[![license](https://img.shields.io/npm/l/@wahengchang2023/chainq?color=blue)](LICENSE)
+
 **Prompt chaining for people who live in prompts — not in dashboards.**
 
 Wire a few prompts together, run them on the CLI model you already have
@@ -46,6 +52,16 @@ chainq init my-flow && cd my-flow   # scaffold a runnable starter flow
 chainq ui flow.yaml                 # open the editor — edit + run on one canvas
 ```
 
+Two installs, once each:
+
+- **The CLI** — [`@wahengchang2023/chainq`](https://www.npmjs.com/package/@wahengchang2023/chainq)
+  on npm is the `chainq` command above. No global install? Swap `chainq` for
+  `npx @wahengchang2023/chainq` in any command.
+- **[Agent skill](docs/guides/agent-skill.md)** — install the skill that teaches an
+  agent to author flows: `npx skills add wahengchang/chainq --skill chainq` (add `-g`
+  for every project). Then *"build me a flow that…"* writes a real prompt chain
+  instead of a YAML file wrapped around a shell script.
+
 Tune your flow on the canvas, then run it from the terminal to land the output —
 same YAML, no extra export step:
 
@@ -54,7 +70,6 @@ chainq run flow.yaml    # run the whole flow; output lands in the file your writ
 ```
 
 Needs **Node ≥ 18**. `ai` steps call your real local model — run `claude login` first.
-No global install? Swap `chainq` for `npx @wahengchang2023/chainq` in any command.
 
 ## What a flow looks like
 
@@ -142,6 +157,12 @@ the open questions, and writes a summary to out/."*
 - [Agent skill](docs/guides/agent-skill.md) — install the skill that teaches an agent to author flows.
 - [Troubleshooting](docs/troubleshooting.md) — resolve common validation, model, cache, and output problems.
 - [Changelog](CHANGELOG.md) — review released changes.
+
+Elsewhere:
+
+- [Documentation site](https://wahengchang.github.io/chainq/) — every page above, hosted and searchable; the reliable route if you are reading this on npm.
+- [chainq on npm](https://www.npmjs.com/package/@wahengchang2023/chainq) — the published package: versions, what ships in the tarball, install size.
+- [GitHub repository](https://github.com/wahengchang/chainq) — source, issues, and the runnable flows in `examples/`.
 
 ## Security
 
