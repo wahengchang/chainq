@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased
+
+- **New: a bundled agent skill, and `chainq skill install` to place it.** chainq now
+  ships an [Agent Skill](https://agentskills.io) at `skills/chainq/` that teaches a
+  coding agent how to author a flow. It exists to fix one specific failure: an agent
+  asked for a flow would emit YAML whose real work sat in `cmd` steps — a task runner
+  with chainq syntax, not a prompt chain. The skill leads with that prime directive
+  (`ai` is the default node type; `cmd` is edge I/O only; one step is one cognitive
+  act), a chain-smell checklist to run before handing a flow back, and a decomposition
+  method with before/after examples. It is progressively disclosed: `SKILL.md` is the
+  only file loaded up front, with `references/` (authoring · flow syntax · patterns ·
+  CLI · troubleshooting) and three runnable `templates/` opened on demand.
+  Install it three ways — `npx @wahengchang2023/chainq skill install` for one project,
+  `--global` for every project, or `/plugin marketplace add wahengchang/chainq` for
+  Claude Code, all from the same source directory. `--dir <path>` targets any other
+  agent; `--force` replaces an existing install, and without it chainq refuses rather
+  than overwrite a copy you edited. Covered by `src/cli/skill.test.ts`, which validates
+  every shipped template through the real engine and asserts the templates obey the
+  skill's own prime directive. See [docs/guides/agent-skill.md](docs/guides/agent-skill.md).
+
 ## 0.2.1
 
 - **Docs: simpler Quickstart.** The README now leads with a global install

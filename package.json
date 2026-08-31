@@ -33,6 +33,7 @@
   },
   "files": [
     "dist",
+    "skills",
     "!**/._*",
     "README.md",
     "LICENSE"

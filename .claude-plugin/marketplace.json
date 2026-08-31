@@ -1,0 +1,17 @@
+{
+  "name": "chainq",
+  "owner": { "name": "wahengchang", "url": "https://github.com/wahengchang" },
+  "description": "The chainq agent skill: how to author a real prompt chain, not a YAML file full of shell steps.",
+  "plugins": [
+    {
+      "name": "chainq",
+      "source": "./",
+      "description": "Author, run, and debug chainq prompt chains — multi-step LLM workflows defined in one YAML file and executed on a local CLI model (claude -p, codex).",
+      "category": "workflow",
+      "keywords": ["prompt-chaining", "workflow", "yaml", "dag", "llm", "cli"],
+      "license": "MIT",
+      "homepage": "https://github.com/wahengchang/chainq#readme",
+      "repository": "https://github.com/wahengchang/chainq"
+    }
+  ]
+}

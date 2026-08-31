@@ -107,8 +107,29 @@ command, executed without a shell), `assemble` (reshape / combine items), `input
   even several steps back) read distinctly — warm-solid vs. cool-dashed, toggle to hide
   references. Give a slow step room with a per-node ◷ timeout so a long `ai` run isn't
   killed mid-flight. Binds to `127.0.0.1` only.
-- **CLI** — `chainq init · new · run · validate · ls`. `run` re-runs everything by
-  default; add `--cache` to reuse unchanged steps.
+- **CLI** — `chainq init · new · run · validate · ls · skill`. `run` re-runs everything
+  by default; add `--cache` to reuse unchanged steps.
+
+## Let your coding agent write the flow
+
+chainq ships an [Agent Skill](docs/guides/agent-skill.md) that teaches Claude Code
+(and any agent reading the same format) what a chainq flow is — so it produces an
+actual prompt chain, not a YAML file wrapped around a shell script:
+
+```bash
+npx @wahengchang2023/chainq skill install            # → ./.claude/skills/chainq
+npx @wahengchang2023/chainq skill install --global   # → ~/.claude/skills/chainq
+```
+
+Or as a Claude Code plugin, tracking this repository:
+
+```
+/plugin marketplace add wahengchang/chainq
+/plugin install chainq@chainq
+```
+
+Then just ask: *"build me a flow that reads notes.md, pulls out the decisions and
+the open questions, and writes a summary to out/."*
 
 ## Documentation
 
@@ -116,6 +137,7 @@ command, executed without a shell), `assemble` (reshape / combine items), `input
 - [Getting started](docs/getting-started.md) — install chainq and complete a first run.
 - [CLI reference](docs/reference/cli.md) and [flow YAML reference](docs/reference/flow.md) — look up commands and configuration.
 - [Visual editor guide](docs/guides/visual-editor.md) and [common tasks](docs/guides/common-tasks.md) — complete specific workflows.
+- [Agent skill](docs/guides/agent-skill.md) — install the skill that teaches an agent to author flows.
 - [Troubleshooting](docs/troubleshooting.md) — resolve common validation, model, cache, and output problems.
 - [Changelog](CHANGELOG.md) — review released changes.
 

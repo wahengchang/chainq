@@ -1,0 +1,58 @@
+# Pattern: extract, then convert to guaranteed-valid JSON.
+# Only the LAST step carries `schema:` — let the creative steps write freely,
+# then convert. Never build JSON by concatenating strings in `assemble`;
+# quoting and newlines will break it.
+#
+#   chainq validate extract-to-json.yaml
+#   chainq run extract-to-json.yaml --input text='...'
+#   cat out/result.json
+profiles:
+  default: { cmd: 'claude -p' }
+
+steps:
+  start:
+    type: input
+    params:
+      text: { type: string, required: true }
+
+  # assemble = no model call; carry the original through untouched
+  original:
+    type: assemble
+    from: start
+    prompt: '{{ $json.text }}'
+
+  summary:
+    type: ai
+    from: start
+    prompt: |
+      Summarize in one sentence. Output only the sentence.
+
+      {{ $json.text }}
+
+  topics:
+    type: ai
+    from: start
+    prompt: |
+      List 3 topic keywords, comma-separated, lowercase. Output only the list.
+
+      {{ $json.text }}
+
+  to_json:
+    type: ai
+    from: [original, summary, topics]
+    schema:
+      original: string
+      summary: string
+      topics: array
+    prompt: |
+      Return ONLY a JSON object with exactly these fields, copying each value
+      verbatim. Do not re-summarize, do not add prose or code fences.
+        original: {{ $('original') }}
+        summary:  {{ $('summary') }}
+        topics:   {{ $('topics') }}   (split the comma-separated list into an array)
+
+  save:
+    type: write
+    from: to_json
+    path: out/result.json
+    mode: overwrite
