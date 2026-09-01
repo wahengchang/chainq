@@ -67,12 +67,28 @@ runnable templates.
 |---|---|
 | **Task** | the one transformation or decision this node owns |
 | **Input** | explicitly — `{{ $json }}`, a field, or a named ancestor |
+| **Decides** | what this node may settle on its own — and what is not its call, because an upstream step, a template, or the user already fixed it |
 | **Criteria** | the constraints that matter at this stage |
 | **Output** | what the next node is allowed to rely on |
 
 Carry the user's original request forward to the stages that need it. A `revise`
 step that sees only the draft and the critique will quietly drop constraints from
 the original brief.
+
+**Constrain with structure, not with prose.** A rule the wiring can enforce does
+not belong in the prompt: `schema:` fixes the shape of an answer, an `assemble`
+template fixes wording that must never drift, a `cmd` after the node turns a hope
+into a check. Prose rules are the fallback for what none of those can express — a
+prompt growing a list of *never / always / do not* is usually a missing `schema:`
+or a missing template. Delete any line that only restates a declared field, or
+that guards against something the graph cannot produce anyway.
+
+**Decide the meaning first, render it second.** When the output must follow a
+fixed format, split it: an `ai` step with `schema:` settles *what* is true, then
+an `assemble` or `write` template settles *how* it reads. Anything that has to be
+byte-stable — a heading, a boilerplate sentence, a field order — is the
+template's job, not something the model is asked to reproduce correctly on every
+run.
 
 **3 — Write the YAML.** Every field, expression, and validation rule is in
 [references/flow-syntax.md](references/flow-syntax.md). Load it before writing
@@ -104,6 +120,8 @@ automatic failures:
 | a step nothing downstream references | dead branch | wire it, or delete it |
 | an `ai` step whose prompt only glues strings together | a wasted model call | use `assemble` |
 | a final stage that never sees the original request | constraints get dropped | reference the trigger |
+| a prompt padded with *never / always / do not* rules | prose is doing a job structure could | shape into `schema:`, fixed wording into `assemble`, the check into a `cmd` |
+| fixed boilerplate the model is asked to reproduce each run | it drifts, and nothing catches it | lock it in an `assemble` template; let the `ai` step decide only the content |
 | a `cmd` reading a file with no `inputs:` | volatile — it and everything after re-run always | declare the files it reads |
 | `schema:` written as JSON Schema | passes validate, fails at run time | use the flat `{ field: type }` map |
 | `chainq validate` not run | you are guessing | run it |
