@@ -80,6 +80,41 @@ itself a reason to split: fragments whose outputs mean nothing alone are their o
 failure, and they cost a model call each. Keep a stage whole when splitting it
 would only produce pieces nobody would ever inspect.
 
+## Meaning first, format second
+
+When the answer has to come out in a fixed shape, do not ask one prompt for both
+the judgement and the presentation. Let an `ai` step settle the meaning under a
+`schema:`, then let a free `assemble` template render it:
+
+```yaml
+  verdict:
+    type: ai
+    from: review
+    schema: { status: string, reason: string, owner: string }
+    prompt: |
+      Decide the release status from the review below.
+      status is exactly one of: ship, hold, block.
+
+      {{ $json }}
+
+  report:                             # no model call — the format is settled here
+    type: assemble
+    from: verdict
+    prompt: |
+      ## Release check — {{ $json.status }}
+
+      {{ $json.reason }}
+
+      Owner: {{ $json.owner }}
+```
+
+The heading, the field order, and the wording belong to the template now: the
+model cannot drift them between runs, and the only thing left to tune is the
+judgement. Note where the constraint on `status` lives, too — `schema:`
+guarantees the fields and their types, not the set of legal values, so name the
+values once in the prompt, and if the choice must actually be enforced put a
+`cmd` check after the node rather than a paragraph of prohibitions.
+
 ## Naming
 
 Node ids are YAML keys, cache filenames, and canvas labels. Use the verb:
