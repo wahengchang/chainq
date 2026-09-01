@@ -9,6 +9,11 @@ name: CI
 # Each suite emits JUnit XML; mikepenz/action-junit-report turns it into per-test
 # PR annotations (failing lines flagged inline) plus a summary table on the run
 # page. JUnit XML is also uploaded as an artifact.
+#
+# `package` and `node18` cover what the code suites cannot: what we actually
+# publish (tarball contents, documentation links, the docs-site sync) and the
+# `engines` range the README advertises, which the other jobs never exercise
+# because they all run on Node 22.
 on:
   push:
     branches: [main]
@@ -97,3 +102,45 @@ jobs:
           name: junit-browser
           path: reports/junit-browser.xml
           if-no-files-found: ignore
+
+  package:
+    name: docs links · docs-site sync · published tarball
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Documentation links resolve
+        run: npm run docs:links
+      # Runs prepack (the real build) and prints the exact file list npm would
+      # publish — the check that `files` still ships what the docs promise.
+      - name: Package tarball
+        run: npm pack --dry-run
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - name: Documentation site sync + validate
+        working-directory: docs-site
+        run: |
+          bun install --frozen-lockfile
+          bun run prepare:docs
+          bun run test
+
+  node18:
+    name: node 18 smoke (minimum supported engine)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+      # The published bin, on the oldest Node `engines` allows, on a real flow.
+      - name: The built CLI runs
+        run: node dist/cli/index.js validate examples/demo.yaml

@@ -2,22 +2,27 @@
   "name": "@wahengchang2023/chainq",
   "version": "0.2.1",
   "type": "module",
-  "description": "Run multi-step prompt chains on local CLI models, defined in one YAML file.",
+  "description": "Multi-step prompt chains on local AI CLIs, defined in one YAML file — edit and run them on the same canvas, on the CLI login you already have.",
   "keywords": [
     "ai",
     "llm",
     "prompt",
     "prompt-chaining",
     "workflow",
+    "ai-workflow",
     "cli",
     "claude",
+    "claude-code",
     "codex",
+    "agent-skill",
+    "local-first",
+    "visual-editor",
     "yaml",
     "dag"
   ],
   "license": "MIT",
   "author": "wahengchang",
-  "homepage": "https://github.com/wahengchang/chainq#readme",
+  "homepage": "https://wahengchang.github.io/chainq/",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/wahengchang/chainq.git"
@@ -31,11 +36,15 @@
   "bin": {
     "chainq": "./dist/cli/index.js"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "files": [
     "dist",
     "skills",
     "!**/._*",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "scripts": {

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **Packaging and docs.** npm metadata now points at the hosted documentation site,
+  the README leads with the one thing you have to install (the CLI) and presents the
+  bundled agent skill as the optional extra it is, and `CHANGELOG.md` ships inside the
+  published package. Profile examples no longer suggest `codex -m`: a profile `cmd`
+  must read the prompt on **stdin**, which that invocation was never verified to do
+  ([#71](https://github.com/wahengchang/chainq/issues/71)).
+
 - **New: a bundled agent skill.** chainq ships an [Agent Skill](https://agentskills.io)
   at `skills/chainq/` that teaches a coding agent how to author a flow. It exists to
   fix one specific failure: an agent asked for a flow would emit YAML whose real work

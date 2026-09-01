@@ -12,10 +12,16 @@ layout, so the standard [`skills`](https://github.com/vercel-labs/skills) CLI
 installs it directly:
 
 ```bash
-npx skills add wahengchang/chainq --skill chainq          # this project
-npx skills add wahengchang/chainq --skill chainq -g       # every project
-npx skills use wahengchang/chainq --skill chainq          # once, without installing
+npx skills add wahengchang/chainq --skill chainq          # this project (default scope)
+npx skills add wahengchang/chainq --skill chainq -g       # every project on this machine
+npx skills use wahengchang/chainq@chainq                  # once, installing nothing
 ```
+
+Project scope is the default, so the skill lands next to the repository it is for
+and can be committed with it; `-g` is the machine-wide copy. `skills use` installs
+nothing at all — it prints the skill as a prompt, so pipe it into the agent
+(`npx skills use wahengchang/chainq@chainq | claude`) or pass `--agent claude-code`
+to start one with the prompt already loaded.
 
 That one command covers Claude Code, Codex, Cursor, opencode, Cline and a dozen
 more agents. Narrow it by repeating `-a`, one agent per flag:

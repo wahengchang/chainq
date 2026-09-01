@@ -1,11 +1,16 @@
 # chainq
 
+[![npm](https://img.shields.io/npm/v/@wahengchang2023/chainq?logo=npm&label=npm&color=cb3837)](https://www.npmjs.com/package/@wahengchang2023/chainq)
+[![CI](https://github.com/wahengchang/chainq/actions/workflows/ci.yml/badge.svg)](https://github.com/wahengchang/chainq/actions/workflows/ci.yml)
+[![license](https://img.shields.io/npm/l/@wahengchang2023/chainq?color=blue)](LICENSE)
+
 **Prompt chaining for people who live in prompts — not in dashboards.**
 
-Wire a few prompts together, run them on the CLI model you already have
-(`claude -p`, `codex -m`), and watch every step light up **on the same canvas you
-built it on**. One YAML file. No model API key in the flow and no hosted runtime
-to operate.
+Wire a few prompts together, run them on the CLI model you are already logged
+into (`claude -p`, or any CLI that takes its prompt on stdin), and watch every
+step light up **on the same canvas you built it on**. One YAML file. Your
+existing CLI login does the authenticating — no model credentials in the flow,
+and no hosted runtime to operate.
 
 ![chainq visual editor](docs/screenshots/doc-sample-1.png)
 
@@ -46,6 +51,12 @@ chainq init my-flow && cd my-flow   # scaffold a runnable starter flow
 chainq ui flow.yaml                 # open the editor — edit + run on one canvas
 ```
 
+That is the whole install — [`@wahengchang2023/chainq`](https://www.npmjs.com/package/@wahengchang2023/chainq)
+on npm is the only thing chainq needs. Prefer not to install globally? Swap
+`chainq` for `npx @wahengchang2023/chainq` in any command. If you also want your
+coding agent to *write* flows, there is an optional [agent skill](docs/guides/agent-skill.md)
+— next section, nothing depends on it.
+
 Tune your flow on the canvas, then run it from the terminal to land the output —
 same YAML, no extra export step:
 
@@ -54,7 +65,35 @@ chainq run flow.yaml    # run the whole flow; output lands in the file your writ
 ```
 
 Needs **Node ≥ 18**. `ai` steps call your real local model — run `claude login` first.
-No global install? Swap `chainq` for `npx @wahengchang2023/chainq` in any command.
+
+## Optional: let your coding agent write the flow
+
+chainq runs without this. But the same repository ships an
+[agent skill](docs/guides/agent-skill.md) that teaches Claude Code (and any agent
+reading the same format) what a chainq flow is — so *"build me a flow that reads
+notes.md, pulls out the decisions and the open questions, and writes a summary to
+out/"* produces an actual prompt chain, not a YAML file wrapped around a shell
+script. Take it one step at a time:
+
+```bash
+# try it on one request, installing nothing — prints the skill as a prompt
+npx skills use wahengchang/chainq@chainq | claude
+
+# keep it in this project (the default scope, committed with your repo)
+npx skills add wahengchang/chainq --skill chainq
+
+# or once, for every project on this machine
+npx skills add wahengchang/chainq --skill chainq -g
+```
+
+That is the open [skills](https://github.com/vercel-labs/skills) CLI — one source,
+installed into Claude Code, Codex, Cursor, opencode and a dozen more. Claude Code
+users can use a plugin instead, tracking this repository:
+
+```
+/plugin marketplace add wahengchang/chainq
+/plugin install chainq@chainq
+```
 
 ## What a flow looks like
 
@@ -110,29 +149,6 @@ command, executed without a shell), `assemble` (reshape / combine items), `input
 - **CLI** — `chainq init · new · run · validate · ls`. `run` re-runs everything by
   default; add `--cache` to reuse unchanged steps.
 
-## Let your coding agent write the flow
-
-chainq ships an [Agent Skill](docs/guides/agent-skill.md) that teaches Claude Code
-(and any agent reading the same format) what a chainq flow is — so it produces an
-actual prompt chain, not a YAML file wrapped around a shell script:
-
-```bash
-npx skills add wahengchang/chainq --skill chainq        # this project
-npx skills add wahengchang/chainq --skill chainq -g     # every project
-```
-
-That is the open [skills](https://github.com/vercel-labs/skills) CLI — it installs
-into Claude Code, Codex, Cursor, opencode and a dozen more from the same source.
-Claude Code users can use a plugin instead, tracking this repository:
-
-```
-/plugin marketplace add wahengchang/chainq
-/plugin install chainq@chainq
-```
-
-Then just ask: *"build me a flow that reads notes.md, pulls out the decisions and
-the open questions, and writes a summary to out/."*
-
 ## Documentation
 
 - [Documentation map](docs/README.md) — choose a tutorial, guide, reference, or concept page.
@@ -142,6 +158,12 @@ the open questions, and writes a summary to out/."*
 - [Agent skill](docs/guides/agent-skill.md) — install the skill that teaches an agent to author flows.
 - [Troubleshooting](docs/troubleshooting.md) — resolve common validation, model, cache, and output problems.
 - [Changelog](CHANGELOG.md) — review released changes.
+
+Elsewhere:
+
+- [Documentation site](https://wahengchang.github.io/chainq/) — every page above, hosted and searchable; the reliable route if you are reading this on npm.
+- [chainq on npm](https://www.npmjs.com/package/@wahengchang2023/chainq) — the published package: versions, what ships in the tarball, install size.
+- [GitHub repository](https://github.com/wahengchang/chainq) — source, issues, and the runnable flows in `examples/`.
 
 ## Security
 
