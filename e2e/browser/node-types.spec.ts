@@ -89,3 +89,33 @@ test("editor: every node type shows its own coloured icon badge (offline)", asyn
   expect(await bg(page.locator("#pnType .tbadge"))).toBe("rgb(167, 139, 250)");
   await dwell(page, 1200);
 });
+
+test("editor: node-type dropdowns no longer offer the removed collection types", async ({ page }) => {
+  await page.goto(baseURL);
+  await dwell(page, 600);
+  const removed = ["splitOut", "aggregate", "merge"];
+  const opts = (sel: string) =>
+    page.locator(sel + " option").evaluateAll((os) => os.map((o) => (o as HTMLOptionElement).value));
+
+  // the "+ add step" toolbar dropdown offers only the surviving creatable types
+  expect(await opts("#addType")).toEqual(["ai", "cmd", "assemble", "write"]);
+
+  // the change-type dropdown for a VALID node offers only consumer types, none removed
+  await nodeByName(page, "gen").dblclick();
+  await dwell(page, 300);
+  const genOpts = await opts("#pnTypeSel");
+  for (const t of removed) expect(genOpts).not.toContain(t);
+  expect(genOpts).toContain("ai");
+  await page.keyboard.press("Escape");
+
+  // a node whose type WAS a removed one keeps that type selectable (so you can
+  // retype it) but still offers no OTHER removed type to switch to
+  await nodeByName(page, "gone").dblclick();
+  await dwell(page, 300);
+  const goneOpts = await opts("#pnTypeSel");
+  expect(goneOpts).toContain("merge");   // its own (unknown) type, to allow a retype
+  expect(goneOpts).toContain("assemble"); // a valid target to switch to
+  expect(goneOpts).not.toContain("splitOut");
+  expect(goneOpts).not.toContain("aggregate");
+  await dwell(page, 800);
+});
